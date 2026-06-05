@@ -700,7 +700,7 @@ th:first-child {
 }
 
 dialog {
-  width: min(820px, calc(100vw - 28px));
+  width: min(1120px, calc(100vw - 28px));
   padding: 0;
   border: 0;
   background: transparent;
@@ -712,6 +712,8 @@ dialog::backdrop {
 
 .detail-card {
   position: relative;
+  max-height: min(860px, calc(100vh - 28px));
+  overflow: auto;
   padding: 20px;
   border-radius: 8px;
   background: #fff;
@@ -733,18 +735,128 @@ dialog::backdrop {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 14px 0;
 }
 
-.detail-section {
-  margin-top: 16px;
+.profile-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+  padding-right: 44px;
 }
 
-.detail-section p {
+.profile-abbr {
+  display: inline-grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  background: #e8f3f1;
+  color: var(--teal-dark);
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.profile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 16px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-section {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.profile-section > h3 {
+  margin-bottom: 10px;
+}
+
+.profile-section p,
+.profile-section li,
+.profile-muted {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.profile-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.similar-grid,
+.source-list {
+  display: grid;
+  gap: 10px;
+}
+
+.similar-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.similar-card {
+  display: grid;
+  gap: 4px;
+  min-height: 78px;
+  padding: 10px;
+  text-align: left;
+}
+
+.similar-card span {
+  color: var(--teal-dark);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.similar-card small {
+  color: var(--muted);
+}
+
+.source-item {
+  padding: 12px;
+  border: 1px solid #e3e8ed;
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.source-item h4 {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+}
+
+.source-item p {
+  margin: 0 0 7px;
+}
+
+.source-item a {
+  color: var(--teal-dark);
+  font-weight: 800;
+}
+
+.source-item code {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 6px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
 }
 
 @media (max-width: 1180px) {
@@ -823,6 +935,10 @@ dialog::backdrop {
 
   .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -942,7 +1058,22 @@ dialog::backdrop {
 
   .detail-grid,
   .metrics,
-  .analysis-grid {
+  .analysis-grid,
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-hero {
+    grid-template-columns: 1fr;
+    padding-right: 38px;
+  }
+
+  .profile-abbr {
+    width: 58px;
+    height: 58px;
+  }
+
+  .similar-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1030,6 +1161,10 @@ dialog::backdrop {
     max-height: calc(100vh - 24px);
     overflow: auto;
     padding: 16px;
+  }
+
+  .profile-section {
+    padding: 12px;
   }
 
   table {

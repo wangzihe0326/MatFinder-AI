@@ -19,6 +19,7 @@ function readMaterials(databasePath) {
     recyclable: Boolean(row.recyclable),
     tags: [],
     uses: [],
+    sources: [],
     summary: row.summary,
     notes: row.notes
   }));
@@ -34,6 +35,15 @@ function readMaterials(databasePath) {
     .readTable(tables.material_uses)
     .sort((a, b) => a.position - b.position)
     .forEach((row) => byId.get(row.material_id)?.uses.push(row.use));
+
+  database.readTable(tables.material_sources).forEach((row) => {
+    byId.get(row.material_id)?.sources.push({
+      source_title: row.source_title,
+      source_url: row.source_url,
+      source_type: row.source_type,
+      notes: row.notes
+    });
+  });
 
   return materials;
 }

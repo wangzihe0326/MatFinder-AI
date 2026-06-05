@@ -38,6 +38,23 @@ def main():
                     (material_id,),
                 )
             ]
+            sources = [
+                {
+                    "source_title": item["source_title"],
+                    "source_url": item["source_url"],
+                    "source_type": item["source_type"],
+                    "notes": item["notes"],
+                }
+                for item in connection.execute(
+                    """
+                    SELECT source_title, source_url, source_type, notes
+                    FROM material_sources
+                    WHERE material_id = ?
+                    ORDER BY id
+                    """,
+                    (material_id,),
+                )
+            ]
             materials.append(
                 {
                     "id": row["id"],
@@ -54,6 +71,7 @@ def main():
                     "recyclable": bool(row["recyclable"]),
                     "tags": tags,
                     "uses": uses,
+                    "sources": sources,
                     "summary": row["summary"],
                     "notes": row["notes"],
                 }
