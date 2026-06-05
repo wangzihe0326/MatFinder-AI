@@ -13,7 +13,8 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(sourcePath, "utf8"), sandbox, { filename: sourcePath });
 
 const additionalMaterials = require("./additional-materials");
-const materials = [...sandbox.window.MatFinderData.materials, ...additionalMaterials];
+const matwebStyleExpansion = require("./matweb-style-expansion");
+const materials = dedupeMaterials([...sandbox.window.MatFinderData.materials, ...additionalMaterials, ...matwebStyleExpansion]);
 const result = spawnSync(findPython(), [writerPath, databasePath], {
   cwd: rootDir,
   input: JSON.stringify(materials),
@@ -41,4 +42,26 @@ function findPython() {
   }
 
   throw new Error("Python runtime with sqlite3 is required to create matfinder.db.");
+}
+
+function dedupeMaterials(items) {
+  const seenIds = new Set();
+  const seenNames = new Set();
+  return items.filter((item) => {
+    const id = item.material_id || item.id;
+    const name = normalizeName(item.name);
+    if (seenIds.has(id) || seenNames.has(name)) {
+      return false;
+    }
+    seenIds.add(id);
+    seenNames.add(name);
+    return true;
+  });
+}
+
+function normalizeName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }

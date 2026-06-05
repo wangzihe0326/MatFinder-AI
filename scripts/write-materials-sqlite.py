@@ -21,18 +21,33 @@ def main():
             DROP TABLE IF EXISTS materials;
 
             CREATE TABLE materials (
-              id TEXT PRIMARY KEY,
+              material_id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
-              abbr TEXT NOT NULL,
+              abbreviation TEXT NOT NULL,
               category TEXT NOT NULL,
+              family TEXT,
+              manufacturer TEXT,
+              trade_name TEXT,
               density REAL,
-              tg REAL,
-              tm REAL,
-              maxTemp REAL,
-              tensile REAL,
+              tensile_strength REAL,
+              flexural_strength REAL,
+              impact_strength REAL,
+              hardness TEXT,
               elongation REAL,
-              dielectric REAL,
-              recyclable INTEGER NOT NULL CHECK (recyclable IN (0, 1)),
+              glass_transition_temperature REAL,
+              melting_temperature REAL,
+              continuous_use_temperature REAL,
+              thermal_conductivity REAL,
+              dielectric_constant REAL,
+              chemical_resistance TEXT,
+              water_absorption REAL,
+              flammability TEXT,
+              recyclability TEXT,
+              cost_level TEXT,
+              processing_methods TEXT NOT NULL,
+              typical_applications TEXT NOT NULL,
+              advantages TEXT NOT NULL,
+              disadvantages TEXT NOT NULL,
               summary TEXT NOT NULL,
               notes TEXT NOT NULL
             );
@@ -42,7 +57,7 @@ def main():
               tag TEXT NOT NULL,
               position INTEGER NOT NULL,
               PRIMARY KEY (material_id, position),
-              FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE
+              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE
             );
 
             CREATE TABLE material_uses (
@@ -50,7 +65,7 @@ def main():
               use TEXT NOT NULL,
               position INTEGER NOT NULL,
               PRIMARY KEY (material_id, position),
-              FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE
+              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE
             );
 
             CREATE TABLE material_sources (
@@ -60,7 +75,7 @@ def main():
               source_url TEXT NOT NULL,
               source_type TEXT NOT NULL,
               notes TEXT NOT NULL,
-              FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE
+              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE
             );
             """
         )
@@ -69,24 +84,44 @@ def main():
             connection.execute(
                 """
                 INSERT INTO materials (
-                  id, name, abbr, category, density, tg, tm, maxTemp, tensile,
-                  elongation, dielectric, recyclable, summary, notes
+                  material_id, name, abbreviation, category, family, manufacturer,
+                  trade_name, density, tensile_strength, flexural_strength,
+                  impact_strength, hardness, elongation, glass_transition_temperature,
+                  melting_temperature, continuous_use_temperature, thermal_conductivity,
+                  dielectric_constant, chemical_resistance, water_absorption,
+                  flammability, recyclability, cost_level, processing_methods,
+                  typical_applications, advantages, disadvantages, summary, notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    item["id"],
+                    material_id(item),
                     item["name"],
-                    item["abbr"],
+                    item.get("abbreviation", item.get("abbr")),
                     item["category"],
-                    item["density"],
-                    item.get("tg"),
-                    item.get("tm"),
-                    item["maxTemp"],
-                    item["tensile"],
-                    item["elongation"],
-                    item["dielectric"],
-                    1 if item["recyclable"] else 0,
+                    item.get("family"),
+                    item.get("manufacturer"),
+                    item.get("trade_name"),
+                    item.get("density"),
+                    item.get("tensile_strength", item.get("tensile")),
+                    item.get("flexural_strength"),
+                    item.get("impact_strength"),
+                    item.get("hardness"),
+                    item.get("elongation"),
+                    item.get("glass_transition_temperature", item.get("tg")),
+                    item.get("melting_temperature", item.get("tm")),
+                    item.get("continuous_use_temperature", item.get("maxTemp")),
+                    item.get("thermal_conductivity"),
+                    item.get("dielectric_constant", item.get("dielectric")),
+                    item.get("chemical_resistance"),
+                    item.get("water_absorption"),
+                    item.get("flammability"),
+                    item.get("recyclability", legacy_recyclability(item)),
+                    item.get("cost_level"),
+                    json.dumps(list_value(item, "processing_methods"), ensure_ascii=False),
+                    json.dumps(list_value(item, "typical_applications", "uses"), ensure_ascii=False),
+                    json.dumps(list_value(item, "advantages"), ensure_ascii=False),
+                    json.dumps(list_value(item, "disadvantages"), ensure_ascii=False),
                     item["summary"],
                     item["notes"],
                 ),
@@ -94,11 +129,11 @@ def main():
 
             connection.executemany(
                 "INSERT INTO material_tags (material_id, tag, position) VALUES (?, ?, ?)",
-                [(item["id"], tag, index) for index, tag in enumerate(item.get("tags", []))],
+                [(material_id(item), tag, index) for index, tag in enumerate(item.get("tags", []))],
             )
             connection.executemany(
                 "INSERT INTO material_uses (material_id, use, position) VALUES (?, ?, ?)",
-                [(item["id"], use, index) for index, use in enumerate(item.get("uses", []))],
+                [(material_id(item), use, index) for index, use in enumerate(list_value(item, "typical_applications", "uses"))],
             )
             connection.executemany(
                 """
@@ -109,13 +144,13 @@ def main():
                 """,
                 [
                     (
-                        item["id"],
+                        material_id(item),
                         source["source_title"],
                         source["source_url"],
                         source["source_type"],
                         source["notes"],
                     )
-                    for source in item.get("sources", default_sources(item["id"]))
+                    for source in item.get("sources", default_sources(material_id(item)))
                 ],
             )
 
@@ -133,6 +168,27 @@ def default_sources(material_id):
             "notes": f"Original MatFinder seed record for {material_id}; grade-specific values should be verified before engineering use.",
         }
     ]
+
+
+def material_id(item):
+    return item.get("material_id", item.get("id"))
+
+
+def list_value(item, primary, fallback=None):
+    value = item.get(primary)
+    if value is None and fallback:
+        value = item.get(fallback)
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [str(value)]
+
+
+def legacy_recyclability(item):
+    if "recyclable" not in item:
+        return None
+    return "recyclable" if item["recyclable"] else "not typically recyclable"
 
 
 if __name__ == "__main__":

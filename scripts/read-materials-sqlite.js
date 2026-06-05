@@ -5,18 +5,41 @@ function readMaterials(databasePath) {
   const tables = database.readTableMap();
 
   const materials = database.readTable(tables.materials).map((row) => ({
-    id: row.id,
+    id: row.material_id ?? row.id,
+    material_id: row.material_id ?? row.id,
     name: row.name,
-    abbr: row.abbr,
+    abbr: row.abbreviation ?? row.abbr,
+    abbreviation: row.abbreviation ?? row.abbr,
     category: row.category,
+    family: row.family,
+    manufacturer: row.manufacturer,
+    trade_name: row.trade_name,
     density: row.density,
-    tg: row.tg,
-    tm: row.tm,
-    maxTemp: row.maxTemp,
-    tensile: row.tensile,
+    tensile_strength: row.tensile_strength ?? row.tensile,
+    flexural_strength: row.flexural_strength,
+    impact_strength: row.impact_strength,
+    hardness: row.hardness,
+    tg: row.glass_transition_temperature ?? row.tg,
+    glass_transition_temperature: row.glass_transition_temperature ?? row.tg,
+    tm: row.melting_temperature ?? row.tm,
+    melting_temperature: row.melting_temperature ?? row.tm,
+    maxTemp: row.continuous_use_temperature ?? row.maxTemp,
+    continuous_use_temperature: row.continuous_use_temperature ?? row.maxTemp,
+    tensile: row.tensile_strength ?? row.tensile,
     elongation: row.elongation,
-    dielectric: row.dielectric,
-    recyclable: Boolean(row.recyclable),
+    thermal_conductivity: row.thermal_conductivity,
+    dielectric: row.dielectric_constant ?? row.dielectric,
+    dielectric_constant: row.dielectric_constant ?? row.dielectric,
+    chemical_resistance: row.chemical_resistance,
+    water_absorption: row.water_absorption,
+    flammability: row.flammability,
+    recyclability: row.recyclability ?? (row.recyclable ? "recyclable" : "not typically recyclable"),
+    recyclable: row.recyclable !== undefined && row.recyclable !== null ? Boolean(row.recyclable) : isRecyclable(row.recyclability),
+    cost_level: row.cost_level,
+    processing_methods: parseJsonList(row.processing_methods),
+    typical_applications: parseJsonList(row.typical_applications),
+    advantages: parseJsonList(row.advantages),
+    disadvantages: parseJsonList(row.disadvantages),
     tags: [],
     uses: [],
     sources: [],
@@ -46,6 +69,23 @@ function readMaterials(databasePath) {
   });
 
   return materials;
+}
+
+function parseJsonList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [String(parsed)];
+  } catch (error) {
+    return [String(value)];
+  }
+}
+
+function isRecyclable(value) {
+  const text = String(value || "").toLowerCase();
+  if (!text || text.includes("not ") || text.includes("non-recycl")) return false;
+  return text.includes("recyclable") || text.includes("recycling");
 }
 
 class SQLiteDatabase {

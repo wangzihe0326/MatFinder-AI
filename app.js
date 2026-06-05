@@ -56,11 +56,20 @@ const i18n = {
     none: "无",
     continuousUse: "连续使用",
     tensileStrength: "拉伸强度",
+    flexuralStrength: "弯曲强度",
+    impactStrength: "冲击强度",
+    hardness: "硬度",
     density: "密度",
     glassTransition: "玻璃化温度",
     meltingPoint: "熔点",
     elongation: "断裂伸长率",
+    thermalConductivity: "导热系数",
     dielectricConstant: "介电常数",
+    chemicalResistance: "耐化学性",
+    waterAbsorption: "吸水率",
+    flammability: "阻燃/燃烧等级",
+    costLevel: "成本等级",
+    processingMethods: "加工方式",
     typicalUses: "典型用途",
     selectionNotes: "选材提示",
     metric: "指标",
@@ -174,11 +183,20 @@ const i18n = {
     none: "none",
     continuousUse: "Continuous use",
     tensileStrength: "Tensile strength",
+    flexuralStrength: "Flexural strength",
+    impactStrength: "Impact strength",
+    hardness: "Hardness",
     density: "Density",
     glassTransition: "Glass transition",
     meltingPoint: "Melting point",
     elongation: "Elongation",
+    thermalConductivity: "Thermal conductivity",
     dielectricConstant: "Dielectric constant",
+    chemicalResistance: "Chemical resistance",
+    waterAbsorption: "Water absorption",
+    flammability: "Flammability",
+    costLevel: "Cost level",
+    processingMethods: "Processing methods",
     typicalUses: "Typical uses",
     selectionNotes: "Selection notes",
     metric: "Metric",
@@ -275,6 +293,14 @@ const zhTerms = {
   "High-performance plastic": "高性能塑料",
   "Bio-based material": "生物基材料",
   Elastomer: "弹性体",
+  Thermoplastics: "热塑性塑料",
+  "Engineering plastics": "工程塑料",
+  "High-performance polymers": "高性能聚合物",
+  Thermosets: "热固性材料",
+  Elastomers: "弹性体",
+  Composites: "复合材料",
+  Metals: "金属",
+  Ceramics: "陶瓷",
   Rubber: "橡胶",
   "chemical resistant": "耐化学",
   "low moisture": "低吸水",
@@ -330,13 +356,13 @@ const zhTerms = {
 };
 
 const propertyPredicates = {
-  "high-temp": (item) => item.maxTemp >= 150,
-  strength: (item) => item.tensile >= 70,
-  chemical: (item) => item.tags.includes("chemical resistant"),
+  "high-temp": (item) => item.maxTemp >= 150 || item.tags.includes("heat resistant"),
+  strength: (item) => item.tensile >= 70 || item.flexural_strength >= 100 || item.tags.includes("high strength"),
+  chemical: (item) => item.tags.includes("chemical resistant") || String(item.chemical_resistance || "").toLowerCase().includes("resistant"),
   transparent: (item) => item.tags.includes("transparent") || item.tags.includes("optical"),
-  elastomer: (item) => item.category === "Elastomer" || item.category === "Rubber" || item.tags.includes("elastomer"),
+  elastomer: (item) => item.category === "Elastomer" || item.category === "Elastomers" || item.category === "Rubber" || item.tags.includes("elastomer"),
   sustainable: (item) => item.tags.includes("bio-based") || item.tags.includes("compostable") || item.recyclable,
-  electrical: (item) => item.tags.includes("electrical insulation") || item.uses.some((use) => use.includes("electrical"))
+  electrical: (item) => item.tags.includes("electrical insulation") || item.uses.some((use) => use.includes("electrical")) || item.typical_applications?.some((use) => use.includes("electrical"))
 };
 
 const state = {
@@ -426,7 +452,7 @@ function materialUses(item) {
 function materialSummary(item) {
   if (state.language !== "zh") return item.summary;
   const uses = materialUses(item).slice(0, 3).join("、");
-  return `${materialName(item)}属于${materialCategory(item)}，典型用途包括${uses}，连续使用温度约 ${item.maxTemp} deg C。`;
+  return `${materialName(item)}属于${materialCategory(item)}，典型用途包括${uses || t("notSpecified")}，连续使用温度约 ${formatValue(item.maxTemp, " deg C")}。`;
 }
 
 function materialNotes(item) {
@@ -684,16 +710,29 @@ function getSearchText(item) {
     item.name,
     materialName(item),
     item.abbr,
+    item.abbreviation,
     item.category,
+    item.family,
+    item.manufacturer,
+    item.trade_name,
     materialCategory(item),
     item.summary,
     materialSummary(item),
     item.notes,
-    ...item.tags,
+    item.chemical_resistance,
+    item.flammability,
+    item.recyclability,
+    item.cost_level,
+    ...(item.tags || []),
     ...materialTags(item),
-    ...item.uses,
-    ...materialUses(item)
+    ...(item.uses || []),
+    ...materialUses(item),
+    ...(item.processing_methods || []),
+    ...(item.typical_applications || []),
+    ...(item.advantages || []),
+    ...(item.disadvantages || [])
   ]
+    .filter(Boolean)
     .join(" ")
     .toLowerCase();
 }
@@ -718,6 +757,10 @@ function localizedProfileText(en, zh) {
 }
 
 function materialAdvantageList(item) {
+  if (Array.isArray(item.advantages) && item.advantages.length) {
+    return item.advantages;
+  }
+
   const advantages = [];
   const tags = new Set(item.tags);
   const add = (en, zh) => advantages.push(localizedProfileText(en, zh));
@@ -740,6 +783,10 @@ function materialAdvantageList(item) {
 }
 
 function materialDisadvantageList(item) {
+  if (Array.isArray(item.disadvantages) && item.disadvantages.length) {
+    return item.disadvantages;
+  }
+
   const disadvantages = [];
   const add = (en, zh) => disadvantages.push(localizedProfileText(en, zh));
 
@@ -963,7 +1010,7 @@ function renderCards(items) {
         ${recommendation ? `<span class="chip">${t("aiScore")} ${recommendation.score}</span>` : ""}
         <p class="summary">${materialSummary(item)}</p>
         <div class="metrics">
-          <div class="metric"><span>${t("continuousUse")}</span><strong>${item.maxTemp} deg C</strong></div>
+          <div class="metric"><span>${t("continuousUse")}</span><strong>${formatValue(item.maxTemp, " deg C")}</strong></div>
           <div class="metric"><span>${t("tensileStrength")}</span><strong>${formatValue(item.tensile, " MPa")}</strong></div>
           <div class="metric"><span>${t("density")}</span><strong>${formatValue(item.density, " g/cm3")}</strong></div>
           <div class="metric"><span>Tg / Tm</span><strong>${formatValue(item.tg, " deg C")} / ${formatValue(item.tm, " deg C")}</strong></div>
@@ -1013,7 +1060,7 @@ function renderCompare() {
     [t("density"), (item) => formatValue(item.density, " g/cm3")],
     [t("glassTransition"), (item) => formatValue(item.tg, " deg C")],
     [t("meltingPoint"), (item) => formatValue(item.tm, " deg C")],
-    [t("continuousUse"), (item) => `${item.maxTemp} deg C`],
+    [t("continuousUse"), (item) => formatValue(item.maxTemp, " deg C")],
     [t("tensileStrength"), (item) => formatValue(item.tensile, " MPa")],
     [t("elongation"), (item) => formatValue(item.elongation, "%")],
     [t("dielectricConstant"), (item) => formatValue(item.dielectric)],
@@ -1214,9 +1261,17 @@ function showDetail(id) {
         <div class="metric"><span>${t("meltingPoint")}</span><strong>${formatValue(item.tm, " deg C")}</strong></div>
         <div class="metric"><span>${t("continuousUse")}</span><strong>${formatValue(item.maxTemp, " deg C")}</strong></div>
         <div class="metric"><span>${t("tensileStrength")}</span><strong>${formatValue(item.tensile, " MPa")}</strong></div>
+        <div class="metric"><span>${t("flexuralStrength")}</span><strong>${formatValue(item.flexural_strength, " MPa")}</strong></div>
+        <div class="metric"><span>${t("impactStrength")}</span><strong>${formatValue(item.impact_strength)}</strong></div>
+        <div class="metric"><span>${t("hardness")}</span><strong>${formatValue(item.hardness)}</strong></div>
         <div class="metric"><span>${t("elongation")}</span><strong>${formatValue(item.elongation, "%")}</strong></div>
+        <div class="metric"><span>${t("thermalConductivity")}</span><strong>${formatValue(item.thermal_conductivity, " W/mK")}</strong></div>
         <div class="metric"><span>${t("dielectricConstant")}</span><strong>${formatValue(item.dielectric)}</strong></div>
-        <div class="metric"><span>${t("recyclable")}</span><strong>${item.recyclable ? t("yes") : t("specialtyStream")}</strong></div>
+        <div class="metric"><span>${t("chemicalResistance")}</span><strong>${formatValue(item.chemical_resistance)}</strong></div>
+        <div class="metric"><span>${t("waterAbsorption")}</span><strong>${formatValue(item.water_absorption, "%")}</strong></div>
+        <div class="metric"><span>${t("flammability")}</span><strong>${formatValue(item.flammability)}</strong></div>
+        <div class="metric"><span>${t("recyclable")}</span><strong>${formatValue(item.recyclability || (item.recyclable ? t("yes") : t("specialtyStream")))}</strong></div>
+        <div class="metric"><span>${t("costLevel")}</span><strong>${formatValue(item.cost_level)}</strong></div>
       </div>
     </section>
 
@@ -1232,6 +1287,10 @@ function showDetail(id) {
       <section class="profile-section">
         <h3>${t("typicalUses")}</h3>
         ${renderProfileList(materialUses(item))}
+      </section>
+      <section class="profile-section">
+        <h3>${t("processingMethods")}</h3>
+        ${renderProfileList(item.processing_methods?.length ? item.processing_methods : [t("notSpecified")])}
       </section>
       <section class="profile-section">
         <h3>${t("similarMaterials")}</h3>

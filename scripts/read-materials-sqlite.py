@@ -12,18 +12,12 @@ def main():
 
     with sqlite3.connect(db_path) as connection:
         connection.row_factory = sqlite3.Row
-        rows = connection.execute(
-            """
-            SELECT id, name, abbr, category, density, tg, tm, maxTemp, tensile,
-                   elongation, dielectric, recyclable, summary, notes
-            FROM materials
-            ORDER BY rowid
-            """
-        ).fetchall()
+        columns = table_columns(connection, "materials")
+        rows = connection.execute("SELECT * FROM materials ORDER BY rowid").fetchall()
 
         materials = []
         for row in rows:
-            material_id = row["id"]
+            material_id = get(row, columns, "material_id", "id")
             tags = [
                 item["tag"]
                 for item in connection.execute(
@@ -57,18 +51,41 @@ def main():
             ]
             materials.append(
                 {
-                    "id": row["id"],
+                    "id": get(row, columns, "material_id", "id"),
+                    "material_id": get(row, columns, "material_id", "id"),
                     "name": row["name"],
-                    "abbr": row["abbr"],
+                    "abbr": get(row, columns, "abbreviation", "abbr"),
+                    "abbreviation": get(row, columns, "abbreviation", "abbr"),
                     "category": row["category"],
+                    "family": get(row, columns, "family"),
+                    "manufacturer": get(row, columns, "manufacturer"),
+                    "trade_name": get(row, columns, "trade_name"),
                     "density": row["density"],
-                    "tg": row["tg"],
-                    "tm": row["tm"],
-                    "maxTemp": row["maxTemp"],
-                    "tensile": row["tensile"],
+                    "tensile_strength": get(row, columns, "tensile_strength", "tensile"),
+                    "flexural_strength": get(row, columns, "flexural_strength"),
+                    "impact_strength": get(row, columns, "impact_strength"),
+                    "hardness": get(row, columns, "hardness"),
+                    "tg": get(row, columns, "glass_transition_temperature", "tg"),
+                    "glass_transition_temperature": get(row, columns, "glass_transition_temperature", "tg"),
+                    "tm": get(row, columns, "melting_temperature", "tm"),
+                    "melting_temperature": get(row, columns, "melting_temperature", "tm"),
+                    "maxTemp": get(row, columns, "continuous_use_temperature", "maxTemp"),
+                    "continuous_use_temperature": get(row, columns, "continuous_use_temperature", "maxTemp"),
+                    "tensile": get(row, columns, "tensile_strength", "tensile"),
                     "elongation": row["elongation"],
-                    "dielectric": row["dielectric"],
-                    "recyclable": bool(row["recyclable"]),
+                    "thermal_conductivity": get(row, columns, "thermal_conductivity"),
+                    "dielectric": get(row, columns, "dielectric_constant", "dielectric"),
+                    "dielectric_constant": get(row, columns, "dielectric_constant", "dielectric"),
+                    "chemical_resistance": get(row, columns, "chemical_resistance"),
+                    "water_absorption": get(row, columns, "water_absorption"),
+                    "flammability": get(row, columns, "flammability"),
+                    "recyclability": get(row, columns, "recyclability") or ("recyclable" if get(row, columns, "recyclable") else "not typically recyclable"),
+                    "recyclable": bool(get(row, columns, "recyclable")) if "recyclable" in columns else is_recyclable(get(row, columns, "recyclability")),
+                    "cost_level": get(row, columns, "cost_level"),
+                    "processing_methods": json_list(get(row, columns, "processing_methods")),
+                    "typical_applications": json_list(get(row, columns, "typical_applications")),
+                    "advantages": json_list(get(row, columns, "advantages")),
+                    "disadvantages": json_list(get(row, columns, "disadvantages")),
                     "tags": tags,
                     "uses": uses,
                     "sources": sources,
@@ -78,6 +95,35 @@ def main():
             )
 
     print(json.dumps(materials, ensure_ascii=False))
+
+
+def table_columns(connection, table_name):
+    return {row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})")}
+
+
+def get(row, columns, primary, fallback=None):
+    if primary in columns:
+        return row[primary]
+    if fallback and fallback in columns:
+        return row[fallback]
+    return None
+
+
+def json_list(value):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else [str(parsed)]
+    except Exception:
+        return [str(value)]
+
+
+def is_recyclable(value):
+    text = str(value or "").lower()
+    if not text or "not " in text or "non-recycl" in text:
+        return False
+    return "recyclable" in text or "recycling" in text
 
 
 if __name__ == "__main__":
