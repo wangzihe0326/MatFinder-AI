@@ -42,9 +42,10 @@ Use `/api/health` as the platform health check path.
 
 ## SQLite Deployment Notes
 
-- The Docker image runs `npm run migrate:materials` during build, creating `matfinder.db` from the checked-in material source files.
-- The deployed server reads SQLite through `scripts/read-materials-sqlite.py`, so the runtime image includes Python 3.
+- The Docker image uses the `matfinder.db` file shipped in the repository.
+- The deployed server reads SQLite directly from Node.js at startup; Python is not required for production runtime or Docker build.
 - Current app behavior is read-only. Rebuild/redeploy after changing material data.
+- Run `npm run migrate:materials` only as a local data maintenance step when intentionally regenerating `matfinder.db`.
 - If you later add admin editing, mount persistent storage and set `MATFINDER_DB_PATH` to that mounted file path.
 
 ## Docker
@@ -140,7 +141,6 @@ If `MATFINDER_API_BASE_URL` is empty, the frontend uses same-origin `/api/...`, 
 Run before deployment:
 
 ```bash
-npm run migrate:materials
 npm start
 ```
 

@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { spawnSync } = require("node:child_process");
+const { readMaterials } = require("./read-materials-sqlite");
 
 loadEnvFile(".env.local");
 
@@ -67,30 +67,5 @@ function loadEnvFile(filePath) {
 
 function loadMaterialsFromSqlite() {
   const rootDir = path.join(__dirname, "..");
-  const result = spawnSync(findPython(), [path.join(__dirname, "read-materials-sqlite.py"), path.join(rootDir, "matfinder.db")], {
-    cwd: rootDir,
-    encoding: "utf8"
-  });
-
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || "Failed to read materials from SQLite.");
-  }
-
-  return JSON.parse(result.stdout);
-}
-
-function findPython() {
-  const candidates = [
-    process.env.PYTHON,
-    path.join(process.env.USERPROFILE || "", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe"),
-    "python",
-    "py"
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    const check = spawnSync(candidate, ["--version"], { encoding: "utf8" });
-    if (check.status === 0) return candidate;
-  }
-
-  throw new Error("Python runtime with sqlite3 is required to read matfinder.db.");
+  return readMaterials(path.join(rootDir, "matfinder.db"));
 }

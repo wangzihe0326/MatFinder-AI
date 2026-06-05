@@ -21,7 +21,6 @@ The system is designed to keep the local material database as the source of trut
 - HTML, CSS, and JavaScript for the frontend.
 - Node.js built-in HTTP server for static assets and API routes.
 - SQLite for the local material database.
-- Python `sqlite3` scripts for database generation and reads.
 - OpenAI API for optional material explanations and comparison narratives.
 - Docker for production packaging and deployment.
 
@@ -82,14 +81,12 @@ flowchart TD
 ### Prerequisites
 
 - Node.js 20 or newer.
-- Python 3 with the standard `sqlite3` module.
 - Optional: an OpenAI API key for AI analysis and comparison.
 
 ### Install and Run
 
 ```bash
 npm install
-npm run migrate:materials
 npm start
 ```
 
@@ -129,11 +126,15 @@ Without `OPENAI_API_KEY`, the local database, search, filters, local recommendat
 
 ## Database Workflow
 
-MatFinder AI uses SQLite in production and development. The migration command builds `matfinder.db` from the checked-in material source files.
+MatFinder AI uses the checked-in `matfinder.db` file in production and development. The server reads that SQLite file directly with Node.js at startup.
+
+When maintaining or expanding the material dataset, regenerate `matfinder.db` from the checked-in material source files:
 
 ```bash
 npm run migrate:materials
 ```
+
+The migration command is a data maintenance step only. Docker and hosted deployments do not run it during build.
 
 The database includes:
 
@@ -168,7 +169,7 @@ docker build -t matfinder-ai .
 docker run --rm -p 3000:3000 --env-file .env.local matfinder-ai
 ```
 
-The Docker image installs Python 3, rebuilds `matfinder.db`, serves the frontend and APIs from Node.js, and exposes `/api/health`.
+The Docker image uses the `matfinder.db` file shipped in the repository, serves the frontend and APIs from Node.js, and exposes `/api/health`.
 
 ### Render
 
@@ -201,7 +202,6 @@ Recommended checks before deployment:
 node --check server.js
 node --check app.js
 node --check recommendation-engine.js
-npm run migrate:materials
 npm start
 ```
 

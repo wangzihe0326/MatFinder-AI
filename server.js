@@ -1,7 +1,7 @@
 const http = require("node:http");
-const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readMaterials } = require("./scripts/read-materials-sqlite");
 
 const rootDir = __dirname;
 loadEnvFile(path.join(rootDir, ".env"));
@@ -88,36 +88,10 @@ function loadEnvFile(filePath) {
 
 function loadMaterials() {
   if (!fs.existsSync(databasePath)) {
-    throw new Error("matfinder.db was not found. Run npm.cmd run migrate:materials first.");
+    throw new Error(`SQLite database was not found at ${databasePath}. Ensure matfinder.db is included in the deployment artifact.`);
   }
 
-  const readerPath = path.join(rootDir, "scripts", "read-materials-sqlite.py");
-  const result = spawnSync(findPython(), [readerPath, databasePath], {
-    cwd: rootDir,
-    encoding: "utf8"
-  });
-
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || "Failed to read materials from SQLite.");
-  }
-
-  return JSON.parse(result.stdout);
-}
-
-function findPython() {
-  const candidates = [
-    process.env.PYTHON,
-    path.join(process.env.USERPROFILE || "", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe"),
-    "python",
-    "py"
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    const check = spawnSync(candidate, ["--version"], { encoding: "utf8" });
-    if (check.status === 0) return candidate;
-  }
-
-  throw new Error("Python runtime with sqlite3 is required to read matfinder.db.");
+  return readMaterials(databasePath);
 }
 
 async function handleMaterialAnalysis(request, response) {

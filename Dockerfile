@@ -6,15 +6,10 @@ ENV NODE_ENV=production \
     PORT=3000 \
     MATFINDER_DB_PATH=/app/matfinder.db
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
-
 COPY package*.json ./
 RUN npm install --omit=dev
 
 COPY . .
-RUN npm run migrate:materials
 
 EXPOSE 3000
 
