@@ -1,0 +1,348 @@
+const http = require("node:http");
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const rootDir = __dirname;
+loadEnvFile(path.join(rootDir, ".env"));
+loadEnvFile(path.join(rootDir, ".env.local"));
+
+const nodeEnv = process.env.NODE_ENV || "development";
+const port = Number(process.env.PORT || 3000);
+const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const databasePath = path.resolve(rootDir, process.env.MATFINDER_DB_PATH || "matfinder.db");
+const allowedOrigins = parseList(process.env.MATFINDER_ALLOWED_ORIGINS);
+
+const materials = loadMaterials();
+
+const mimeTypes = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml; charset=utf-8"
+};
+
+const server = http.createServer(async (request, response) => {
+  try {
+    const requestPath = new URL(request.url, `http://localhost:${port}`).pathname;
+    attachCorsHeaders(request, response, requestPath);
+
+    if (request.method === "OPTIONS" && requestPath.startsWith("/api/")) {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
+    if (request.method === "GET" && requestPath === "/api/health") {
+      sendJson(response, 200, {
+        status: "ok",
+        environment: nodeEnv,
+        materials: materials.length,
+        database: path.basename(databasePath),
+        openaiConfigured: Boolean(process.env.OPENAI_API_KEY)
+      });
+      return;
+    }
+
+    if (request.method === "GET" && requestPath === "/api/materials") {
+      sendJson(response, 200, materials);
+      return;
+    }
+
+    if (request.method === "POST" && requestPath === "/api/material-analysis") {
+      await handleMaterialAnalysis(request, response);
+      return;
+    }
+
+    if (request.method === "POST" && requestPath === "/api/material-comparison") {
+      await handleMaterialComparison(request, response);
+      return;
+    }
+
+    if (request.method !== "GET") {
+      sendJson(response, 405, { error: "Method not allowed" });
+      return;
+    }
+
+    serveStatic(request, response);
+  } catch (error) {
+    sendJson(response, 500, { error: "Server error", detail: error.message });
+  }
+});
+
+server.listen(port, () => {
+  console.log(`MatFinder AI running in ${nodeEnv} mode at http://localhost:${port}`);
+});
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+
+  const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+  lines.forEach((line) => {
+    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (!match || process.env[match[1]]) return;
+    process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+  });
+}
+
+function loadMaterials() {
+  if (!fs.existsSync(databasePath)) {
+    throw new Error("matfinder.db was not found. Run npm.cmd run migrate:materials first.");
+  }
+
+  const readerPath = path.join(rootDir, "scripts", "read-materials-sqlite.py");
+  const result = spawnSync(findPython(), [readerPath, databasePath], {
+    cwd: rootDir,
+    encoding: "utf8"
+  });
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "Failed to read materials from SQLite.");
+  }
+
+  return JSON.parse(result.stdout);
+}
+
+function findPython() {
+  const candidates = [
+    process.env.PYTHON,
+    path.join(process.env.USERPROFILE || "", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe"),
+    "python",
+    "py"
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const check = spawnSync(candidate, ["--version"], { encoding: "utf8" });
+    if (check.status === 0) return candidate;
+  }
+
+  throw new Error("Python runtime with sqlite3 is required to read matfinder.db.");
+}
+
+async function handleMaterialAnalysis(request, response) {
+  if (!process.env.OPENAI_API_KEY) {
+    sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  const language = normalizeLanguage(body.language);
+  const material = materials.find((item) => item.id === body.materialId);
+
+  if (!material) {
+    sendJson(response, 404, { error: "Material not found" });
+    return;
+  }
+
+  const analysis = await generateMaterialAnalysis(material, language);
+  sendJson(response, 200, { materialId: material.id, materialName: material.name, analysis });
+}
+
+async function handleMaterialComparison(request, response) {
+  if (!process.env.OPENAI_API_KEY) {
+    sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
+    return;
+  }
+
+  const body = await readJsonBody(request);
+  const language = normalizeLanguage(body.language);
+  const requestedIds = Array.isArray(body.materialIds) ? body.materialIds.slice(0, 2) : [];
+  const pair = requestedIds.map((id) => materials.find((item) => item.id === id));
+
+  if (pair.length !== 2 || pair.some((item) => !item)) {
+    sendJson(response, 400, { error: "Exactly two valid materialIds are required" });
+    return;
+  }
+
+  if (pair[0].id === pair[1].id) {
+    sendJson(response, 400, { error: "Choose two different materials" });
+    return;
+  }
+
+  const comparison = await generateMaterialComparison(pair, language);
+  sendJson(response, 200, {
+    materialIds: pair.map((item) => item.id),
+    materialNames: pair.map((item) => item.name),
+    comparison
+  });
+}
+
+async function generateMaterialAnalysis(material, language) {
+  const prompt = {
+    targetLanguage: language === "zh" ? "Simplified Chinese" : "English",
+    task: "Explain this polymer material using only the supplied local database fields. Do not invent properties, standards, certifications, numeric values, grades, or applications that are not supported by the provided object. If something is not specified, say so plainly.",
+    requiredJsonShape: {
+      overview: "one concise paragraph",
+      advantages: ["3 to 5 bullets grounded in provided fields"],
+      limitations: ["2 to 4 bullets grounded in provided fields or notes"],
+      recommendedApplications: ["3 to 5 applications supported by uses, tags, and properties"]
+    },
+    material
+  };
+
+  const content = await requestOpenAIJson(prompt);
+  return normalizeAnalysis(parseJsonObject(content));
+}
+
+async function generateMaterialComparison(pair, language) {
+  const prompt = {
+    targetLanguage: language === "zh" ? "Simplified Chinese" : "English",
+    task: "Compare these two polymer materials using only the supplied local database profiles. Do not invent properties, standards, certifications, numeric values, grades, or applications that are not supported by the provided objects. If a difference is not supported by the fields, say it is not specified.",
+    requiredJsonShape: {
+      keyDifferences: ["3 to 5 bullets comparing provided properties or tags"],
+      strengthsAndWeaknesses: ["4 to 6 bullets covering both materials"],
+      recommendedUseCases: ["3 to 5 bullets mapping each material to supported uses"],
+      selectionAdvice: "one concise paragraph explaining when to choose each material"
+    },
+    materials: pair
+  };
+
+  const content = await requestOpenAIJson(prompt);
+  return normalizeComparison(parseJsonObject(content));
+}
+
+async function requestOpenAIJson(prompt) {
+  const apiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a cautious polymer materials assistant. Explain only from provided source data. Return strict JSON in the requested targetLanguage and do not include markdown."
+        },
+        {
+          role: "user",
+          content: JSON.stringify(prompt)
+        }
+      ]
+    })
+  });
+
+  const payload = await apiResponse.json();
+
+  if (!apiResponse.ok) {
+    const message = payload.error?.message || "OpenAI request failed";
+    throw new Error(message);
+  }
+
+  return payload.choices?.[0]?.message?.content || "{}";
+}
+
+function normalizeAnalysis(analysis) {
+  return {
+    overview: String(analysis.overview || "No overview returned."),
+    advantages: normalizeList(analysis.advantages),
+    limitations: normalizeList(analysis.limitations),
+    recommendedApplications: normalizeList(analysis.recommendedApplications)
+  };
+}
+
+function normalizeComparison(comparison) {
+  return {
+    keyDifferences: normalizeList(comparison.keyDifferences),
+    strengthsAndWeaknesses: normalizeList(comparison.strengthsAndWeaknesses),
+    recommendedUseCases: normalizeList(comparison.recommendedUseCases),
+    selectionAdvice: String(comparison.selectionAdvice || "No selection advice returned.")
+  };
+}
+
+function normalizeLanguage(value) {
+  return value === "en" ? "en" : "zh";
+}
+
+function parseList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function attachCorsHeaders(request, response, requestPath) {
+  if (!requestPath.startsWith("/api/")) return;
+
+  const origin = request.headers.origin;
+  if (!origin) return;
+
+  if (allowedOrigins.includes("*")) {
+    response.setHeader("Access-Control-Allow-Origin", "*");
+  } else if (allowedOrigins.includes(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  } else {
+    return;
+  }
+
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function parseJsonObject(content) {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    const match = content.match(/\{[\s\S]*\}/);
+    if (!match) throw error;
+    return JSON.parse(match[0]);
+  }
+}
+
+function normalizeList(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item)).filter(Boolean).slice(0, 6);
+}
+
+function serveStatic(request, response) {
+  const url = new URL(request.url, `http://localhost:${port}`);
+  const requestedPath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
+  const filePath = path.normalize(path.join(rootDir, requestedPath));
+
+  if (!filePath.startsWith(rootDir)) {
+    response.writeHead(403);
+    response.end("Forbidden");
+    return;
+  }
+
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    response.writeHead(404);
+    response.end("Not found");
+    return;
+  }
+
+  const ext = path.extname(filePath);
+  response.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
+  fs.createReadStream(filePath).pipe(response);
+}
+
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 64_000) {
+        request.destroy();
+        reject(new Error("Request body too large"));
+      }
+    });
+    request.on("end", () => {
+      try {
+        resolve(JSON.parse(body || "{}"));
+      } catch (error) {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+  });
+}
+
+function sendJson(response, status, payload) {
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  response.writeHead(status);
+  response.end(JSON.stringify(payload));
+}

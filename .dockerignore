@@ -1,0 +1,6 @@
+.git
+.env
+.env.local
+node_modules
+npm-debug.log
+deployment-url.txt

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: matfinder-ai
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MATFINDER_DB_PATH
+        value: /app/matfinder.db
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: MATFINDER_ALLOWED_ORIGINS
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
