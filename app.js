@@ -6,6 +6,7 @@ const i18n = {
   zh: {
     brandEyebrow: "本地材料数据库 + AI",
     languageLabel: "语言",
+    filtersToggle: "筛选",
     materialsUnit: "种材料",
     comparedUnit: "个对比",
     requirementLabel: "需求描述",
@@ -114,6 +115,7 @@ const i18n = {
   en: {
     brandEyebrow: "Local Material Database + AI",
     languageLabel: "Language",
+    filtersToggle: "Filters",
     materialsUnit: "materials",
     comparedUnit: "compared",
     requirementLabel: "Requirement description",
@@ -349,6 +351,7 @@ const elements = {
   analysisContent: document.querySelector("#analysisContent"),
   exampleButtons: document.querySelectorAll("[data-example]"),
   searchInput: document.querySelector("#searchInput"),
+  filterToggleButton: document.querySelector("#filterToggleButton"),
   categoryFilter: document.querySelector("#categoryFilter"),
   propertyFilter: document.querySelector("#propertyFilter"),
   tempRange: document.querySelector("#tempRange"),
@@ -521,6 +524,12 @@ function apiUrl(path) {
 }
 
 function bindEvents() {
+  elements.filterToggleButton.addEventListener("click", () => {
+    const isOpen = elements.filterToggleButton.getAttribute("aria-expanded") === "true";
+    elements.filterToggleButton.setAttribute("aria-expanded", String(!isOpen));
+    elements.filterToggleButton.closest(".filters").classList.toggle("is-open", !isOpen);
+  });
+
   elements.languageSelect.addEventListener("change", (event) => {
     state.language = event.target.value;
     document.documentElement.lang = state.language === "zh" ? "zh-CN" : "en";

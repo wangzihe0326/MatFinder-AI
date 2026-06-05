@@ -71,6 +71,11 @@
 
       <main class="layout">
         <aside class="filters" aria-label="Database filters">
+          <button id="filterToggleButton" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterBody">
+            <span data-i18n="filtersToggle">Filters</span>
+            <span class="filter-toggle-icon" aria-hidden="true">+</span>
+          </button>
+          <div id="filterBody" class="filters-body">
           <div class="search-box">
             <label for="searchInput" data-i18n="keywordSearch">关键词搜索</label>
             <input id="searchInput" type="search" placeholder="名称、缩写、用途、性能" autocomplete="off" />
@@ -119,6 +124,7 @@
               <span data-i18n="recyclableOnly">仅可回收</span>
             </label>
             <button id="resetButton" type="button" data-i18n="resetButton">重置</button>
+          </div>
           </div>
         </aside>
 

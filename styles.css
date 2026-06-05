@@ -26,6 +26,7 @@ body {
     linear-gradient(90deg, rgba(15, 118, 110, 0.08), transparent 28%),
     linear-gradient(180deg, #f8fbfb 0%, var(--page) 100%);
   font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
 button,
@@ -33,6 +34,19 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button,
+input,
+select,
+textarea,
+h1,
+h2,
+h3,
+p,
+td,
+th {
+  overflow-wrap: anywhere;
 }
 
 button {
@@ -212,6 +226,7 @@ textarea:focus {
 .ai-actions,
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -417,8 +432,16 @@ button:hover {
   position: sticky;
   top: 18px;
   display: grid;
-  gap: 16px;
   padding: 16px;
+}
+
+.filter-toggle {
+  display: none;
+}
+
+.filters-body {
+  display: grid;
+  gap: 16px;
 }
 
 .range-group {
@@ -646,6 +669,8 @@ output {
 
 .compare-table-wrap {
   overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -668,6 +693,10 @@ th {
 
 td {
   background: #fff;
+}
+
+th:first-child {
+  min-width: 142px;
 }
 
 dialog {
@@ -718,7 +747,90 @@ dialog::backdrop {
   line-height: 1.55;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1180px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .layout {
+    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .materials-grid {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  }
+
+  .topbar,
+  .ai-panel,
+  .analysis-panel,
+  .workspace,
+  .compare-panel {
+    padding: 14px;
+  }
+
+  .filters {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .ai-panel,
+  .analysis-panel,
+  .layout,
+  .compare-panel,
+  .topbar {
+    max-width: 100%;
+  }
+
+  .layout {
+    grid-template-columns: minmax(224px, 260px) minmax(0, 1fr);
+  }
+
+  .materials-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  .summary,
+  .analysis-block p,
+  .analysis-block li {
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    align-items: flex-start;
+  }
+
+  .top-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    white-space: normal;
+  }
+
+  .ai-panel {
+    grid-template-columns: minmax(260px, 0.95fr) minmax(260px, 1.05fr);
+  }
+
+  .recommendation-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .recommendation-card .score-box {
+    grid-column: 1 / -1;
+  }
+
+  .detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: 12px;
+  }
+
   .ai-panel,
   .layout {
     grid-template-columns: 1fr;
@@ -733,12 +845,251 @@ dialog::backdrop {
 
   .filters {
     position: static;
+    padding: 0;
+  }
+
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: #fff;
+  }
+
+  .filter-toggle-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    transition: transform 160ms ease;
+  }
+
+  .filter-toggle[aria-expanded="true"] .filter-toggle-icon {
+    transform: rotate(45deg);
+  }
+
+  .filters-body {
+    padding: 14px;
+  }
+
+  .filters:not(.is-open) .filters-body {
+    display: none;
+  }
+
+  .topbar,
+  .toolbar,
+  .compare-header,
+  .analysis-header,
+  .recommendation-card {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .top-actions,
+  .example-strip,
+  .toolbar-controls,
+  .ai-actions,
+  .card-actions {
+    width: 100%;
+  }
+
+  .top-actions {
+    align-items: stretch;
+  }
+
+  .top-actions > span,
+  .language-control {
+    width: 100%;
+  }
+
+  .language-control {
+    justify-content: space-between;
+  }
+
+  .language-control select {
+    width: 132px;
+    flex: 0 0 132px;
+  }
+
+  .brand-asset {
+    width: 58px;
+    height: 48px;
+  }
+
+  .toolbar-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .toolbar-controls select {
+    width: 100%;
+  }
+
+  .materials-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .material-card {
+    min-height: 0;
+  }
+
+  .detail-grid,
+  .metrics,
+  .analysis-grid {
+    grid-template-columns: 1fr;
+  }
+
+  table {
+    min-width: 640px;
   }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 480px) {
+  body {
+    font-size: 15px;
+  }
+
   .app-shell {
+    padding: 10px;
+  }
+
+  .topbar,
+  .ai-panel,
+  .analysis-panel,
+  .workspace,
+  .compare-panel {
     padding: 12px;
+  }
+
+  h1 {
+    font-size: 1.55rem;
+  }
+
+  h2 {
+    font-size: 1.12rem;
+  }
+
+  h3 {
+    font-size: 1rem;
+  }
+
+  input[type="search"],
+  select,
+  textarea,
+  button {
+    min-height: 46px;
+  }
+
+  textarea {
+    min-height: 118px;
+  }
+
+  .example-strip button,
+  .ai-actions button,
+  .card-actions button,
+  .compare-header button,
+  .toolbar-controls select {
+    width: 100%;
+  }
+
+  .card-head {
+    gap: 10px;
+  }
+
+  .abbr {
+    width: 42px;
+    height: 42px;
+    font-size: 0.84rem;
+  }
+
+  .metric {
+    padding: 9px;
+  }
+
+  .tag,
+  .reason,
+  .chip {
+    line-height: 1.25;
+  }
+
+  .analysis-status {
+    justify-content: center;
+    width: 100%;
+    min-height: 38px;
+    text-align: center;
+  }
+
+  .detail-card {
+    max-height: calc(100vh - 24px);
+    overflow: auto;
+    padding: 16px;
+  }
+
+  table {
+    min-width: 600px;
+  }
+}
+
+@media (max-width: 390px) {
+  .app-shell {
+    padding: 8px;
+  }
+
+  .brand {
+    gap: 10px;
+  }
+
+  .brand-asset {
+    width: 52px;
+    height: 44px;
+  }
+
+  .top-actions {
+    gap: 8px;
+  }
+
+  .recommendation-empty,
+  .analysis-block,
+  .recommendation-card,
+  .material-card {
+    padding: 11px;
+  }
+
+  .range-row {
+    grid-template-columns: 1fr;
+  }
+
+  output {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filter-row button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 761px) {
+  .filters {
+    display: block;
+  }
+
+  .filters-body {
+    display: grid !important;
+  }
+}
   }
 
   .topbar,
