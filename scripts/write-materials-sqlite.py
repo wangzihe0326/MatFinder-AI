@@ -8,6 +8,11 @@ def main():
     if len(sys.argv) != 2:
         raise SystemExit("Usage: write-materials-sqlite.py <database-path>")
 
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+
     db_path = Path(sys.argv[1])
     materials = clean_value(json.load(sys.stdin))
 
