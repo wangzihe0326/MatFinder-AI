@@ -155,8 +155,8 @@ const i18n = {
     copilotContextEmpty: "No material selected",
     copilotSend: "Ask",
     copilotPlaceholder: "Ask about recommendation reasons, advantages, limitations, or alternatives",
-    copilotEmpty: "Open a recommended material from Home, then use Copilot for follow-up questions about that real material record.",
-    copilotNoContext: "Open a material detail first so I can answer from a real material record.",
+    copilotEmpty: "Open a material detail from Home recommendations or the Materials Database, then use Copilot for follow-up questions about that real material record.",
+    copilotNoContext: "Open a material detail from Home or Materials Database first so I can answer from a real material record.",
     copilotDefaultQuestion: "How should I evaluate this material?",
     copilotContextPrefix: "Using",
     copilotWhyTitle: "Recommendation rationale",
@@ -173,6 +173,12 @@ const i18n = {
     analysisEmpty: "Open a material detail to make optional AI analysis available for that selected material.",
     keywordSearch: "Keyword search",
     searchPlaceholder: "Name, abbreviation, use, property",
+    materialsPageLabel: "Materials database",
+    materialsPageTitle: "Browse the material library",
+    materialsPageBody: "Search, filter, and compare material records from the local engineering database.",
+    catalogTotalMaterials: "Total materials",
+    catalogCategories: "Categories",
+    catalogTopCategory: "Largest category",
     materialCategory: "Material category",
     allCategories: "All categories",
     performanceFocus: "Performance focus",
@@ -188,7 +194,14 @@ const i18n = {
     performanceSnapshot: "Performance snapshot",
     comparePageLabel: "Material comparison",
     comparePageTitle: "Build a side-by-side shortlist",
-    comparePageBody: "Search or filter the material database, add up to 3 materials, then compare properties in one table. Optional AI comparison stays here as a supporting action.",
+    comparePageBody: "Compare selected materials in one focused table without the database browser in the way.",
+    compareGuidance: "Select materials from Home or Materials Database to compare.",
+    selectedMaterials: "Selected materials",
+    compareEmptyTitle: "No materials selected yet",
+    compareEmptyBody: "Select materials from Home recommendation results or the Materials Database to build a comparison.",
+    openHome: "Open Home",
+    browseMaterials: "Browse Materials",
+    remove: "Remove",
     aiComparisonLabel: "Contextual AI Comparison",
     selectTwoMaterials: "Select two materials",
     compareWithAi: "Compare with AI",
@@ -217,14 +230,30 @@ const i18n = {
     aboutIntro: "MatFinder AI turns product requirements into ranked material candidates, explains the match, and produces a report you can review with engineering, sourcing, or suppliers.",
     aboutCategoriesUnit: "categories",
     aboutDatasetTitle: "Dataset size",
-    aboutEngineTitle: "Recommendation engine",
+    aboutWhatTitle: "What is MatFinder AI?",
+    aboutWhatBody: "MatFinder AI is a local-first material selection assistant that combines a structured materials database with transparent recommendation scoring and optional contextual AI explanations.",
+    aboutAudienceTitle: "Who is it for?",
+    aboutAudienceBody: "It is designed for product designers, engineers, founders, students, and sourcing teams who need a fast first-pass shortlist before grade-level validation.",
+    aboutEngineTitle: "How recommendation scoring works",
     aboutEngineBody: "The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.",
-    aboutTrustTitle: "What the score means",
-    aboutTrustBody: "Scores summarize how well each material matches the detected requirements, with reasons and warnings shown beside every recommendation.",
+    aboutScoringOne: "Parse the requirement for material, performance, application, and constraint signals.",
+    aboutScoringTwo: "Match those signals against tags, properties, uses, and numeric thresholds in the local dataset.",
+    aboutScoringThree: "Rank candidates with explainable reasons, warnings, and similar alternatives.",
+    aboutFeaturesTitle: "Key features",
+    aboutFeatureOne: "Requirement-to-shortlist recommendation workflow.",
+    aboutFeatureTwo: "Searchable, filterable material catalog.",
+    aboutFeatureThree: "Side-by-side comparison for up to three materials.",
+    aboutFeatureFour: "PDF-style report export for selection reviews.",
+    aboutTrustTitle: "Limitations",
+    aboutTrustBody: "Scores are a screening aid, not a certification. Numeric fields are normalized from the local dataset and should be checked against supplier datasheets before final material selection.",
     aboutValidationTitle: "Before final selection",
     aboutValidationOne: "Confirm grade-level datasheets and supplier availability.",
     aboutValidationTwo: "Validate processing method, environment, and long-term load.",
     aboutValidationThree: "Use the exported report as a selection brief, not a final certification.",
+    aboutRoadmapTitle: "Roadmap",
+    aboutRoadmapOne: "Grade-level datasheet links and supplier records.",
+    aboutRoadmapTwo: "More domain presets for automotive, electronics, medical, packaging, and sustainability use cases.",
+    aboutRoadmapThree: "Richer export templates for engineering reviews and sourcing conversations.",
     recommendationExplanation: "Recommendation explanation",
     aiRecommendationSummary: "AI recommendation summary",
     scoringReasons: "Scoring engine reasons",
@@ -353,6 +382,12 @@ const zhDetailLabels = {
   analysisEmpty: "\u6253\u5f00\u6750\u6599\u8be6\u60c5\u540e\uff0c\u53ef\u4ee5\u5728\u8fd9\u91cc\u67e5\u770b\u8be5\u6750\u6599\u7684\u53ef\u9009 AI \u5206\u6790\u3002",
   keywordSearch: "\u5173\u952e\u8bcd\u641c\u7d22",
   searchPlaceholder: "\u540d\u79f0\u3001\u7f29\u5199\u3001\u7528\u9014\u3001\u6027\u80fd",
+  materialsPageLabel: "\u6750\u6599\u6570\u636e\u5e93",
+  materialsPageTitle: "\u6d4f\u89c8\u6750\u6599\u56fe\u4e66\u9986",
+  materialsPageBody: "\u641c\u7d22\u3001\u7b5b\u9009\u5e76\u5bf9\u6bd4\u672c\u5730\u5de5\u7a0b\u6750\u6599\u6570\u636e\u5e93\u4e2d\u7684\u6750\u6599\u8bb0\u5f55\u3002",
+  catalogTotalMaterials: "\u6750\u6599\u603b\u6570",
+  catalogCategories: "\u6750\u6599\u7c7b\u522b",
+  catalogTopCategory: "\u6700\u5927\u7c7b\u522b",
   materialCategory: "\u6750\u6599\u7c7b\u522b",
   allCategories: "\u5168\u90e8\u7c7b\u522b",
   performanceFocus: "\u6027\u80fd\u91cd\u70b9",
@@ -480,8 +515,8 @@ const zhDetailLabels = {
   copilotContextEmpty: "\u5c1a\u672a\u9009\u62e9\u6750\u6599",
   copilotSend: "\u63d0\u95ee",
   copilotPlaceholder: "\u8be2\u95ee\u63a8\u8350\u539f\u56e0\u3001\u4f18\u52bf\u3001\u9650\u5236\u6216\u66ff\u4ee3\u6750\u6599",
-  copilotEmpty: "\u5148\u5728\u9996\u9875\u6253\u5f00\u4e00\u4e2a\u63a8\u8350\u6750\u6599\uff0c\u7136\u540e\u7528 Copilot \u8ffd\u95ee\u8be5\u6750\u6599\u7684\u4f18\u52bf\u3001\u9650\u5236\u6216\u66ff\u4ee3\u65b9\u6848\u3002",
-  copilotNoContext: "\u8bf7\u5148\u6253\u5f00\u4e00\u4e2a\u6750\u6599\u8be6\u60c5\uff0c\u6211\u624d\u80fd\u57fa\u4e8e\u771f\u5b9e\u6750\u6599\u6570\u636e\u56de\u7b54\u3002",
+  copilotEmpty: "\u5148\u4ece\u9996\u9875\u63a8\u8350\u7ed3\u679c\u6216\u6750\u6599\u6570\u636e\u5e93\u6253\u5f00\u4e00\u4e2a\u6750\u6599\u8be6\u60c5\uff0c\u7136\u540e\u7528 Copilot \u8ffd\u95ee\u8be5\u6750\u6599\u7684\u4f18\u52bf\u3001\u9650\u5236\u6216\u66ff\u4ee3\u65b9\u6848\u3002",
+  copilotNoContext: "\u8bf7\u5148\u4ece\u9996\u9875\u6216\u6750\u6599\u6570\u636e\u5e93\u6253\u5f00\u4e00\u4e2a\u6750\u6599\u8be6\u60c5\uff0c\u6211\u624d\u80fd\u57fa\u4e8e\u771f\u5b9e\u6750\u6599\u6570\u636e\u56de\u7b54\u3002",
   copilotDefaultQuestion: "\u5e94\u8be5\u5982\u4f55\u8bc4\u4f30\u8fd9\u79cd\u6750\u6599\uff1f",
   copilotContextPrefix: "\u5f53\u524d\u6750\u6599",
   copilotWhyTitle: "\u63a8\u8350\u7406\u7531",
@@ -506,21 +541,44 @@ const zhDetailLabels = {
   reportNoWarnings: "\u8bc4\u5206\u5f15\u64ce\u672a\u6807\u51fa\u4e3b\u8981\u672a\u5339\u914d\u8b66\u544a\u3002",
   comparePageLabel: "\u6750\u6599\u5bf9\u6bd4",
   comparePageTitle: "\u5efa\u7acb\u5e76\u6392\u7684\u6750\u6599\u5019\u9009\u6e05\u5355",
-  comparePageBody: "\u641c\u7d22\u6216\u7b5b\u9009\u6750\u6599\u5e93\uff0c\u6700\u591a\u52a0\u5165 3 \u79cd\u6750\u6599\uff0c\u7136\u540e\u5728\u4e00\u5f20\u8868\u91cc\u5bf9\u6bd4\u5173\u952e\u5c5e\u6027\u3002AI \u5bf9\u6bd4\u4f5c\u4e3a\u8f85\u52a9\u52a8\u4f5c\u4fdd\u7559\u5728\u672c\u9875\u3002",
+  comparePageBody: "\u5728\u4e13\u95e8\u7684\u8868\u683c\u4e2d\u5bf9\u6bd4\u5df2\u9009\u6750\u6599\uff0c\u4e0d\u518d\u6df7\u5165\u6750\u6599\u5e93\u6d4f\u89c8\u5668\u3002",
+  compareGuidance: "\u8bf7\u4ece\u9996\u9875\u6216\u6750\u6599\u6570\u636e\u5e93\u9009\u62e9\u6750\u6599\u8fdb\u884c\u5bf9\u6bd4\u3002",
+  selectedMaterials: "\u5df2\u9009\u6750\u6599",
+  compareEmptyTitle: "\u5c1a\u672a\u9009\u62e9\u6750\u6599",
+  compareEmptyBody: "\u4ece\u9996\u9875\u63a8\u8350\u7ed3\u679c\u6216\u6750\u6599\u6570\u636e\u5e93\u9009\u62e9\u6750\u6599\uff0c\u5373\u53ef\u751f\u6210\u5bf9\u6bd4\u8868\u3002",
+  openHome: "\u6253\u5f00\u9996\u9875",
+  browseMaterials: "\u6d4f\u89c8\u6750\u6599\u5e93",
+  remove: "\u79fb\u9664",
   aiComparisonLabel: "\u4e0a\u4e0b\u6587 AI \u5bf9\u6bd4",
   aboutLabel: "\u5173\u4e8e MatFinder AI",
   aboutTitle: "\u9762\u5411\u65e9\u671f\u9009\u6750\u7684\u805a\u7126\u5de5\u4f5c\u6d41",
   aboutIntro: "MatFinder AI \u628a\u4ea7\u54c1\u9700\u6c42\u8f6c\u6210\u6750\u6599\u5019\u9009\u3001\u89e3\u91ca\u5339\u914d\u7406\u7531\uff0c\u5e76\u751f\u6210\u53ef\u4e0e\u5de5\u7a0b\u3001\u91c7\u8d2d\u6216\u4f9b\u5e94\u5546\u8ba8\u8bba\u7684\u9009\u578b\u62a5\u544a\u3002",
   aboutCategoriesUnit: "\u4e2a\u7c7b\u522b",
   aboutDatasetTitle: "\u6570\u636e\u96c6\u89c4\u6a21",
-  aboutEngineTitle: "\u63a8\u8350\u5f15\u64ce",
+  aboutWhatTitle: "MatFinder AI \u662f\u4ec0\u4e48\uff1f",
+  aboutWhatBody: "MatFinder AI \u662f\u4e00\u4e2a\u672c\u5730\u4f18\u5148\u7684\u6750\u6599\u9009\u578b\u52a9\u624b\uff0c\u5c06\u7ed3\u6784\u5316\u6750\u6599\u6570\u636e\u5e93\u3001\u53ef\u89e3\u91ca\u8bc4\u5206\u548c\u53ef\u9009\u7684\u4e0a\u4e0b\u6587 AI \u89e3\u91ca\u7ed3\u5408\u5728\u4e00\u8d77\u3002",
+  aboutAudienceTitle: "\u9002\u5408\u8c01\u4f7f\u7528\uff1f",
+  aboutAudienceBody: "\u5b83\u9002\u5408\u4ea7\u54c1\u8bbe\u8ba1\u5e08\u3001\u5de5\u7a0b\u5e08\u3001\u521b\u4e1a\u56e2\u961f\u3001\u5b66\u751f\u548c\u91c7\u8d2d\u56e2\u961f\uff0c\u7528\u4e8e\u5728\u724c\u53f7\u7ea7\u9a8c\u8bc1\u524d\u5feb\u901f\u5f62\u6210\u521d\u6b65\u5019\u9009\u6e05\u5355\u3002",
+  aboutEngineTitle: "\u63a8\u8350\u8bc4\u5206\u5982\u4f55\u5de5\u4f5c",
   aboutEngineBody: "\u5f15\u64ce\u652f\u6301\u4e2d\u82f1\u6587\u9700\u6c42\u89e3\u6790\uff0c\u8bc6\u522b\u6027\u80fd\u9700\u6c42\uff0c\u4e3a\u6750\u6599\u6253\u5206\uff0c\u5e76\u89e3\u91ca\u5339\u914d\u539f\u56e0\u548c\u9650\u5236\u3002",
-  aboutTrustTitle: "\u5206\u6570\u4ee3\u8868\u4ec0\u4e48",
-  aboutTrustBody: "\u5206\u6570\u6982\u62ec\u6750\u6599\u4e0e\u8bc6\u522b\u9700\u6c42\u7684\u5339\u914d\u7a0b\u5ea6\uff0c\u6bcf\u4e2a\u63a8\u8350\u90fd\u4f1a\u540c\u65f6\u663e\u793a\u5339\u914d\u539f\u56e0\u548c\u98ce\u9669\u63d0\u793a\u3002",
+  aboutScoringOne: "\u89e3\u6790\u9700\u6c42\u4e2d\u7684\u6750\u6599\u3001\u6027\u80fd\u3001\u5e94\u7528\u548c\u9650\u5236\u4fe1\u53f7\u3002",
+  aboutScoringTwo: "\u5c06\u8fd9\u4e9b\u4fe1\u53f7\u4e0e\u672c\u5730\u6570\u636e\u96c6\u7684\u6807\u7b7e\u3001\u5c5e\u6027\u3001\u7528\u9014\u548c\u6570\u503c\u9608\u503c\u5339\u914d\u3002",
+  aboutScoringThree: "\u4f7f\u7528\u53ef\u89e3\u91ca\u7684\u539f\u56e0\u3001\u8b66\u544a\u548c\u76f8\u4f3c\u66ff\u4ee3\u6750\u6599\u5bf9\u5019\u9009\u8fdb\u884c\u6392\u540d\u3002",
+  aboutFeaturesTitle: "\u6838\u5fc3\u529f\u80fd",
+  aboutFeatureOne: "\u4ece\u9700\u6c42\u5230\u5019\u9009\u6e05\u5355\u7684\u63a8\u8350\u5de5\u4f5c\u6d41\u3002",
+  aboutFeatureTwo: "\u53ef\u641c\u7d22\u3001\u53ef\u7b5b\u9009\u7684\u6750\u6599\u76ee\u5f55\u3002",
+  aboutFeatureThree: "\u6700\u591a\u4e09\u79cd\u6750\u6599\u7684\u5e76\u6392\u5bf9\u6bd4\u3002",
+  aboutFeatureFour: "\u9762\u5411\u9009\u578b\u8bc4\u5ba1\u7684 PDF \u5f0f\u62a5\u544a\u5bfc\u51fa\u3002",
+  aboutTrustTitle: "\u5c40\u9650",
+  aboutTrustBody: "\u5206\u6570\u662f\u7b5b\u9009\u8f85\u52a9\uff0c\u4e0d\u662f\u8ba4\u8bc1\u7ed3\u8bba\u3002\u6570\u503c\u5b57\u6bb5\u6765\u81ea\u672c\u5730\u6570\u636e\u96c6\u5e76\u7ecf\u8fc7\u5f52\u4e00\u5316\uff0c\u6700\u7ec8\u9009\u578b\u524d\u5e94\u6838\u5bf9\u4f9b\u5e94\u5546\u6570\u636e\u8868\u3002",
   aboutValidationTitle: "\u6700\u7ec8\u9009\u578b\u524d",
   aboutValidationOne: "\u786e\u8ba4\u724c\u53f7\u7ea7\u6570\u636e\u8868\u548c\u4f9b\u5e94\u53ef\u5f97\u6027\u3002",
   aboutValidationTwo: "\u9a8c\u8bc1\u52a0\u5de5\u65b9\u5f0f\u3001\u4f7f\u7528\u73af\u5883\u548c\u957f\u671f\u8f7d\u8377\u3002",
-  aboutValidationThree: "\u5c06\u5bfc\u51fa\u62a5\u544a\u4f5c\u4e3a\u9009\u6750\u7b80\u62a5\uff0c\u800c\u4e0d\u662f\u6700\u7ec8\u8ba4\u8bc1\u3002"
+  aboutValidationThree: "\u5c06\u5bfc\u51fa\u62a5\u544a\u4f5c\u4e3a\u9009\u6750\u7b80\u62a5\uff0c\u800c\u4e0d\u662f\u6700\u7ec8\u8ba4\u8bc1\u3002",
+  aboutRoadmapTitle: "\u8def\u7ebf\u56fe",
+  aboutRoadmapOne: "\u724c\u53f7\u7ea7\u6570\u636e\u8868\u94fe\u63a5\u548c\u4f9b\u5e94\u5546\u8bb0\u5f55\u3002",
+  aboutRoadmapTwo: "\u9762\u5411\u6c7d\u8f66\u3001\u7535\u5b50\u3001\u533b\u7597\u3001\u5305\u88c5\u548c\u53ef\u6301\u7eed\u573a\u666f\u7684\u66f4\u591a\u9886\u57df\u9884\u8bbe\u3002",
+  aboutRoadmapThree: "\u9762\u5411\u5de5\u7a0b\u8bc4\u5ba1\u548c\u91c7\u8d2d\u6c9f\u901a\u7684\u66f4\u5b8c\u6574\u5bfc\u51fa\u6a21\u677f\u3002"
 };
 
 const zhNames = {
@@ -671,6 +729,7 @@ const elements = {
   languageSelect: document.querySelector("#languageSelect"),
   routePanels: document.querySelectorAll("[data-route-pages]"),
   routeLinks: document.querySelectorAll("[data-route-link]"),
+  catalogStats: document.querySelector("#catalogStats"),
   aboutMaterialCount: document.querySelector("#aboutMaterialCount"),
   aboutCategoryCount: document.querySelector("#aboutCategoryCount"),
   requirementInput: document.querySelector("#requirementInput"),
@@ -702,6 +761,7 @@ const elements = {
   materialsGrid: document.querySelector("#materialsGrid"),
   materialsPagination: document.querySelector("#materialsPagination"),
   emptyState: document.querySelector("#emptyState"),
+  compareSelection: document.querySelector("#compareSelection"),
   comparePanel: document.querySelector("#comparePanel"),
   compareTableWrap: document.querySelector("#compareTableWrap"),
   clearCompareButton: document.querySelector("#clearCompareButton"),
@@ -889,6 +949,7 @@ async function init() {
   elements.totalCount.textContent = materials.length;
   elements.aboutMaterialCount.textContent = materials.length;
   elements.aboutCategoryCount.textContent = categories.length;
+  renderCatalogStats();
   bindEvents();
   applyLanguage();
   setRoute(routeFromPath(window.location.pathname), { replace: true });
@@ -934,7 +995,7 @@ function setRoute(route, options = {}) {
   if (state.route === "copilot") {
     renderCopilotRoute();
   }
-  if (!options.replace && ["materials", "compare"].includes(state.route) && materials.length && !state.materialsGridRendered) {
+  if (!options.replace && state.route === "materials" && materials.length && !state.materialsGridRendered) {
     render();
   }
 }
@@ -952,7 +1013,7 @@ function renderRoute() {
   elements.routePanels.forEach((panel) => {
     const pages = String(panel.dataset.routePages || "").split(/\s+/);
     const routeVisible = pages.includes(state.route);
-    panel.hidden = panel.id === "comparePanel" ? !routeVisible || state.selected.size === 0 : !routeVisible;
+    panel.hidden = !routeVisible;
   });
 
   elements.routeLinks.forEach((link) => {
@@ -999,7 +1060,7 @@ function bindEvents() {
     if (state.route === "copilot") {
       renderCopilotRoute();
     }
-    if (["materials", "compare"].includes(state.route) && materials.length && !state.materialsGridRendered) {
+    if (state.route === "materials" && materials.length && !state.materialsGridRendered) {
       render();
     }
   });
@@ -1791,12 +1852,46 @@ function sortMaterials(a, b) {
   return getMatchScore(b) - getMatchScore(a) || byName;
 }
 
+function getCategoryCounts() {
+  const counts = new Map();
+  materials.forEach((item) => {
+    counts.set(item.category, (counts.get(item.category) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+function renderCatalogStats() {
+  if (!elements.catalogStats || !materials.length) return;
+  const categoryCounts = getCategoryCounts();
+  const topCategory = categoryCounts[0];
+  const topCategories = categoryCounts.slice(0, 5);
+
+  elements.catalogStats.innerHTML = `
+    <div class="catalog-stat">
+      <span>${t("catalogTotalMaterials")}</span>
+      <strong>${materials.length}</strong>
+    </div>
+    <div class="catalog-stat">
+      <span>${t("catalogCategories")}</span>
+      <strong>${categories.length}</strong>
+    </div>
+    <div class="catalog-stat catalog-stat-wide">
+      <span>${t("catalogTopCategory")}</span>
+      <strong>${topCategory ? `${localizeTerm(topCategory[0])} · ${topCategory[1]}` : t("none")}</strong>
+    </div>
+    <div class="catalog-category-strip">
+      ${topCategories.map(([category, count]) => `<span>${localizeTerm(category)} <strong>${count}</strong></span>`).join("")}
+    </div>
+  `;
+}
+
 function render() {
-  const needsMaterialGrid = ["materials", "compare"].includes(state.route);
+  const needsMaterialGrid = state.route === "materials";
   const filtered = needsMaterialGrid ? getFilteredMaterials() : state.filteredMaterialsCache.items;
   elements.tempOutput.textContent = `>= ${state.minTemp} deg C`;
   elements.strengthOutput.textContent = `>= ${state.minStrength} MPa`;
   elements.selectedCount.textContent = state.selected.size;
+  renderCatalogStats();
 
   if (needsMaterialGrid) {
     const totalPages = Math.max(1, Math.ceil(filtered.length / state.materialsPageSize));
@@ -1846,6 +1941,12 @@ function renderRecommendations(result = null) {
   elements.recommendationResults.querySelectorAll("[data-detail-id]").forEach((button) => {
     button.addEventListener("click", () => showDetail(button.dataset.detailId));
   });
+  elements.recommendationResults.querySelectorAll("[data-compare-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleCompare(button.dataset.compareId);
+      renderRecommendations();
+    });
+  });
   elements.recommendationResults.querySelector("[data-export-report]")?.addEventListener("click", exportMaterialSelectionReport);
 }
 
@@ -1867,6 +1968,9 @@ function renderRecommendationCard(candidate, index) {
         <div class="score-label"><span>${t("matchScore")}</span><strong>${candidate.score}</strong></div>
         <div class="score-track"><div class="score-fill" style="width: ${candidate.score}%"></div></div>
         <button type="button" data-detail-id="${item.id}">${t("detailsAi")}</button>
+        <button class="compare-button" type="button" data-compare-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
+          ${state.selected.has(item.id) ? t("added") : t("compare")}
+        </button>
       </div>
     </article>
   `;
@@ -2148,12 +2252,67 @@ function toggleCompare(id) {
   render();
 }
 
-function renderCompare() {
-  const selectedItems = materials.filter((item) => state.selected.has(item.id));
-  elements.comparePanel.hidden = selectedItems.length === 0;
+function renderCompareSelection(selectedItems) {
+  if (!elements.compareSelection) return;
 
   if (!selectedItems.length) {
-    elements.compareTableWrap.replaceChildren();
+    elements.compareSelection.innerHTML = `
+      <div class="compare-empty-card">
+        <p class="result-label">${t("selectedMaterials")}</p>
+        <h3>${t("compareEmptyTitle")}</h3>
+        <p>${t("compareEmptyBody")}</p>
+      </div>
+    `;
+    return;
+  }
+
+  elements.compareSelection.innerHTML = `
+    <div class="compare-selection-header">
+      <p class="result-label">${t("selectedMaterials")}</p>
+      <strong>${selectedItems.length} / 3</strong>
+    </div>
+    <div class="compare-selected-grid">
+      ${selectedItems
+        .map(
+          (item) => `
+            <article class="compare-selected-card">
+              <span class="abbr">${escapeHtml(item.abbr)}</span>
+              <div>
+                <span class="category">${escapeHtml(materialCategory(item))}</span>
+                <h3>${escapeHtml(materialName(item))}</h3>
+                <p>${escapeHtml(materialSummary(item))}</p>
+              </div>
+              <div class="compare-selected-actions">
+                <button type="button" data-detail-id="${escapeAttribute(item.id)}">${t("detailsAi")}</button>
+                <button type="button" data-remove-compare="${escapeAttribute(item.id)}">${t("remove")}</button>
+              </div>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+
+  elements.compareSelection.querySelectorAll("[data-detail-id]").forEach((button) => {
+    button.addEventListener("click", () => showDetail(button.dataset.detailId));
+  });
+  elements.compareSelection.querySelectorAll("[data-remove-compare]").forEach((button) => {
+    button.addEventListener("click", () => toggleCompare(button.dataset.removeCompare));
+  });
+}
+
+function renderCompare() {
+  const selectedItems = materials.filter((item) => state.selected.has(item.id));
+  renderCompareSelection(selectedItems);
+  elements.comparePanel.hidden = false;
+
+  if (!selectedItems.length) {
+    elements.compareTableWrap.innerHTML = `
+      <div class="compare-empty-card">
+        <h3>${t("compareEmptyTitle")}</h3>
+        <p>${t("compareGuidance")}</p>
+      </div>
+    `;
     return;
   }
 

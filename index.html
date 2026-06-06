@@ -57,13 +57,13 @@
           </div>
         </div>
         <div class="example-strip" aria-label="Example requirements">
-          <button type="button" data-example-zh="需要一种轻量、耐热、并且电绝缘的材料。" data-example-en="Need a lightweight, heat-resistant, electrically insulating material.">
+          <button type="button" data-example data-example-zh="需要一种轻量、耐热、并且电绝缘的材料。" data-example-en="Need a lightweight, heat-resistant, electrically insulating material.">
             轻量耐热绝缘
           </button>
-          <button type="button" data-example-zh="我需要一种透明、抗冲击的塑料，用于防护窗口。" data-example-en="I need a transparent impact resistant plastic for a protective window.">
+          <button type="button" data-example data-example-zh="我需要一种透明、抗冲击的塑料，用于防护窗口。" data-example-en="I need a transparent impact resistant plastic for a protective window.">
             透明抗冲击件
           </button>
-          <button type="button" data-example-zh="推荐一种适合高温密封件的耐化学高分子材料。" data-example-en="Recommend a chemically resistant polymer for high temperature seals.">
+          <button type="button" data-example data-example-zh="推荐一种适合高温密封件的耐化学高分子材料。" data-example-en="Recommend a chemically resistant polymer for high temperature seals.">
             耐化学高温密封
           </button>
         </div>
@@ -104,18 +104,26 @@
         </div>
       </section>
 
-      <main class="layout route-panel" data-route-pages="materials compare">
+      <section id="materialsHero" class="catalog-hero route-panel" data-route-pages="materials">
+        <div class="catalog-hero-copy">
+          <p class="result-label" data-i18n="materialsPageLabel">Materials database</p>
+          <h2 data-i18n="materialsPageTitle">Browse the material library</h2>
+          <p data-i18n="materialsPageBody">Search, filter, and compare material records from the local engineering database.</p>
+        </div>
+        <div class="catalog-search">
+          <label for="searchInput" data-i18n="keywordSearch">Keyword search</label>
+          <input id="searchInput" type="search" placeholder="Name, abbreviation, use, property" autocomplete="off" />
+        </div>
+        <div id="catalogStats" class="catalog-stats" aria-label="Database statistics"></div>
+      </section>
+
+      <main class="layout catalog-layout route-panel" data-route-pages="materials">
         <aside class="filters" aria-label="Database filters">
           <button id="filterToggleButton" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterBody">
             <span data-i18n="filtersToggle">Filters</span>
             <span class="filter-toggle-icon" aria-hidden="true">+</span>
           </button>
           <div id="filterBody" class="filters-body">
-          <div class="search-box">
-            <label for="searchInput" data-i18n="keywordSearch">关键词搜索</label>
-            <input id="searchInput" type="search" placeholder="名称、缩写、用途、性能" autocomplete="off" />
-          </div>
-
           <div class="filter-group">
             <label for="categoryFilter" data-i18n="materialCategory">材料类别</label>
             <select id="categoryFilter">
@@ -188,10 +196,20 @@
         </section>
       </main>
 
-      <section id="compareIntro" class="page-panel route-panel" data-route-pages="compare">
-        <p class="result-label" data-i18n="comparePageLabel">Material comparison</p>
-        <h2 data-i18n="comparePageTitle">Compare up to 3 materials side by side</h2>
-        <p data-i18n="comparePageBody">Use the Compare buttons in the material cards, then review the property table below.</p>
+      <section id="compareIntro" class="compare-dashboard route-panel" data-route-pages="compare">
+        <div class="compare-hero">
+          <div>
+            <p class="result-label" data-i18n="comparePageLabel">Material comparison</p>
+            <h2 data-i18n="comparePageTitle">Build a side-by-side shortlist</h2>
+            <p data-i18n="comparePageBody">Compare selected materials in one focused table without the database browser in the way.</p>
+          </div>
+          <p class="compare-guidance" data-i18n="compareGuidance">Select materials from Home or Materials Database to compare.</p>
+        </div>
+        <div class="compare-actions">
+          <button type="button" data-route-link="home" data-i18n="openHome">Open Home</button>
+          <button type="button" data-route-link="materials" data-i18n="browseMaterials">Browse Materials</button>
+        </div>
+        <div id="compareSelection" class="compare-selection" aria-live="polite"></div>
       </section>
 
       <section id="comparePanel" class="compare-panel route-panel" data-route-pages="compare" aria-label="Material comparison" hidden>
@@ -224,31 +242,61 @@
       <section id="aboutPage" class="about-page route-panel" data-route-pages="about">
         <div class="about-hero">
           <p class="result-label" data-i18n="aboutLabel">About MatFinder AI</p>
-          <h2 data-i18n="aboutTitle">AI-assisted material selection from a local engineering database</h2>
-          <p data-i18n="aboutIntro">MatFinder AI helps teams translate product requirements into material candidates using a local SQLite dataset, a transparent scoring engine, and optional OpenAI-backed explanations.</p>
+          <h2 data-i18n="aboutTitle">A focused workflow for early material selection</h2>
+          <p data-i18n="aboutIntro">MatFinder AI turns product requirements into ranked material candidates, explains the match, and produces a report you can review with engineering, sourcing, or suppliers.</p>
         </div>
-        <div class="about-grid">
+        <div class="about-story">
+          <section class="about-section about-section-wide">
+            <h3 data-i18n="aboutWhatTitle">What is MatFinder AI?</h3>
+            <p data-i18n="aboutWhatBody">MatFinder AI is a local-first material selection assistant that combines a structured materials database with transparent recommendation scoring and optional contextual AI explanations.</p>
+          </section>
+          <section class="about-section">
+            <h3 data-i18n="aboutAudienceTitle">Who is it for?</h3>
+            <p data-i18n="aboutAudienceBody">It is designed for product designers, engineers, founders, students, and sourcing teams who need a fast first-pass shortlist before grade-level validation.</p>
+          </section>
           <article class="about-card">
             <h3 data-i18n="aboutDatasetTitle">Dataset size</h3>
             <p><strong id="aboutMaterialCount">0</strong> <span data-i18n="materialsUnit">materials</span></p>
             <p><strong id="aboutCategoryCount">0</strong> <span data-i18n="aboutCategoriesUnit">categories</span></p>
           </article>
-          <article class="about-card">
-            <h3 data-i18n="aboutEngineTitle">Recommendation engine</h3>
+          <section class="about-section about-section-wide">
+            <h3 data-i18n="aboutEngineTitle">How recommendation scoring works</h3>
             <p data-i18n="aboutEngineBody">The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.</p>
-          </article>
-          <article class="about-card">
-            <h3 data-i18n="aboutTrustTitle">What the score means</h3>
+            <ol class="about-steps">
+              <li data-i18n="aboutScoringOne">Parse the requirement for material, performance, application, and constraint signals.</li>
+              <li data-i18n="aboutScoringTwo">Match those signals against tags, properties, uses, and numeric thresholds in the local dataset.</li>
+              <li data-i18n="aboutScoringThree">Rank candidates with explainable reasons, warnings, and similar alternatives.</li>
+            </ol>
+          </section>
+          <section class="about-section">
+            <h3 data-i18n="aboutFeaturesTitle">Key features</h3>
+            <ul>
+              <li data-i18n="aboutFeatureOne">Requirement-to-shortlist recommendation workflow.</li>
+              <li data-i18n="aboutFeatureTwo">Searchable, filterable material catalog.</li>
+              <li data-i18n="aboutFeatureThree">Side-by-side comparison for up to three materials.</li>
+              <li data-i18n="aboutFeatureFour">PDF-style report export for selection reviews.</li>
+            </ul>
+          </section>
+          <section class="about-section">
+            <h3 data-i18n="aboutTrustTitle">Limitations</h3>
             <p data-i18n="aboutTrustBody">Scores summarize how well each material matches the detected requirements, with reasons and warnings shown beside every recommendation.</p>
-          </article>
-          <article class="about-card">
+          </section>
+          <section class="about-section">
             <h3 data-i18n="aboutValidationTitle">Before final selection</h3>
             <ul>
               <li data-i18n="aboutValidationOne">Confirm grade-level datasheets and supplier availability.</li>
               <li data-i18n="aboutValidationTwo">Validate processing method, environment, and long-term load.</li>
               <li data-i18n="aboutValidationThree">Use the exported report as a selection brief, not a final certification.</li>
             </ul>
-          </article>
+          </section>
+          <section class="about-section about-section-wide">
+            <h3 data-i18n="aboutRoadmapTitle">Roadmap</h3>
+            <ul class="roadmap-list">
+              <li data-i18n="aboutRoadmapOne">Grade-level datasheet links and supplier records.</li>
+              <li data-i18n="aboutRoadmapTwo">More domain presets for automotive, electronics, medical, packaging, and sustainability use cases.</li>
+              <li data-i18n="aboutRoadmapThree">Richer export templates for engineering reviews and sourcing conversations.</li>
+            </ul>
+          </section>
         </div>
       </section>
     </div>
