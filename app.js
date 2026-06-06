@@ -132,6 +132,11 @@ const i18n = {
   },
   en: {
     brandEyebrow: "Local Material Database + AI",
+    navHome: "Home",
+    navMaterials: "Materials",
+    navCompare: "Compare",
+    navCopilot: "AI Copilot",
+    navAbout: "About",
     languageLabel: "Language",
     filtersToggle: "Filters",
     materialsUnit: "materials",
@@ -177,6 +182,9 @@ const i18n = {
     noMatches: "No matching materials.",
     comparisonLabel: "Material Comparison",
     performanceSnapshot: "Performance snapshot",
+    comparePageLabel: "Material comparison",
+    comparePageTitle: "Compare up to 3 materials side by side",
+    comparePageBody: "Use the Compare buttons in the material cards, then review the property table below.",
     aiComparisonLabel: "AI Material Comparison",
     selectTwoMaterials: "Select two materials",
     compareWithAi: "Compare with AI",
@@ -199,6 +207,18 @@ const i18n = {
     reportDate: "Date",
     reportProject: "Project",
     reportNoWarnings: "No major unmatched requirement warnings were flagged by the scoring engine.",
+    aboutLabel: "About MatFinder AI",
+    aboutTitle: "AI-assisted material selection from a local engineering database",
+    aboutIntro: "MatFinder AI helps teams translate product requirements into material candidates using a local SQLite dataset, a transparent scoring engine, and optional OpenAI-backed explanations.",
+    aboutCategoriesUnit: "categories",
+    aboutDatasetTitle: "Dataset size",
+    aboutEngineTitle: "Recommendation engine",
+    aboutEngineBody: "The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.",
+    aboutTechTitle: "Technology stack",
+    aboutRoadmapTitle: "Roadmap",
+    aboutRoadmapOne: "Grade-level property ranges and uncertainty metadata.",
+    aboutRoadmapTwo: "Visual material knowledge graph.",
+    aboutRoadmapThree: "Deeper Copilot workflows for selection reports and requirement discovery.",
     recommendationExplanation: "Recommendation explanation",
     aiRecommendationSummary: "AI recommendation summary",
     scoringReasons: "Scoring engine reasons",
@@ -303,6 +323,11 @@ const i18n = {
 };
 
 const zhDetailLabels = {
+  navHome: "\u9996\u9875",
+  navMaterials: "\u6750\u6599\u5e93",
+  navCompare: "\u6750\u6599\u5bf9\u6bd4",
+  navCopilot: "AI \u52a9\u624b",
+  navAbout: "\u5173\u4e8e",
   recommendationExplanation: "\u63a8\u8350\u89e3\u91ca",
   aiRecommendationSummary: "AI \u63a8\u8350\u6458\u8981",
   scoringReasons: "\u8bc4\u5206\u5f15\u64ce\u5339\u914d\u539f\u56e0",
@@ -345,7 +370,22 @@ const zhDetailLabels = {
   reportAlternatives: "\u66ff\u4ee3\u6750\u6599",
   reportDate: "\u65e5\u671f",
   reportProject: "\u9879\u76ee",
-  reportNoWarnings: "\u8bc4\u5206\u5f15\u64ce\u672a\u6807\u51fa\u4e3b\u8981\u672a\u5339\u914d\u8b66\u544a\u3002"
+  reportNoWarnings: "\u8bc4\u5206\u5f15\u64ce\u672a\u6807\u51fa\u4e3b\u8981\u672a\u5339\u914d\u8b66\u544a\u3002",
+  comparePageLabel: "\u6750\u6599\u5bf9\u6bd4",
+  comparePageTitle: "\u6700\u591a\u5bf9\u6bd4 3 \u79cd\u6750\u6599",
+  comparePageBody: "\u5728\u6750\u6599\u5361\u7247\u4e2d\u70b9\u51fb\u201c\u5bf9\u6bd4\u201d\uff0c\u7136\u540e\u5728\u4e0b\u65b9\u67e5\u770b\u5e76\u6392\u5c5e\u6027\u8868\u3002",
+  aboutLabel: "\u5173\u4e8e MatFinder AI",
+  aboutTitle: "\u57fa\u4e8e\u672c\u5730\u5de5\u7a0b\u6750\u6599\u6570\u636e\u5e93\u7684 AI \u8f85\u52a9\u9009\u6750",
+  aboutIntro: "MatFinder AI \u5c06\u4ea7\u54c1\u9700\u6c42\u8f6c\u5316\u4e3a\u6750\u6599\u5019\u9009\uff0c\u5e76\u7ed3\u5408 SQLite \u672c\u5730\u6570\u636e\u5e93\u3001\u900f\u660e\u8bc4\u5206\u5f15\u64ce\u548c\u53ef\u9009 OpenAI \u89e3\u91ca\u3002",
+  aboutCategoriesUnit: "\u4e2a\u7c7b\u522b",
+  aboutDatasetTitle: "\u6570\u636e\u96c6\u89c4\u6a21",
+  aboutEngineTitle: "\u63a8\u8350\u5f15\u64ce",
+  aboutEngineBody: "\u5f15\u64ce\u652f\u6301\u4e2d\u82f1\u6587\u9700\u6c42\u89e3\u6790\uff0c\u8bc6\u522b\u6027\u80fd\u9700\u6c42\uff0c\u4e3a\u6750\u6599\u6253\u5206\uff0c\u5e76\u89e3\u91ca\u5339\u914d\u539f\u56e0\u548c\u9650\u5236\u3002",
+  aboutTechTitle: "\u6280\u672f\u6808",
+  aboutRoadmapTitle: "\u8def\u7ebf\u56fe",
+  aboutRoadmapOne: "\u724c\u53f7\u7ea7\u5c5e\u6027\u8303\u56f4\u548c\u4e0d\u786e\u5b9a\u6027\u5143\u6570\u636e\u3002",
+  aboutRoadmapTwo: "\u53ef\u89c6\u5316\u6750\u6599\u77e5\u8bc6\u56fe\u8c31\u3002",
+  aboutRoadmapThree: "\u66f4\u6df1\u5165\u7684 Copilot \u9009\u578b\u62a5\u544a\u548c\u9700\u6c42\u53d1\u73b0\u6d41\u7a0b\u3002"
 };
 
 const zhNames = {
@@ -465,6 +505,7 @@ const propertyPredicates = {
 };
 
 const state = {
+  route: "home",
   language: "zh",
   query: "",
   category: "all",
@@ -487,6 +528,10 @@ const elements = {
   totalCount: document.querySelector("#totalCount"),
   selectedCount: document.querySelector("#selectedCount"),
   languageSelect: document.querySelector("#languageSelect"),
+  routePanels: document.querySelectorAll("[data-route-pages]"),
+  routeLinks: document.querySelectorAll("[data-route-link]"),
+  aboutMaterialCount: document.querySelector("#aboutMaterialCount"),
+  aboutCategoryCount: document.querySelector("#aboutCategoryCount"),
   requirementInput: document.querySelector("#requirementInput"),
   recommendButton: document.querySelector("#recommendButton"),
   clearRecommendationButton: document.querySelector("#clearRecommendationButton"),
@@ -700,11 +745,74 @@ async function init() {
   });
 
   elements.totalCount.textContent = materials.length;
+  elements.aboutMaterialCount.textContent = materials.length;
+  elements.aboutCategoryCount.textContent = categories.length;
   bindEvents();
   applyLanguage();
+  setRoute(routeFromPath(window.location.pathname), { replace: true });
   renderRecommendations();
   render();
   renderCopilotMessages();
+}
+
+function routeFromPath(pathname) {
+  const cleanPath = String(pathname || "/").replace(/\/+$/, "") || "/";
+  const routes = {
+    "/": "home",
+    "/materials": "materials",
+    "/compare": "compare",
+    "/copilot": "copilot",
+    "/about": "about"
+  };
+  return routes[cleanPath] || "home";
+}
+
+function pathFromRoute(route) {
+  return {
+    home: "/",
+    materials: "/materials",
+    compare: "/compare",
+    copilot: "/copilot",
+    about: "/about"
+  }[route] || "/";
+}
+
+function setRoute(route, options = {}) {
+  state.route = routeFromPath(pathFromRoute(route));
+  const path = pathFromRoute(state.route);
+  if (options.replace) {
+    window.history.replaceState({ route: state.route }, "", path);
+  } else if (window.location.pathname !== path) {
+    window.history.pushState({ route: state.route }, "", path);
+  }
+  renderRoute();
+}
+
+function renderRoute() {
+  const routeTitles = {
+    home: "MatFinder AI",
+    materials: `${t("navMaterials")} - MatFinder AI`,
+    compare: `${t("navCompare")} - MatFinder AI`,
+    copilot: `${t("navCopilot")} - MatFinder AI`,
+    about: `${t("navAbout")} - MatFinder AI`
+  };
+  document.title = routeTitles[state.route] || "MatFinder AI";
+
+  elements.routePanels.forEach((panel) => {
+    const pages = String(panel.dataset.routePages || "").split(/\s+/);
+    const routeVisible = pages.includes(state.route);
+    panel.hidden = panel.id === "comparePanel" ? !routeVisible || state.selected.size === 0 : !routeVisible;
+  });
+
+  elements.routeLinks.forEach((link) => {
+    const isActive = link.dataset.routeLink === state.route;
+    link.classList.toggle("is-active", isActive);
+    if (isActive) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
 }
 
 async function loadMaterials() {
@@ -720,6 +828,18 @@ function apiUrl(path) {
 }
 
 function bindEvents() {
+  elements.routeLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      setRoute(link.dataset.routeLink);
+    });
+  });
+
+  window.addEventListener("popstate", () => {
+    state.route = routeFromPath(window.location.pathname);
+    renderRoute();
+  });
+
   elements.filterToggleButton.addEventListener("click", () => {
     const isOpen = elements.filterToggleButton.getAttribute("aria-expanded") === "true";
     elements.filterToggleButton.setAttribute("aria-expanded", String(!isOpen));
@@ -1281,7 +1401,13 @@ function formatCopilotAlternatives(item) {
 
 function buildCopilotAnswer(prompt) {
   const { item, candidate } = getCopilotContext();
-  if (!item) return t("copilotNoContext");
+  if (!item) {
+    const parsed = window.MatFinderAI?.parseRequirement?.(prompt);
+    if (parsed?.requirements?.length) {
+      return `${t("reportDetectedRequirements")}:\n${copilotLineList(parsed.requirements.map(localizeTerm))}\n\n${state.language === "zh" ? "可以把这段需求放到首页推荐框中生成材料候选。" : "Use this requirement text on the Home recommendation panel to generate candidate materials."}`;
+    }
+    return t("copilotNoContext");
+  }
 
   const intent = detectCopilotIntent(prompt);
   const recommendationNote = candidate ? "" : `\n\n${t("copilotNoRecommendation")}`;
@@ -1466,6 +1592,7 @@ function render() {
   renderCompare();
   renderAiComparePanel();
   updateCopilotContext();
+  renderRoute();
 }
 
 function renderRecommendations(result = null) {
@@ -1716,7 +1843,7 @@ function toggleCompare(id) {
   if (state.selected.has(id)) {
     state.selected.delete(id);
   } else {
-    if (state.selected.size >= 4) {
+    if (state.selected.size >= 3) {
       const first = state.selected.values().next().value;
       state.selected.delete(first);
     }

@@ -9,12 +9,26 @@ The system is designed to keep the local material database as the source of trut
 - Material search by name, abbreviation, category, tags, properties, and typical uses.
 - Multi-condition filtering for category, performance focus, continuous use temperature, tensile strength, and recyclability.
 - Local recommendation engine that ranks materials from natural language requirement descriptions.
+- Multi-page application structure with Home, Materials Database, Compare, AI Copilot, and About pages.
 - SQLite material database with normalized tables for materials, tags, uses, and sources.
 - Source tracking for material records, including source title, URL, source type, and notes.
 - AI material analysis panel for selected materials, powered by the OpenAI API when configured.
 - AI material comparison panel for two selected materials, while preserving the existing comparison table.
+- Material Selection Report export workflow using a clean print-to-PDF report page.
 - Bilingual UI with Chinese as the default language and English as an alternate language.
 - Docker-ready deployment with health checks and platform configuration for Render, Railway, and Vercel frontend hosting.
+
+## Site Structure
+
+MatFinder AI is served as a lightweight multi-page app with client-side routing and server fallback to `index.html` for clean URLs.
+
+| Route | Page | Purpose |
+| --- | --- | --- |
+| `/` | Home | Current recommendation workflow with requirement input, AI recommendation results, material search, and material detail analysis. |
+| `/materials` | Materials Database | Browse all materials, search, filter by category/performance, and view the total material count. |
+| `/compare` | Compare | Select up to 3 materials and review a side-by-side property comparison table plus optional AI comparison. |
+| `/copilot` | AI Copilot | Dedicated assistant page for explaining recommendations and identifying material requirements from natural language. |
+| `/about` | About | Project introduction, dataset size, recommendation engine overview, technology stack, and roadmap. |
 
 ## Tech Stack
 

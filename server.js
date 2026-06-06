@@ -285,11 +285,22 @@ function serveStatic(request, response) {
   }
 
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    const appRoutes = new Set(["/", "/materials", "/compare", "/copilot", "/about"]);
+    const acceptsHtml = String(request.headers.accept || "").includes("text/html");
+    const hasExtension = Boolean(path.extname(requestedPath));
+    if ((acceptsHtml && !hasExtension) || appRoutes.has(url.pathname)) {
+      serveFile(path.join(rootDir, "index.html"), response);
+      return;
+    }
     response.writeHead(404);
     response.end("Not found");
     return;
   }
 
+  serveFile(filePath, response);
+}
+
+function serveFile(filePath, response) {
   const ext = path.extname(filePath);
   response.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
   fs.createReadStream(filePath).pipe(response);

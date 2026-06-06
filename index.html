@@ -16,6 +16,13 @@
             <h1>MatFinder AI</h1>
           </div>
         </div>
+        <nav class="top-nav" aria-label="Primary navigation">
+          <a href="/" data-route-link="home" data-i18n="navHome">Home</a>
+          <a href="/materials" data-route-link="materials" data-i18n="navMaterials">Materials</a>
+          <a href="/compare" data-route-link="compare" data-i18n="navCompare">Compare</a>
+          <a href="/copilot" data-route-link="copilot" data-i18n="navCopilot">AI Copilot</a>
+          <a href="/about" data-route-link="about" data-i18n="navAbout">About</a>
+        </nav>
         <div class="top-actions" aria-label="Platform overview">
           <label class="language-control" for="languageSelect">
             <span data-i18n="languageLabel">语言</span>
@@ -29,7 +36,7 @@
         </div>
       </header>
 
-      <section class="ai-panel" aria-label="Material recommendation">
+      <section class="ai-panel route-panel" data-route-pages="home" aria-label="Material recommendation">
         <div class="ai-input">
           <label for="requirementInput" data-i18n="requirementLabel">需求描述</label>
           <textarea
@@ -56,7 +63,7 @@
         <div id="recommendationResults" class="recommendation-results" aria-live="polite"></div>
       </section>
 
-      <section id="analysisPanel" class="analysis-panel" aria-label="AI material analysis">
+      <section id="analysisPanel" class="analysis-panel route-panel" data-route-pages="home" aria-label="AI material analysis">
         <div class="analysis-header">
           <div>
             <p class="result-label" data-i18n="analysisPanelLabel">AI 材料分析</p>
@@ -69,7 +76,7 @@
         </div>
       </section>
 
-      <section id="copilotPanel" class="copilot-panel" aria-label="MatFinder AI Copilot">
+      <section id="copilotPanel" class="copilot-panel route-panel" data-route-pages="copilot" aria-label="MatFinder AI Copilot">
         <div class="analysis-header">
           <div>
             <p class="result-label" data-i18n="copilotLabel">MatFinder AI Copilot</p>
@@ -90,7 +97,7 @@
         </form>
       </section>
 
-      <main class="layout">
+      <main class="layout route-panel" data-route-pages="home materials compare">
         <aside class="filters" aria-label="Database filters">
           <button id="filterToggleButton" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterBody">
             <span data-i18n="filtersToggle">Filters</span>
@@ -173,7 +180,13 @@
         </section>
       </main>
 
-      <section id="comparePanel" class="compare-panel" aria-label="Material comparison" hidden>
+      <section id="compareIntro" class="page-panel route-panel" data-route-pages="compare">
+        <p class="result-label" data-i18n="comparePageLabel">Material comparison</p>
+        <h2 data-i18n="comparePageTitle">Compare up to 3 materials side by side</h2>
+        <p data-i18n="comparePageBody">Use the Compare buttons in the material cards, then review the property table below.</p>
+      </section>
+
+      <section id="comparePanel" class="compare-panel route-panel" data-route-pages="compare" aria-label="Material comparison" hidden>
         <div class="compare-header">
           <div>
             <p class="result-label" data-i18n="comparisonLabel">材料对比</p>
@@ -184,7 +197,7 @@
         <div id="compareTableWrap" class="compare-table-wrap"></div>
       </section>
 
-      <section id="aiComparePanel" class="analysis-panel" aria-label="AI material comparison">
+      <section id="aiComparePanel" class="analysis-panel route-panel" data-route-pages="compare" aria-label="AI material comparison">
         <div class="analysis-header">
           <div>
             <p class="result-label" data-i18n="aiComparisonLabel">AI 材料对比</p>
@@ -197,6 +210,37 @@
         </div>
         <div id="aiCompareContent" class="analysis-content">
           <p class="recommendation-empty">添加两种材料进行对比，即可基于本地数据集生成 GPT 对比。</p>
+        </div>
+      </section>
+
+      <section id="aboutPage" class="about-page route-panel" data-route-pages="about">
+        <div class="about-hero">
+          <p class="result-label" data-i18n="aboutLabel">About MatFinder AI</p>
+          <h2 data-i18n="aboutTitle">AI-assisted material selection from a local engineering database</h2>
+          <p data-i18n="aboutIntro">MatFinder AI helps teams translate product requirements into material candidates using a local SQLite dataset, a transparent scoring engine, and optional OpenAI-backed explanations.</p>
+        </div>
+        <div class="about-grid">
+          <article class="about-card">
+            <h3 data-i18n="aboutDatasetTitle">Dataset size</h3>
+            <p><strong id="aboutMaterialCount">0</strong> <span data-i18n="materialsUnit">materials</span></p>
+            <p><strong id="aboutCategoryCount">0</strong> <span data-i18n="aboutCategoriesUnit">categories</span></p>
+          </article>
+          <article class="about-card">
+            <h3 data-i18n="aboutEngineTitle">Recommendation engine</h3>
+            <p data-i18n="aboutEngineBody">The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.</p>
+          </article>
+          <article class="about-card">
+            <h3 data-i18n="aboutTechTitle">Technology stack</h3>
+            <p>HTML, CSS, JavaScript, Node.js, SQLite, local rule-based recommendation, optional OpenAI API.</p>
+          </article>
+          <article class="about-card">
+            <h3 data-i18n="aboutRoadmapTitle">Roadmap</h3>
+            <ul>
+              <li data-i18n="aboutRoadmapOne">Grade-level property ranges and uncertainty metadata.</li>
+              <li data-i18n="aboutRoadmapTwo">Visual material knowledge graph.</li>
+              <li data-i18n="aboutRoadmapThree">Deeper Copilot workflows for selection reports and requirement discovery.</li>
+            </ul>
+          </article>
         </div>
       </section>
     </div>
