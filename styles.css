@@ -458,12 +458,83 @@ h3 {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(280px, 1.4fr);
   grid-template-areas:
+    "hero hero"
     "steps steps"
     "input examples"
     "input results";
   gap: 14px;
   margin-bottom: 18px;
   padding: 16px;
+}
+
+.home-hero {
+  grid-area: hero;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  gap: 16px;
+  align-items: stretch;
+  padding: 18px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(49, 95, 140, 0.08)),
+    #f8fbfb;
+}
+
+.home-hero-copy {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  max-width: 760px;
+}
+
+.home-hero-copy h2 {
+  max-width: 720px;
+  font-size: clamp(1.7rem, 3vw, 2.6rem);
+  line-height: 1.08;
+}
+
+.home-hero-copy p:not(.result-label) {
+  max-width: 680px;
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+
+.hero-cta {
+  width: fit-content;
+  margin-top: 4px;
+  padding-inline: 16px;
+}
+
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.home-stat {
+  display: grid;
+  align-content: center;
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.home-stat strong {
+  color: var(--teal-dark);
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.home-stat span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 
 .workflow-steps {
@@ -473,12 +544,17 @@ h3 {
   gap: 8px;
 }
 
-.workflow-steps span {
+.workflow-steps > span:not(.workflow-step) {
+  display: none;
+}
+
+.workflow-step {
+  position: relative;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 74px;
+  padding: 12px;
   border: 1px solid rgba(15, 118, 110, 0.2);
   border-radius: 6px;
   background: #f3faf8;
@@ -487,7 +563,24 @@ h3 {
   font-weight: 800;
 }
 
-.workflow-steps strong {
+.workflow-step:nth-of-type(-n + 3)::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: -11px;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--blue);
+  font-size: 0.82rem;
+  transform: translateY(-50%);
+}
+
+.workflow-step strong {
   display: inline-grid;
   place-items: center;
   width: 22px;
@@ -497,6 +590,18 @@ h3 {
   background: var(--teal);
   color: #fff;
   font-size: 0.76rem;
+}
+
+.workflow-step span {
+  display: grid;
+  gap: 3px;
+}
+
+.workflow-step small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .ai-input {
@@ -607,6 +712,53 @@ button:hover {
   border: 1px dashed var(--line);
   color: var(--muted);
   background: var(--panel-soft);
+}
+
+.onboarding-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(260px, 1.05fr);
+  gap: 14px;
+  align-items: start;
+  border-style: solid;
+  background:
+    linear-gradient(135deg, rgba(49, 95, 140, 0.08), transparent 55%),
+    var(--panel-soft);
+}
+
+.onboarding-empty h2 {
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+
+.onboarding-empty p:last-child {
+  margin-bottom: 0;
+  line-height: 1.55;
+}
+
+.empty-use-cases {
+  display: grid;
+  gap: 8px;
+}
+
+.empty-use-cases button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  text-align: left;
+}
+
+.empty-use-cases button span {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #e8f3f1;
+  color: var(--teal-dark);
+  font-size: 0.76rem;
+  font-weight: 900;
 }
 
 .recommendation-card {
@@ -1455,8 +1607,13 @@ dialog::backdrop {
   .catalog-hero,
   .compare-hero,
   .compare-selected-grid,
+  .home-hero,
   .about-story {
     grid-template-columns: 1fr;
+  }
+
+  .home-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .about-section-wide {
@@ -1482,6 +1639,7 @@ dialog::backdrop {
 
   .ai-panel {
     grid-template-areas:
+      "hero"
       "steps"
       "input"
       "examples"
@@ -1490,6 +1648,15 @@ dialog::backdrop {
 
   .workflow-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-step:nth-of-type(-n + 3)::after {
+    display: none;
+  }
+
+  .home-stats,
+  .onboarding-empty {
+    grid-template-columns: 1fr;
   }
 
   .filters {
@@ -1699,6 +1866,7 @@ dialog::backdrop {
 
   .example-strip button,
   .copilot-suggestions button,
+  .hero-cta,
   .ai-actions button,
   .card-actions button,
   .copilot-form button,
@@ -1748,6 +1916,14 @@ dialog::backdrop {
 
   table {
     min-width: 600px;
+  }
+
+  .home-hero {
+    padding: 14px;
+  }
+
+  .home-stat {
+    min-height: 78px;
   }
 }
 

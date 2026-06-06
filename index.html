@@ -38,7 +38,37 @@
       </header>
 
       <section class="ai-panel route-panel" data-route-pages="home" aria-label="Material recommendation">
+        <div class="home-hero">
+          <div class="home-hero-copy">
+            <p class="result-label" data-i18n="homeHeroLabel">MatFinder AI</p>
+            <h2 data-i18n="homeHeroTitle">AI-powered material selection assistant</h2>
+            <p data-i18n="homeHeroBody">Helps users find suitable engineering materials based on natural language requirements.</p>
+            <button id="startSelectionButton" class="primary-button hero-cta" type="button" data-i18n="startSelection">Start Material Selection</button>
+          </div>
+          <div class="home-stats" aria-label="Product highlights">
+            <div class="home-stat">
+              <strong id="homeMaterialCount">1219</strong>
+              <span data-i18n="homeStatMaterials">materials</span>
+            </div>
+            <div class="home-stat">
+              <strong data-i18n="homeStatScoringValue">Live</strong>
+              <span data-i18n="homeStatScoring">Dynamic scoring</span>
+            </div>
+            <div class="home-stat">
+              <strong data-i18n="homeStatCompareValue">3-way</strong>
+              <span data-i18n="homeStatCompare">Material comparison</span>
+            </div>
+            <div class="home-stat">
+              <strong data-i18n="homeStatReportValue">PDF</strong>
+              <span data-i18n="homeStatReport">Report export</span>
+            </div>
+          </div>
+        </div>
         <div class="workflow-steps" aria-label="Material selection workflow">
+          <span class="workflow-step"><strong>1</strong> <span><b data-i18n="workflowRequirement">Requirement Input</b><small data-i18n="workflowRequirementHint">Describe the application</small></span></span>
+          <span class="workflow-step"><strong>2</strong> <span><b data-i18n="workflowRecommendation">Recommendations</b><small data-i18n="workflowRecommendationHint">Rank suitable materials</small></span></span>
+          <span class="workflow-step"><strong>3</strong> <span><b data-i18n="workflowExplanation">Explanation</b><small data-i18n="workflowExplanationHint">Review reasons and risks</small></span></span>
+          <span class="workflow-step"><strong>4</strong> <span><b data-i18n="workflowReport">Export Report</b><small data-i18n="workflowReportHint">Share the selection brief</small></span></span>
           <span><strong>1</strong> <span data-i18n="workflowRequirement">输入需求</span></span>
           <span><strong>2</strong> <span data-i18n="workflowRecommendation">获得推荐</span></span>
           <span><strong>3</strong> <span data-i18n="workflowExplanation">查看解释</span></span>
@@ -247,20 +277,20 @@
         </div>
         <div class="about-story">
           <section class="about-section about-section-wide">
-            <h3 data-i18n="aboutWhatTitle">What is MatFinder AI?</h3>
-            <p data-i18n="aboutWhatBody">MatFinder AI is a local-first material selection assistant that combines a structured materials database with transparent recommendation scoring and optional contextual AI explanations.</p>
+            <h3 data-i18n="aboutProblemTitle">Problem</h3>
+            <p data-i18n="aboutProblemBody">Early material selection is slow because requirements are written in natural language while material data lives in tables, datasheets, and supplier notes.</p>
           </section>
           <section class="about-section">
-            <h3 data-i18n="aboutAudienceTitle">Who is it for?</h3>
-            <p data-i18n="aboutAudienceBody">It is designed for product designers, engineers, founders, students, and sourcing teams who need a fast first-pass shortlist before grade-level validation.</p>
+            <h3 data-i18n="aboutSolutionTitle">Solution</h3>
+            <p data-i18n="aboutSolutionBody">MatFinder AI turns a plain-language requirement into a ranked shortlist, explains the match, supports comparison, and exports a selection brief.</p>
           </section>
           <article class="about-card">
-            <h3 data-i18n="aboutDatasetTitle">Dataset size</h3>
+            <h3 data-i18n="aboutDatasetTitle">Dataset</h3>
             <p><strong id="aboutMaterialCount">0</strong> <span data-i18n="materialsUnit">materials</span></p>
             <p><strong id="aboutCategoryCount">0</strong> <span data-i18n="aboutCategoriesUnit">categories</span></p>
           </article>
           <section class="about-section about-section-wide">
-            <h3 data-i18n="aboutEngineTitle">How recommendation scoring works</h3>
+            <h3 data-i18n="aboutEngineTitle">Recommendation Logic</h3>
             <p data-i18n="aboutEngineBody">The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.</p>
             <ol class="about-steps">
               <li data-i18n="aboutScoringOne">Parse the requirement for material, performance, application, and constraint signals.</li>
@@ -278,7 +308,7 @@
             </ul>
           </section>
           <section class="about-section">
-            <h3 data-i18n="aboutTrustTitle">Limitations</h3>
+            <h3 data-i18n="aboutTrustTitle">Current Limitations</h3>
             <p data-i18n="aboutTrustBody">Scores summarize how well each material matches the detected requirements, with reasons and warnings shown beside every recommendation.</p>
           </section>
           <section class="about-section">
@@ -290,7 +320,7 @@
             </ul>
           </section>
           <section class="about-section about-section-wide">
-            <h3 data-i18n="aboutRoadmapTitle">Roadmap</h3>
+            <h3 data-i18n="aboutRoadmapTitle">Future Roadmap</h3>
             <ul class="roadmap-list">
               <li data-i18n="aboutRoadmapOne">Grade-level datasheet links and supplier records.</li>
               <li data-i18n="aboutRoadmapTwo">More domain presets for automotive, electronics, medical, packaging, and sustainability use cases.</li>

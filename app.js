@@ -141,10 +141,25 @@ const i18n = {
     filtersToggle: "Filters",
     materialsUnit: "materials",
     comparedUnit: "compared",
+    homeHeroLabel: "MatFinder AI",
+    homeHeroTitle: "AI-powered material selection assistant",
+    homeHeroBody: "Helps users find suitable engineering materials based on natural language requirements.",
+    startSelection: "Start Material Selection",
+    homeStatMaterials: "materials",
+    homeStatScoringValue: "Live",
+    homeStatScoring: "Dynamic scoring",
+    homeStatCompareValue: "3-way",
+    homeStatCompare: "Material comparison",
+    homeStatReportValue: "PDF",
+    homeStatReport: "Report export",
     workflowRequirement: "Requirement",
     workflowRecommendation: "Recommendation",
     workflowExplanation: "Explanation",
     workflowReport: "Report",
+    workflowRequirementHint: "Describe the application",
+    workflowRecommendationHint: "Rank suitable materials",
+    workflowExplanationHint: "Review reasons and risks",
+    workflowReportHint: "Share the selection brief",
     requirementLabel: "Requirement description",
     requirementPlaceholder: "Need a lightweight, heat-resistant, electrically insulating material.",
     recommendButton: "Recommend",
@@ -211,7 +226,12 @@ const i18n = {
     recommendedMaterials: "Recommended Materials",
     matchedRequirements: "Matched requirements",
     localDatasetMatch: "Local dataset match",
-    noRecommendations: "Describe your application to generate recommendations. Start with the examples above if you are exploring.",
+    noRecommendations: "Describe your application to generate recommendations.",
+    emptyStateTitle: "Start with a real material challenge",
+    emptyStateBody: "Try one of these use cases or write your own requirement in natural language.",
+    emptyUseCaseOne: "EV battery sealing ring",
+    emptyUseCaseTwo: "Transparent impact-resistant cover",
+    emptyUseCaseThree: "Chemical corrosion-resistant seal",
     matchScore: "Match score",
     detailsAi: "View explanation",
     askCopilot: "Ask Copilot",
@@ -229,12 +249,12 @@ const i18n = {
     aboutTitle: "A focused workflow for early material selection",
     aboutIntro: "MatFinder AI turns product requirements into ranked material candidates, explains the match, and produces a report you can review with engineering, sourcing, or suppliers.",
     aboutCategoriesUnit: "categories",
-    aboutDatasetTitle: "Dataset size",
-    aboutWhatTitle: "What is MatFinder AI?",
-    aboutWhatBody: "MatFinder AI is a local-first material selection assistant that combines a structured materials database with transparent recommendation scoring and optional contextual AI explanations.",
-    aboutAudienceTitle: "Who is it for?",
-    aboutAudienceBody: "It is designed for product designers, engineers, founders, students, and sourcing teams who need a fast first-pass shortlist before grade-level validation.",
-    aboutEngineTitle: "How recommendation scoring works",
+    aboutDatasetTitle: "Dataset",
+    aboutProblemTitle: "Problem",
+    aboutProblemBody: "Early material selection is slow because requirements are written in natural language while material data lives in tables, datasheets, and supplier notes.",
+    aboutSolutionTitle: "Solution",
+    aboutSolutionBody: "MatFinder AI turns a plain-language requirement into a ranked shortlist, explains the match, supports comparison, and exports a selection brief.",
+    aboutEngineTitle: "Recommendation Logic",
     aboutEngineBody: "The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.",
     aboutScoringOne: "Parse the requirement for material, performance, application, and constraint signals.",
     aboutScoringTwo: "Match those signals against tags, properties, uses, and numeric thresholds in the local dataset.",
@@ -244,13 +264,13 @@ const i18n = {
     aboutFeatureTwo: "Searchable, filterable material catalog.",
     aboutFeatureThree: "Side-by-side comparison for up to three materials.",
     aboutFeatureFour: "PDF-style report export for selection reviews.",
-    aboutTrustTitle: "Limitations",
+    aboutTrustTitle: "Current Limitations",
     aboutTrustBody: "Scores are a screening aid, not a certification. Numeric fields are normalized from the local dataset and should be checked against supplier datasheets before final material selection.",
     aboutValidationTitle: "Before final selection",
     aboutValidationOne: "Confirm grade-level datasheets and supplier availability.",
     aboutValidationTwo: "Validate processing method, environment, and long-term load.",
     aboutValidationThree: "Use the exported report as a selection brief, not a final certification.",
-    aboutRoadmapTitle: "Roadmap",
+    aboutRoadmapTitle: "Future Roadmap",
     aboutRoadmapOne: "Grade-level datasheet links and supplier records.",
     aboutRoadmapTwo: "More domain presets for automotive, electronics, medical, packaging, and sustainability use cases.",
     aboutRoadmapThree: "Richer export templates for engineering reviews and sourcing conversations.",
@@ -336,7 +356,7 @@ const i18n = {
     keyDifferences: "Key differences",
     strengthsWeaknesses: "Strengths and weaknesses",
     recommendedUseCases: "Recommended use cases",
-    examples: ["Lightweight heat insulator", "Transparent impact part", "Chemical high-temp seal"],
+    examples: ["EV battery seal", "Transparent impact cover", "Chemical-resistant seal"],
     propertyOptions: {
       all: "Balanced",
       "high-temp": "Heat resistant",
@@ -368,10 +388,25 @@ const zhDetailLabels = {
   filtersToggle: "\u7b5b\u9009",
   materialsUnit: "\u79cd\u6750\u6599",
   comparedUnit: "\u4e2a\u5bf9\u6bd4",
+  homeHeroLabel: "MatFinder AI",
+  homeHeroTitle: "AI \u6750\u6599\u9009\u578b\u52a9\u624b",
+  homeHeroBody: "\u57fa\u4e8e\u81ea\u7136\u8bed\u8a00\u9700\u6c42\uff0c\u5e2e\u52a9\u7528\u6237\u5feb\u901f\u627e\u5230\u9002\u5408\u7684\u5de5\u7a0b\u6750\u6599\u3002",
+  startSelection: "\u5f00\u59cb\u6750\u6599\u9009\u578b",
+  homeStatMaterials: "\u6750\u6599\u6570\u636e",
+  homeStatScoringValue: "\u52a8\u6001",
+  homeStatScoring: "\u5b9e\u65f6\u8bc4\u5206",
+  homeStatCompareValue: "3 \u79cd",
+  homeStatCompare: "\u6750\u6599\u5bf9\u6bd4",
+  homeStatReportValue: "PDF",
+  homeStatReport: "\u62a5\u544a\u5bfc\u51fa",
   workflowRequirement: "\u8f93\u5165\u9700\u6c42",
   workflowRecommendation: "\u83b7\u5f97\u63a8\u8350",
   workflowExplanation: "\u67e5\u770b\u89e3\u91ca",
   workflowReport: "\u5bfc\u51fa\u62a5\u544a",
+  workflowRequirementHint: "\u63cf\u8ff0\u5e94\u7528\u573a\u666f",
+  workflowRecommendationHint: "\u751f\u6210\u6750\u6599\u6392\u540d",
+  workflowExplanationHint: "\u67e5\u770b\u7406\u7531\u4e0e\u98ce\u9669",
+  workflowReportHint: "\u5bfc\u51fa\u9009\u578b\u7b80\u62a5",
   requirementLabel: "\u9700\u6c42\u63cf\u8ff0",
   requirementPlaceholder: "\u4f8b\u5982\uff1a\u6211\u8981\u505a\u65b0\u80fd\u6e90\u6c7d\u8f66\u7535\u6c60\u5bc6\u5c01\u5708\u3002",
   recommendButton: "\u63a8\u8350\u6750\u6599",
@@ -409,7 +444,12 @@ const zhDetailLabels = {
   recommendedMaterials: "\u63a8\u8350\u6750\u6599",
   matchedRequirements: "\u5339\u914d\u9700\u6c42",
   localDatasetMatch: "\u672c\u5730\u6570\u636e\u5339\u914d",
-  noRecommendations: "\u8f93\u5165\u5e94\u7528\u9700\u6c42\u540e\u751f\u6210\u63a8\u8350\u6750\u6599\u3002\u5982\u679c\u8fd8\u5728\u63a2\u7d22\uff0c\u53ef\u4ee5\u5148\u70b9\u4e0a\u65b9\u793a\u4f8b\u3002",
+  noRecommendations: "\u8f93\u5165\u5e94\u7528\u9700\u6c42\u540e\u751f\u6210\u63a8\u8350\u6750\u6599\u3002",
+  emptyStateTitle: "\u4ece\u4e00\u4e2a\u771f\u5b9e\u9009\u6750\u95ee\u9898\u5f00\u59cb",
+  emptyStateBody: "\u9009\u62e9\u4e0b\u65b9\u7528\u4f8b\uff0c\u6216\u76f4\u63a5\u7528\u81ea\u7136\u8bed\u8a00\u5199\u4e0b\u4f60\u7684\u9700\u6c42\u3002",
+  emptyUseCaseOne: "\u65b0\u80fd\u6e90\u6c7d\u8f66\u7535\u6c60\u5bc6\u5c01\u5708",
+  emptyUseCaseTwo: "\u900f\u660e\u6297\u51b2\u51fb\u9632\u62a4\u7f69",
+  emptyUseCaseThree: "\u8010\u5316\u5b66\u8150\u8680\u5bc6\u5c01\u6750\u6599",
   matchScore: "\u5339\u914d\u5206",
   detailsAi: "\u67e5\u770b\u89e3\u91ca",
   aiScore: "AI \u5206\u6570",
@@ -477,7 +517,7 @@ const zhDetailLabels = {
   keyDifferences: "\u5173\u952e\u5dee\u5f02",
   strengthsWeaknesses: "\u5f3a\u9879\u4e0e\u5f31\u9879",
   recommendedUseCases: "\u63a8\u8350\u4f7f\u7528\u573a\u666f",
-  examples: ["\u65b0\u80fd\u6e90\u7535\u6c60\u5bc6\u5c01\u5708", "\u6237\u5916\u900f\u660e\u9632\u62a4\u7f69", "\u8010\u5316\u5b66\u9ad8\u6e29\u5bc6\u5c01\u4ef6"],
+  examples: ["\u65b0\u80fd\u6e90\u6c7d\u8f66\u7535\u6c60\u5bc6\u5c01\u5708", "\u900f\u660e\u6297\u51b2\u51fb\u9632\u62a4\u7f69", "\u8010\u5316\u5b66\u8150\u8680\u5bc6\u5c01\u6750\u6599"],
   propertyOptions: {
     all: "\u7efc\u5408",
     "high-temp": "\u8010\u70ed",
@@ -554,12 +594,12 @@ const zhDetailLabels = {
   aboutTitle: "\u9762\u5411\u65e9\u671f\u9009\u6750\u7684\u805a\u7126\u5de5\u4f5c\u6d41",
   aboutIntro: "MatFinder AI \u628a\u4ea7\u54c1\u9700\u6c42\u8f6c\u6210\u6750\u6599\u5019\u9009\u3001\u89e3\u91ca\u5339\u914d\u7406\u7531\uff0c\u5e76\u751f\u6210\u53ef\u4e0e\u5de5\u7a0b\u3001\u91c7\u8d2d\u6216\u4f9b\u5e94\u5546\u8ba8\u8bba\u7684\u9009\u578b\u62a5\u544a\u3002",
   aboutCategoriesUnit: "\u4e2a\u7c7b\u522b",
-  aboutDatasetTitle: "\u6570\u636e\u96c6\u89c4\u6a21",
-  aboutWhatTitle: "MatFinder AI \u662f\u4ec0\u4e48\uff1f",
-  aboutWhatBody: "MatFinder AI \u662f\u4e00\u4e2a\u672c\u5730\u4f18\u5148\u7684\u6750\u6599\u9009\u578b\u52a9\u624b\uff0c\u5c06\u7ed3\u6784\u5316\u6750\u6599\u6570\u636e\u5e93\u3001\u53ef\u89e3\u91ca\u8bc4\u5206\u548c\u53ef\u9009\u7684\u4e0a\u4e0b\u6587 AI \u89e3\u91ca\u7ed3\u5408\u5728\u4e00\u8d77\u3002",
-  aboutAudienceTitle: "\u9002\u5408\u8c01\u4f7f\u7528\uff1f",
-  aboutAudienceBody: "\u5b83\u9002\u5408\u4ea7\u54c1\u8bbe\u8ba1\u5e08\u3001\u5de5\u7a0b\u5e08\u3001\u521b\u4e1a\u56e2\u961f\u3001\u5b66\u751f\u548c\u91c7\u8d2d\u56e2\u961f\uff0c\u7528\u4e8e\u5728\u724c\u53f7\u7ea7\u9a8c\u8bc1\u524d\u5feb\u901f\u5f62\u6210\u521d\u6b65\u5019\u9009\u6e05\u5355\u3002",
-  aboutEngineTitle: "\u63a8\u8350\u8bc4\u5206\u5982\u4f55\u5de5\u4f5c",
+  aboutDatasetTitle: "\u6570\u636e\u96c6",
+  aboutProblemTitle: "\u95ee\u9898",
+  aboutProblemBody: "\u65e9\u671f\u6750\u6599\u9009\u578b\u5f80\u5f80\u5f88\u6162\uff1a\u9700\u6c42\u662f\u81ea\u7136\u8bed\u8a00\uff0c\u800c\u6750\u6599\u6570\u636e\u5206\u6563\u5728\u8868\u683c\u3001\u6570\u636e\u8868\u548c\u4f9b\u5e94\u5546\u8bf4\u660e\u4e2d\u3002",
+  aboutSolutionTitle: "\u89e3\u51b3\u65b9\u6848",
+  aboutSolutionBody: "MatFinder AI \u5c06\u666e\u901a\u8bed\u8a00\u9700\u6c42\u8f6c\u6210\u6750\u6599\u5019\u9009\u6392\u540d\uff0c\u89e3\u91ca\u5339\u914d\u7406\u7531\uff0c\u652f\u6301\u5bf9\u6bd4\uff0c\u5e76\u5bfc\u51fa\u9009\u578b\u7b80\u62a5\u3002",
+  aboutEngineTitle: "\u63a8\u8350\u903b\u8f91",
   aboutEngineBody: "\u5f15\u64ce\u652f\u6301\u4e2d\u82f1\u6587\u9700\u6c42\u89e3\u6790\uff0c\u8bc6\u522b\u6027\u80fd\u9700\u6c42\uff0c\u4e3a\u6750\u6599\u6253\u5206\uff0c\u5e76\u89e3\u91ca\u5339\u914d\u539f\u56e0\u548c\u9650\u5236\u3002",
   aboutScoringOne: "\u89e3\u6790\u9700\u6c42\u4e2d\u7684\u6750\u6599\u3001\u6027\u80fd\u3001\u5e94\u7528\u548c\u9650\u5236\u4fe1\u53f7\u3002",
   aboutScoringTwo: "\u5c06\u8fd9\u4e9b\u4fe1\u53f7\u4e0e\u672c\u5730\u6570\u636e\u96c6\u7684\u6807\u7b7e\u3001\u5c5e\u6027\u3001\u7528\u9014\u548c\u6570\u503c\u9608\u503c\u5339\u914d\u3002",
@@ -569,13 +609,13 @@ const zhDetailLabels = {
   aboutFeatureTwo: "\u53ef\u641c\u7d22\u3001\u53ef\u7b5b\u9009\u7684\u6750\u6599\u76ee\u5f55\u3002",
   aboutFeatureThree: "\u6700\u591a\u4e09\u79cd\u6750\u6599\u7684\u5e76\u6392\u5bf9\u6bd4\u3002",
   aboutFeatureFour: "\u9762\u5411\u9009\u578b\u8bc4\u5ba1\u7684 PDF \u5f0f\u62a5\u544a\u5bfc\u51fa\u3002",
-  aboutTrustTitle: "\u5c40\u9650",
+  aboutTrustTitle: "\u5f53\u524d\u5c40\u9650",
   aboutTrustBody: "\u5206\u6570\u662f\u7b5b\u9009\u8f85\u52a9\uff0c\u4e0d\u662f\u8ba4\u8bc1\u7ed3\u8bba\u3002\u6570\u503c\u5b57\u6bb5\u6765\u81ea\u672c\u5730\u6570\u636e\u96c6\u5e76\u7ecf\u8fc7\u5f52\u4e00\u5316\uff0c\u6700\u7ec8\u9009\u578b\u524d\u5e94\u6838\u5bf9\u4f9b\u5e94\u5546\u6570\u636e\u8868\u3002",
   aboutValidationTitle: "\u6700\u7ec8\u9009\u578b\u524d",
   aboutValidationOne: "\u786e\u8ba4\u724c\u53f7\u7ea7\u6570\u636e\u8868\u548c\u4f9b\u5e94\u53ef\u5f97\u6027\u3002",
   aboutValidationTwo: "\u9a8c\u8bc1\u52a0\u5de5\u65b9\u5f0f\u3001\u4f7f\u7528\u73af\u5883\u548c\u957f\u671f\u8f7d\u8377\u3002",
   aboutValidationThree: "\u5c06\u5bfc\u51fa\u62a5\u544a\u4f5c\u4e3a\u9009\u6750\u7b80\u62a5\uff0c\u800c\u4e0d\u662f\u6700\u7ec8\u8ba4\u8bc1\u3002",
-  aboutRoadmapTitle: "\u8def\u7ebf\u56fe",
+  aboutRoadmapTitle: "\u672a\u6765\u8def\u7ebf\u56fe",
   aboutRoadmapOne: "\u724c\u53f7\u7ea7\u6570\u636e\u8868\u94fe\u63a5\u548c\u4f9b\u5e94\u5546\u8bb0\u5f55\u3002",
   aboutRoadmapTwo: "\u9762\u5411\u6c7d\u8f66\u3001\u7535\u5b50\u3001\u533b\u7597\u3001\u5305\u88c5\u548c\u53ef\u6301\u7eed\u573a\u666f\u7684\u66f4\u591a\u9886\u57df\u9884\u8bbe\u3002",
   aboutRoadmapThree: "\u9762\u5411\u5de5\u7a0b\u8bc4\u5ba1\u548c\u91c7\u8d2d\u6c9f\u901a\u7684\u66f4\u5b8c\u6574\u5bfc\u51fa\u6a21\u677f\u3002"
@@ -729,6 +769,8 @@ const elements = {
   languageSelect: document.querySelector("#languageSelect"),
   routePanels: document.querySelectorAll("[data-route-pages]"),
   routeLinks: document.querySelectorAll("[data-route-link]"),
+  startSelectionButton: document.querySelector("#startSelectionButton"),
+  homeMaterialCount: document.querySelector("#homeMaterialCount"),
   catalogStats: document.querySelector("#catalogStats"),
   aboutMaterialCount: document.querySelector("#aboutMaterialCount"),
   aboutCategoryCount: document.querySelector("#aboutCategoryCount"),
@@ -947,6 +989,7 @@ async function init() {
   });
 
   elements.totalCount.textContent = materials.length;
+  elements.homeMaterialCount.textContent = materials.length;
   elements.aboutMaterialCount.textContent = materials.length;
   elements.aboutCategoryCount.textContent = categories.length;
   renderCatalogStats();
@@ -1042,6 +1085,11 @@ function apiUrl(path) {
   return `${apiBaseUrl}${path}`;
 }
 
+function focusRequirementInput() {
+  elements.requirementInput.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => elements.requirementInput.focus({ preventScroll: true }), 260);
+}
+
 function bindEvents() {
   elements.routeLinks.forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -1049,6 +1097,8 @@ function bindEvents() {
       setRoute(link.dataset.routeLink);
     });
   });
+
+  elements.startSelectionButton.addEventListener("click", focusRequirementInput);
 
   window.addEventListener("popstate", () => {
     state.route = routeFromPath(window.location.pathname);
@@ -1100,9 +1150,10 @@ function bindEvents() {
     render();
   });
 
-  elements.exampleButtons.forEach((button) => {
+  elements.exampleButtons.forEach((button, index) => {
     button.addEventListener("click", () => {
-      elements.requirementInput.value = state.language === "zh" ? button.dataset.exampleZh : button.dataset.exampleEn;
+      const useCase = getOnboardingUseCases()[index];
+      elements.requirementInput.value = useCase?.query || (state.language === "zh" ? button.dataset.exampleZh : button.dataset.exampleEn);
       runRecommendation();
     });
   });
@@ -1919,7 +1970,7 @@ function render() {
 
 function renderRecommendations(result = null) {
   if (!state.recommendations.length) {
-    elements.recommendationResults.innerHTML = `<p class="recommendation-empty">${t("noRecommendations")}</p>`;
+    renderRecommendationEmptyState();
     return;
   }
 
@@ -1948,6 +1999,63 @@ function renderRecommendations(result = null) {
     });
   });
   elements.recommendationResults.querySelector("[data-export-report]")?.addEventListener("click", exportMaterialSelectionReport);
+}
+
+function getOnboardingUseCases() {
+  return [
+    {
+      label: t("emptyUseCaseOne"),
+      query: state.language === "zh"
+        ? "\u6211\u9700\u8981\u4e00\u79cd\u9002\u5408\u65b0\u80fd\u6e90\u6c7d\u8f66\u7535\u6c60\u5305\u5bc6\u5c01\u5708\u7684\u8010\u70ed\u3001\u8010\u5316\u5b66\u8150\u8680\u5f39\u6027\u4f53\u6750\u6599\u3002"
+        : "I need a heat-resistant, chemically corrosion-resistant elastomer for an EV battery pack sealing ring."
+    },
+    {
+      label: t("emptyUseCaseTwo"),
+      query: state.language === "zh"
+        ? "\u6211\u9700\u8981\u4e00\u79cd\u900f\u660e\u3001\u6297\u51b2\u51fb\u7684\u5de5\u7a0b\u5851\u6599\uff0c\u7528\u4e8e\u6237\u5916\u9632\u62a4\u7f69\u3002"
+        : "I need a transparent, impact-resistant engineering plastic for an outdoor protective cover."
+    },
+    {
+      label: t("emptyUseCaseThree"),
+      query: state.language === "zh"
+        ? "\u63a8\u8350\u4e00\u79cd\u9002\u5408\u8150\u8680\u6027\u4ecb\u8d28\u5bc6\u5c01\u4ef6\u7684\u8010\u5316\u5b66\u8150\u8680\u6750\u6599\u3002"
+        : "Recommend a chemically corrosion-resistant material for seals exposed to aggressive media."
+    }
+  ];
+}
+
+function renderRecommendationEmptyState() {
+  const useCases = getOnboardingUseCases();
+  elements.recommendationResults.innerHTML = `
+    <section class="recommendation-empty onboarding-empty">
+      <div>
+        <p class="result-label">${t("noRecommendations")}</p>
+        <h2>${t("emptyStateTitle")}</h2>
+        <p>${t("emptyStateBody")}</p>
+      </div>
+      <div class="empty-use-cases">
+        ${useCases
+          .map(
+            (useCase, index) => `
+              <button type="button" data-empty-example="${index}">
+                <span>${String(index + 1).padStart(2, "0")}</span>
+                ${escapeHtml(useCase.label)}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+
+  elements.recommendationResults.querySelectorAll("[data-empty-example]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const useCase = useCases[Number(button.dataset.emptyExample)];
+      if (!useCase) return;
+      elements.requirementInput.value = useCase.query;
+      runRecommendation();
+    });
+  });
 }
 
 function renderRecommendationCard(candidate, index) {
