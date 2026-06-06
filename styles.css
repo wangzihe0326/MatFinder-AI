@@ -157,6 +157,26 @@ h3 {
   font-size: 0.9rem;
 }
 
+.top-count-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.top-count-button:hover,
+.top-count-button.is-active {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: #e8f3f1;
+  color: var(--teal-dark);
+}
+
 .top-actions strong {
   color: var(--ink);
 }
@@ -248,11 +268,45 @@ h3 {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(280px, 1.4fr);
   grid-template-areas:
+    "steps steps"
     "input examples"
     "input results";
   gap: 14px;
   margin-bottom: 18px;
   padding: 16px;
+}
+
+.workflow-steps {
+  grid-area: steps;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workflow-steps span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  border-radius: 6px;
+  background: #f3faf8;
+  color: var(--teal-dark);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.workflow-steps strong {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 0.76rem;
 }
 
 .ai-input {
@@ -386,6 +440,7 @@ button:hover {
 .report-export-button {
   flex: 0 0 auto;
   border-color: var(--blue);
+  background: #eef5fb;
   color: var(--blue);
 }
 
@@ -976,6 +1031,19 @@ dialog::backdrop {
   background: #f8fbfb;
 }
 
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.secondary-context-button {
+  border-color: rgba(49, 95, 140, 0.28);
+  background: #eef5fb;
+  color: #254b70;
+}
+
 .explanation-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1212,9 +1280,14 @@ dialog::backdrop {
 
   .ai-panel {
     grid-template-areas:
+      "steps"
       "input"
       "examples"
       "results";
+  }
+
+  .workflow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .filters {
@@ -1280,6 +1353,7 @@ dialog::backdrop {
   }
 
   .top-actions > span,
+  .top-count-button,
   .language-control {
     width: 100%;
   }
@@ -1414,6 +1488,7 @@ dialog::backdrop {
   .card-actions button,
   .copilot-form button,
   .report-export-button,
+  .top-count-button,
   .compare-header button,
   .toolbar-controls select {
     width: 100%;
@@ -1487,6 +1562,10 @@ dialog::backdrop {
   }
 
   .range-row {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-steps {
     grid-template-columns: 1fr;
   }
 

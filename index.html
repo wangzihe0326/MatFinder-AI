@@ -20,7 +20,6 @@
           <a href="/" data-route-link="home" data-i18n="navHome">Home</a>
           <a href="/materials" data-route-link="materials" data-i18n="navMaterials">Materials</a>
           <a href="/compare" data-route-link="compare" data-i18n="navCompare">Compare</a>
-          <a href="/copilot" data-route-link="copilot" data-i18n="navCopilot">AI Copilot</a>
           <a href="/about" data-route-link="about" data-i18n="navAbout">About</a>
         </nav>
         <div class="top-actions" aria-label="Platform overview">
@@ -32,11 +31,19 @@
             </select>
           </label>
           <span><strong id="totalCount">0</strong> <span data-i18n="materialsUnit">种材料</span></span>
-          <span><strong id="selectedCount">0</strong> <span data-i18n="comparedUnit">个对比</span></span>
+          <button id="compareCountButton" class="top-count-button" type="button" data-route-link="compare">
+            <strong id="selectedCount">0</strong> <span data-i18n="comparedUnit">个对比</span>
+          </button>
         </div>
       </header>
 
       <section class="ai-panel route-panel" data-route-pages="home" aria-label="Material recommendation">
+        <div class="workflow-steps" aria-label="Material selection workflow">
+          <span><strong>1</strong> <span data-i18n="workflowRequirement">输入需求</span></span>
+          <span><strong>2</strong> <span data-i18n="workflowRecommendation">获得推荐</span></span>
+          <span><strong>3</strong> <span data-i18n="workflowExplanation">查看解释</span></span>
+          <span><strong>4</strong> <span data-i18n="workflowReport">导出报告</span></span>
+        </div>
         <div class="ai-input">
           <label for="requirementInput" data-i18n="requirementLabel">需求描述</label>
           <textarea
@@ -63,19 +70,6 @@
         <div id="recommendationResults" class="recommendation-results" aria-live="polite"></div>
       </section>
 
-      <section id="analysisPanel" class="analysis-panel route-panel" data-route-pages="home" aria-label="AI material analysis">
-        <div class="analysis-header">
-          <div>
-            <p class="result-label" data-i18n="analysisPanelLabel">AI 材料分析</p>
-            <h2 id="analysisTitle">选择一种材料</h2>
-          </div>
-          <span id="analysisStatus" class="analysis-status">GPT 解释</span>
-        </div>
-        <div id="analysisContent" class="analysis-content">
-          <p class="recommendation-empty">点击材料的详情按钮，从本地数据集生成 OpenAI 分析。</p>
-        </div>
-      </section>
-
       <section id="copilotPanel" class="copilot-panel route-panel" data-route-pages="copilot" aria-label="MatFinder AI Copilot">
         <div class="analysis-header">
           <div>
@@ -97,7 +91,20 @@
         </form>
       </section>
 
-      <main class="layout route-panel" data-route-pages="home materials compare">
+      <section id="analysisPanel" class="analysis-panel route-panel" data-route-pages="copilot" aria-label="AI material analysis">
+        <div class="analysis-header">
+          <div>
+            <p class="result-label" data-i18n="analysisPanelLabel">AI 材料分析</p>
+            <h2 id="analysisTitle">选择一种材料</h2>
+          </div>
+          <span id="analysisStatus" class="analysis-status">GPT 解释</span>
+        </div>
+        <div id="analysisContent" class="analysis-content">
+          <p class="recommendation-empty">点击材料的详情按钮，从本地数据集生成 OpenAI 分析。</p>
+        </div>
+      </section>
+
+      <main class="layout route-panel" data-route-pages="materials compare">
         <aside class="filters" aria-label="Database filters">
           <button id="filterToggleButton" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterBody">
             <span data-i18n="filtersToggle">Filters</span>
@@ -231,15 +238,15 @@
             <p data-i18n="aboutEngineBody">The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.</p>
           </article>
           <article class="about-card">
-            <h3 data-i18n="aboutTechTitle">Technology stack</h3>
-            <p>HTML, CSS, JavaScript, Node.js, SQLite, local rule-based recommendation, optional OpenAI API.</p>
+            <h3 data-i18n="aboutTrustTitle">What the score means</h3>
+            <p data-i18n="aboutTrustBody">Scores summarize how well each material matches the detected requirements, with reasons and warnings shown beside every recommendation.</p>
           </article>
           <article class="about-card">
-            <h3 data-i18n="aboutRoadmapTitle">Roadmap</h3>
+            <h3 data-i18n="aboutValidationTitle">Before final selection</h3>
             <ul>
-              <li data-i18n="aboutRoadmapOne">Grade-level property ranges and uncertainty metadata.</li>
-              <li data-i18n="aboutRoadmapTwo">Visual material knowledge graph.</li>
-              <li data-i18n="aboutRoadmapThree">Deeper Copilot workflows for selection reports and requirement discovery.</li>
+              <li data-i18n="aboutValidationOne">Confirm grade-level datasheets and supplier availability.</li>
+              <li data-i18n="aboutValidationTwo">Validate processing method, environment, and long-term load.</li>
+              <li data-i18n="aboutValidationThree">Use the exported report as a selection brief, not a final certification.</li>
             </ul>
           </article>
         </div>
