@@ -302,6 +302,19 @@ button:hover {
   background: #fff;
 }
 
+.recommendation-results-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-export-button {
+  flex: 0 0 auto;
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
 .analysis-panel {
   max-width: 1440px;
   margin: 0 auto 18px;
@@ -1132,6 +1145,7 @@ dialog::backdrop {
   .toolbar,
   .compare-header,
   .analysis-header,
+  .recommendation-results-header,
   .recommendation-card {
     align-items: stretch;
     grid-template-columns: 1fr;
@@ -1271,6 +1285,7 @@ dialog::backdrop {
   .ai-actions button,
   .card-actions button,
   .copilot-form button,
+  .report-export-button,
   .compare-header button,
   .toolbar-controls select {
     width: 100%;

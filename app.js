@@ -189,6 +189,16 @@ const i18n = {
     noRecommendations: "No recommendations yet.",
     matchScore: "Match score",
     detailsAi: "Details + AI",
+    exportReport: "Export PDF report",
+    reportTitle: "Material Selection Report",
+    reportRequirementText: "User requirement",
+    reportDetectedRequirements: "Detected requirements",
+    reportTopMaterials: "Top 5 recommended materials",
+    reportWarnings: "Warnings and limitations",
+    reportAlternatives: "Alternative materials",
+    reportDate: "Date",
+    reportProject: "Project",
+    reportNoWarnings: "No major unmatched requirement warnings were flagged by the scoring engine.",
     recommendationExplanation: "Recommendation explanation",
     aiRecommendationSummary: "AI recommendation summary",
     scoringReasons: "Scoring engine reasons",
@@ -325,7 +335,17 @@ const zhDetailLabels = {
   copilotScore: "\u5206\u6570",
   copilotMatchedRequirements: "\u5339\u914d\u9700\u6c42",
   copilotNoRecommendation: "\u8be5\u6750\u6599\u4e0d\u5728\u5f53\u524d\u63a8\u8350\u7ed3\u679c\u4e2d\uff0c\u56e0\u6b64\u6211\u53ea\u4f7f\u7528\u6750\u6599\u6863\u6848\u56de\u7b54\u3002",
-  copilotSourceNote: "\u56de\u7b54\u57fa\u4e8e\u672c\u5730\u6750\u6599\u6570\u636e\u548c\u5f53\u524d\u8bc4\u5206\u7ed3\u679c\u3002"
+  copilotSourceNote: "\u56de\u7b54\u57fa\u4e8e\u672c\u5730\u6750\u6599\u6570\u636e\u548c\u5f53\u524d\u8bc4\u5206\u7ed3\u679c\u3002",
+  exportReport: "\u5bfc\u51fa PDF \u62a5\u544a",
+  reportTitle: "\u6750\u6599\u9009\u578b\u62a5\u544a",
+  reportRequirementText: "\u7528\u6237\u9700\u6c42",
+  reportDetectedRequirements: "\u8bc6\u522b\u9700\u6c42",
+  reportTopMaterials: "Top 5 \u63a8\u8350\u6750\u6599",
+  reportWarnings: "\u8b66\u544a\u548c\u9650\u5236",
+  reportAlternatives: "\u66ff\u4ee3\u6750\u6599",
+  reportDate: "\u65e5\u671f",
+  reportProject: "\u9879\u76ee",
+  reportNoWarnings: "\u8bc4\u5206\u5f15\u64ce\u672a\u6807\u51fa\u4e3b\u8981\u672a\u5339\u914d\u8b66\u544a\u3002"
 };
 
 const zhNames = {
@@ -456,6 +476,7 @@ const state = {
   selected: new Set(),
   recommendations: [],
   recommendationCriteria: [],
+  recommendationQuery: "",
   selectedMaterialId: null,
   copilotMessages: [],
   analysisCache: new Map(),
@@ -726,6 +747,7 @@ function bindEvents() {
     elements.requirementInput.value = "";
     state.recommendations = [];
     state.recommendationCriteria = [];
+    state.recommendationQuery = "";
     renderRecommendations();
     render();
   });
@@ -815,6 +837,7 @@ function bindEvents() {
 }
 
 async function runRecommendation() {
+  state.recommendationQuery = elements.requirementInput.value.trim();
   const result = await recommendationService.recommend(elements.requirementInput.value, { limit: 5 });
   state.recommendations = result.recommendations;
   state.recommendationCriteria = result.criteria;
@@ -1456,9 +1479,12 @@ function renderRecommendations(result = null) {
     ? `${t("matchedRequirements")}: ${criteria.map(localizeTerm).join(state.language === "zh" ? "、" : ", ")}`
     : t("localDatasetMatch");
   elements.recommendationResults.innerHTML = `
-    <div>
-      <p class="result-label">${t("recommendedMaterials")}</p>
-      <h2>${criteriaText}</h2>
+    <div class="recommendation-results-header">
+      <div>
+        <p class="result-label">${t("recommendedMaterials")}</p>
+        <h2>${criteriaText}</h2>
+      </div>
+      <button class="report-export-button" type="button" data-export-report>${t("exportReport")}</button>
     </div>
     ${state.recommendations.map(renderRecommendationCard).join("")}
   `;
@@ -1466,6 +1492,7 @@ function renderRecommendations(result = null) {
   elements.recommendationResults.querySelectorAll("[data-detail-id]").forEach((button) => {
     button.addEventListener("click", () => showDetail(button.dataset.detailId));
   });
+  elements.recommendationResults.querySelector("[data-export-report]")?.addEventListener("click", exportMaterialSelectionReport);
 }
 
 function renderRecommendationCard(candidate, index) {
@@ -1486,6 +1513,138 @@ function renderRecommendationCard(candidate, index) {
         <div class="score-label"><span>${t("matchScore")}</span><strong>${candidate.score}</strong></div>
         <div class="score-track"><div class="score-fill" style="width: ${candidate.score}%"></div></div>
         <button type="button" data-detail-id="${item.id}">${t("detailsAi")}</button>
+      </div>
+    </article>
+  `;
+}
+
+function exportMaterialSelectionReport() {
+  if (!state.recommendations.length) return;
+
+  const reportWindow = window.open("", "_blank");
+  if (!reportWindow) return;
+
+  const reportHtml = buildMaterialSelectionReportHtml();
+  reportWindow.document.open();
+  reportWindow.document.write(reportHtml);
+  reportWindow.document.close();
+  reportWindow.focus();
+  reportWindow.setTimeout(() => {
+    reportWindow.print();
+  }, 250);
+}
+
+function buildMaterialSelectionReportHtml() {
+  const reportDate = new Date().toLocaleDateString(state.language === "zh" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+  const detectedRequirements = state.recommendationCriteria.length
+    ? state.recommendationCriteria.map(localizeTerm).join(state.language === "zh" ? "、" : ", ")
+    : t("localDatasetMatch");
+
+  return `<!doctype html>
+    <html lang="${state.language === "zh" ? "zh-CN" : "en"}">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(t("reportTitle"))} - MatFinder AI</title>
+        <style>
+          @page { margin: 18mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; color: #1f2933; font-family: Inter, "Segoe UI", Arial, "Microsoft YaHei", sans-serif; font-size: 12px; line-height: 1.45; }
+          h1, h2, h3, p { margin-top: 0; }
+          h1 { margin-bottom: 6px; font-size: 26px; }
+          h2 { margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #d8dee4; font-size: 15px; color: #115e59; }
+          h3 { margin-bottom: 4px; font-size: 13px; }
+          .cover { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 14px; border-bottom: 2px solid #115e59; }
+          .meta { min-width: 180px; padding: 10px; border: 1px solid #d8dee4; background: #f6f8f9; }
+          .meta div { margin-bottom: 5px; }
+          .requirement { padding: 12px; border: 1px solid #d8dee4; background: #f8fbfb; }
+          .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+          .chip { padding: 4px 7px; border-radius: 999px; background: #e8f3f1; color: #115e59; font-weight: 700; }
+          .material { break-inside: avoid; margin: 12px 0; padding: 12px; border: 1px solid #d8dee4; border-radius: 6px; }
+          .material-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+          .score { min-width: 72px; padding: 8px; background: #e8f3f1; color: #115e59; text-align: center; font-weight: 800; }
+          .score strong { display: block; font-size: 22px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+          ul { margin: 0; padding-left: 18px; }
+          li { margin-bottom: 4px; }
+          .muted { color: #64707d; }
+          .alternatives { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d8dee4; }
+          @media print { button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <header class="cover">
+          <div>
+            <h1>${escapeHtml(t("reportTitle"))}</h1>
+            <p class="muted">MatFinder AI</p>
+          </div>
+          <div class="meta">
+            <div><strong>${escapeHtml(t("reportProject"))}:</strong> MatFinder AI</div>
+            <div><strong>${escapeHtml(t("reportDate"))}:</strong> ${escapeHtml(reportDate)}</div>
+          </div>
+        </header>
+
+        <section>
+          <h2>${escapeHtml(t("reportRequirementText"))}</h2>
+          <div class="requirement">
+            <p>${escapeHtml(state.recommendationQuery || elements.requirementInput.value || t("notSpecified"))}</p>
+            <strong>${escapeHtml(t("reportDetectedRequirements"))}</strong>
+            <div class="chips">${detectedRequirements
+              .split(state.language === "zh" ? "、" : ", ")
+              .filter(Boolean)
+              .map((requirement) => `<span class="chip">${escapeHtml(requirement)}</span>`)
+              .join("")}</div>
+          </div>
+        </section>
+
+        <section>
+          <h2>${escapeHtml(t("reportTopMaterials"))}</h2>
+          ${state.recommendations.slice(0, 5).map((candidate, index) => renderReportMaterial(candidate, index)).join("")}
+        </section>
+      </body>
+    </html>`;
+}
+
+function renderReportMaterial(candidate, index) {
+  const item = candidate.material;
+  const reasons = candidate.reasons?.length ? candidate.reasons.map(localizeRecommendationReason) : [t("notSpecified")];
+  const warnings = meaningfulWarnings(candidate)
+    .filter((warning) => warning !== "no major unmatched requirement warnings")
+    .map(localizeRecommendationReason);
+  const limitations = [...new Set([...(warnings.length ? warnings : [t("reportNoWarnings")]), ...materialDisadvantageList(item).slice(0, 3)])];
+  const alternatives = rankSimilarMaterials(item, 3);
+
+  return `
+    <article class="material">
+      <div class="material-head">
+        <div>
+          <h3>#${index + 1} ${escapeHtml(materialName(item))} (${escapeHtml(item.abbr)})</h3>
+          <p class="muted">${escapeHtml(materialCategory(item))} · ${escapeHtml(materialSummary(item))}</p>
+        </div>
+        <div class="score">${escapeHtml(t("matchScore"))}<strong>${escapeHtml(candidate.score)}</strong></div>
+      </div>
+      <div class="grid">
+        <div>
+          <h3>${escapeHtml(t("scoringReasons"))}</h3>
+          <ul>${reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}</ul>
+        </div>
+        <div>
+          <h3>${escapeHtml(t("reportWarnings"))}</h3>
+          <ul>${limitations.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>
+        </div>
+      </div>
+      <div class="alternatives">
+        <h3>${escapeHtml(t("reportAlternatives"))}</h3>
+        <ul>${
+          alternatives.length
+            ? alternatives
+                .map((entry) => `<li>${escapeHtml(materialName(entry.material))} (${escapeHtml(entry.material.abbr)}) · ${escapeHtml(t("similarityScore"))} ${escapeHtml(entry.score)}</li>`)
+                .join("")
+            : `<li>${escapeHtml(t("noAlternativeMaterials"))}</li>`
+        }</ul>
       </div>
     </article>
   `;
