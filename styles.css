@@ -702,6 +702,31 @@ output {
   gap: 12px;
 }
 
+.materials-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.materials-pagination span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.materials-pagination button,
+.materials-pagination select {
+  min-height: 36px;
+  margin-top: 0;
+}
+
+.materials-pagination button {
+  min-width: 38px;
+  padding: 6px 10px;
+}
+
 .material-card {
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -1289,6 +1314,18 @@ dialog::backdrop {
 
   .materials-grid {
     grid-template-columns: 1fr;
+  }
+
+  .materials-pagination {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .materials-pagination span,
+  .materials-pagination select {
+    flex: 1 1 100%;
+    width: 100%;
+    text-align: center;
   }
 
   .material-card {

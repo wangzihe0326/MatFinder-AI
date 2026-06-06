@@ -514,6 +514,12 @@ const state = {
   minStrength: 5,
   recyclableOnly: false,
   sort: "match",
+  materialsPage: 1,
+  materialsPageSize: 48,
+  materialsGridRendered: false,
+  filteredMaterialsCache: { key: "", items: [] },
+  recommendationCache: new Map(),
+  compareTableCache: new Map(),
   selected: new Set(),
   recommendations: [],
   recommendationCriteria: [],
@@ -559,6 +565,7 @@ const elements = {
   resultTitle: document.querySelector("#resultTitle"),
   activeFilters: document.querySelector("#activeFilters"),
   materialsGrid: document.querySelector("#materialsGrid"),
+  materialsPagination: document.querySelector("#materialsPagination"),
   emptyState: document.querySelector("#emptyState"),
   comparePanel: document.querySelector("#comparePanel"),
   compareTableWrap: document.querySelector("#compareTableWrap"),
@@ -752,7 +759,6 @@ async function init() {
   setRoute(routeFromPath(window.location.pathname), { replace: true });
   renderRecommendations();
   render();
-  renderCopilotMessages();
 }
 
 function routeFromPath(pathname) {
@@ -786,6 +792,16 @@ function setRoute(route, options = {}) {
     window.history.pushState({ route: state.route }, "", path);
   }
   renderRoute();
+  if (state.route === "compare") {
+    renderCompare();
+    renderAiComparePanel();
+  }
+  if (state.route === "copilot") {
+    renderCopilotRoute();
+  }
+  if (!options.replace && ["home", "materials", "compare"].includes(state.route) && materials.length && !state.materialsGridRendered) {
+    render();
+  }
 }
 
 function renderRoute() {
@@ -816,11 +832,14 @@ function renderRoute() {
 }
 
 async function loadMaterials() {
+  elements.materialsGrid.innerHTML = `<p class="recommendation-empty">${t("generating")}</p>`;
+  elements.emptyState.hidden = true;
   const response = await fetch(apiUrl("/api/materials"));
   if (!response.ok) {
     throw new Error("Failed to load materials from SQLite.");
   }
   materials = await response.json();
+  state.filteredMaterialsCache = { key: "", items: [] };
 }
 
 function apiUrl(path) {
@@ -838,6 +857,16 @@ function bindEvents() {
   window.addEventListener("popstate", () => {
     state.route = routeFromPath(window.location.pathname);
     renderRoute();
+    if (state.route === "compare") {
+      renderCompare();
+      renderAiComparePanel();
+    }
+    if (state.route === "copilot") {
+      renderCopilotRoute();
+    }
+    if (["home", "materials", "compare"].includes(state.route) && materials.length && !state.materialsGridRendered) {
+      render();
+    }
   });
 
   elements.filterToggleButton.addEventListener("click", () => {
@@ -853,7 +882,9 @@ function bindEvents() {
     renderRecommendations();
     render();
     rerenderActiveAnalysis();
-    renderCopilotMessages();
+    if (state.route === "copilot") {
+      renderCopilotMessages();
+    }
   });
 
   elements.recommendButton.addEventListener("click", runRecommendation);
@@ -868,6 +899,7 @@ function bindEvents() {
     state.recommendations = [];
     state.recommendationCriteria = [];
     state.recommendationQuery = "";
+    resetMaterialsPage();
     renderRecommendations();
     render();
   });
@@ -896,36 +928,43 @@ function bindEvents() {
 
   elements.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value.trim().toLowerCase();
+    resetMaterialsPage();
     render();
   });
 
   elements.categoryFilter.addEventListener("change", (event) => {
     state.category = event.target.value;
+    resetMaterialsPage();
     render();
   });
 
   elements.propertyFilter.addEventListener("change", (event) => {
     state.property = event.target.value;
+    resetMaterialsPage();
     render();
   });
 
   elements.tempRange.addEventListener("input", (event) => {
     state.minTemp = Number(event.target.value);
+    resetMaterialsPage();
     render();
   });
 
   elements.strengthRange.addEventListener("input", (event) => {
     state.minStrength = Number(event.target.value);
+    resetMaterialsPage();
     render();
   });
 
   elements.recyclableOnly.addEventListener("change", (event) => {
     state.recyclableOnly = event.target.checked;
+    resetMaterialsPage();
     render();
   });
 
   elements.sortSelect.addEventListener("change", (event) => {
     state.sort = event.target.value;
+    resetMaterialsPage();
     render();
   });
 
@@ -937,6 +976,7 @@ function bindEvents() {
     state.minStrength = 5;
     state.recyclableOnly = false;
     state.sort = "match";
+    resetMaterialsPage();
     syncControls();
     render();
   });
@@ -958,9 +998,15 @@ function bindEvents() {
 
 async function runRecommendation() {
   state.recommendationQuery = elements.requirementInput.value.trim();
-  const result = await recommendationService.recommend(elements.requirementInput.value, { limit: 5 });
+  const cacheKey = `${state.recommendationQuery}::${materials.length}`;
+  let result = state.recommendationCache.get(cacheKey);
+  if (!result) {
+    result = await recommendationService.recommend(elements.requirementInput.value, { limit: 5 });
+    state.recommendationCache.set(cacheKey, result);
+  }
   state.recommendations = result.recommendations;
   state.recommendationCriteria = result.criteria;
+  resetMaterialsPage();
   renderRecommendations(result);
   render();
 }
@@ -1375,6 +1421,11 @@ function updateCopilotContext() {
     : t("copilotContextEmpty");
 }
 
+function renderCopilotRoute() {
+  updateCopilotContext();
+  renderCopilotMessages();
+}
+
 function detectCopilotIntent(prompt) {
   const text = String(prompt || "").toLowerCase();
   if (/why|recommend|recommended|推荐|为什么|为何|原因/.test(text)) return "why";
@@ -1560,7 +1611,23 @@ function renderRecommendationDetail(item) {
 }
 
 function getFilteredMaterials() {
-  return materials
+  const cacheKey = JSON.stringify({
+    language: state.language,
+    query: state.query,
+    category: state.category,
+    property: state.property,
+    minTemp: state.minTemp,
+    minStrength: state.minStrength,
+    recyclableOnly: state.recyclableOnly,
+    sort: state.sort,
+    recommendations: state.recommendations.map((candidate) => `${candidate.material.id}:${candidate.score}`)
+  });
+
+  if (state.filteredMaterialsCache.key === cacheKey) {
+    return state.filteredMaterialsCache.items;
+  }
+
+  const items = materials
     .filter((item) => !state.query || getSearchText(item).includes(state.query))
     .filter((item) => state.category === "all" || item.category === state.category)
     .filter((item) => state.property === "all" || propertyPredicates[state.property](item))
@@ -1568,6 +1635,9 @@ function getFilteredMaterials() {
     .filter((item) => item.tensile >= state.minStrength)
     .filter((item) => !state.recyclableOnly || item.recyclable)
     .sort(sortMaterials);
+
+  state.filteredMaterialsCache = { key: cacheKey, items };
+  return items;
 }
 
 function sortMaterials(a, b) {
@@ -1580,18 +1650,33 @@ function sortMaterials(a, b) {
 }
 
 function render() {
-  const filtered = getFilteredMaterials();
+  const needsMaterialGrid = ["home", "materials", "compare"].includes(state.route);
+  const filtered = needsMaterialGrid ? getFilteredMaterials() : state.filteredMaterialsCache.items;
   elements.tempOutput.textContent = `>= ${state.minTemp} deg C`;
   elements.strengthOutput.textContent = `>= ${state.minStrength} MPa`;
   elements.selectedCount.textContent = state.selected.size;
-  elements.resultTitle.textContent = `${filtered.length} ${t("matchingMaterials")}`;
-  elements.emptyState.hidden = filtered.length > 0;
 
-  renderChips();
-  renderCards(filtered);
-  renderCompare();
-  renderAiComparePanel();
-  updateCopilotContext();
+  if (needsMaterialGrid) {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / state.materialsPageSize));
+    if (state.materialsPage > totalPages) state.materialsPage = totalPages;
+    const pageStart = (state.materialsPage - 1) * state.materialsPageSize;
+    const pageItems = filtered.slice(pageStart, pageStart + state.materialsPageSize);
+
+    elements.resultTitle.textContent = `${filtered.length} ${t("matchingMaterials")}`;
+    elements.emptyState.hidden = filtered.length > 0;
+
+    renderChips();
+    renderCards(pageItems);
+    renderMaterialsPagination(filtered.length, totalPages);
+  }
+
+  if (state.route === "compare") {
+    renderCompare();
+    renderAiComparePanel();
+  }
+  if (state.route === "copilot") {
+    updateCopilotContext();
+  }
   renderRoute();
 }
 
@@ -1645,20 +1730,37 @@ function renderRecommendationCard(candidate, index) {
   `;
 }
 
-function exportMaterialSelectionReport() {
+function exportMaterialSelectionReport(event) {
   if (!state.recommendations.length) return;
+  const button = event?.currentTarget;
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("generating");
+  }
 
-  const reportWindow = window.open("", "_blank");
-  if (!reportWindow) return;
+  window.setTimeout(() => {
+    const reportWindow = window.open("", "_blank");
+    if (!reportWindow) {
+      if (button) {
+        button.disabled = false;
+        button.textContent = t("exportReport");
+      }
+      return;
+    }
 
-  const reportHtml = buildMaterialSelectionReportHtml();
-  reportWindow.document.open();
-  reportWindow.document.write(reportHtml);
-  reportWindow.document.close();
-  reportWindow.focus();
-  reportWindow.setTimeout(() => {
-    reportWindow.print();
-  }, 250);
+    const reportHtml = buildMaterialSelectionReportHtml();
+    reportWindow.document.open();
+    reportWindow.document.write(reportHtml);
+    reportWindow.document.close();
+    reportWindow.focus();
+    reportWindow.setTimeout(() => {
+      reportWindow.print();
+      if (button) {
+        button.disabled = false;
+        button.textContent = t("exportReport");
+      }
+    }, 250);
+  }, 0);
 }
 
 function buildMaterialSelectionReportHtml() {
@@ -1837,6 +1939,58 @@ function renderCards(items) {
   });
 
   elements.materialsGrid.replaceChildren(fragment);
+  state.materialsGridRendered = true;
+}
+
+function resetMaterialsPage() {
+  state.materialsPage = 1;
+}
+
+function renderMaterialsPagination(totalItems, totalPages) {
+  if (!elements.materialsPagination) return;
+  if (!totalItems || totalPages <= 1) {
+    elements.materialsPagination.replaceChildren();
+    return;
+  }
+
+  const label = document.createElement("span");
+  const pageStart = (state.materialsPage - 1) * state.materialsPageSize + 1;
+  const pageEnd = Math.min(totalItems, state.materialsPage * state.materialsPageSize);
+  label.textContent = `${pageStart}-${pageEnd} / ${totalItems}`;
+
+  const previous = document.createElement("button");
+  previous.type = "button";
+  previous.textContent = "‹";
+  previous.disabled = state.materialsPage <= 1;
+  previous.addEventListener("click", () => {
+    state.materialsPage = Math.max(1, state.materialsPage - 1);
+    render();
+  });
+
+  const next = document.createElement("button");
+  next.type = "button";
+  next.textContent = "›";
+  next.disabled = state.materialsPage >= totalPages;
+  next.addEventListener("click", () => {
+    state.materialsPage = Math.min(totalPages, state.materialsPage + 1);
+    render();
+  });
+
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", "Material page");
+  for (let page = 1; page <= totalPages; page += 1) {
+    const option = document.createElement("option");
+    option.value = String(page);
+    option.textContent = `${page} / ${totalPages}`;
+    option.selected = page === state.materialsPage;
+    select.append(option);
+  }
+  select.addEventListener("change", (event) => {
+    state.materialsPage = Number(event.target.value);
+    render();
+  });
+
+  elements.materialsPagination.replaceChildren(label, previous, select, next);
 }
 
 function toggleCompare(id) {
@@ -1858,6 +2012,12 @@ function renderCompare() {
 
   if (!selectedItems.length) {
     elements.compareTableWrap.replaceChildren();
+    return;
+  }
+
+  const cacheKey = `${state.language}:${selectedItems.map((item) => item.id).join("|")}`;
+  if (state.compareTableCache.has(cacheKey)) {
+    elements.compareTableWrap.innerHTML = state.compareTableCache.get(cacheKey);
     return;
   }
 
@@ -1897,6 +2057,7 @@ function renderCompare() {
   `;
 
   elements.compareTableWrap.replaceChildren(table);
+  state.compareTableCache.set(cacheKey, table.outerHTML);
 }
 
 function getSelectedMaterials() {
@@ -2133,7 +2294,9 @@ function showDetail(id) {
 async function selectMaterialForAnalysis(item) {
   state.selectedMaterialId = item.id;
   elements.analysisTitle.textContent = `${materialName(item)} (${item.abbr})`;
-  updateCopilotContext();
+  if (state.route === "copilot") {
+    updateCopilotContext();
+  }
 
   const cacheKey = getLanguageCacheKey(item.id);
   if (state.analysisCache.has(cacheKey)) {

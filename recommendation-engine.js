@@ -4,6 +4,8 @@
     if (value === null || value === undefined || Number.isNaN(Number(value))) return 0;
     return clamp((Number(value) - min) / (max - min));
   };
+  const requirementParseCache = new Map();
+  const scoreCache = new Map();
 
   const zh = {
     lightweight: ["\u8f7b\u91cf", "\u4f4e\u5bc6\u5ea6", "\u8f7b\u8d28", "\u51cf\u91cd"],
@@ -397,6 +399,7 @@
 
   function parseRequirement(description) {
     const query = String(description || "").trim();
+    if (requirementParseCache.has(query)) return requirementParseCache.get(query);
     const text = query.toLowerCase();
     const matches = new Map();
     const priority = [
@@ -434,12 +437,14 @@
       return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
     });
     const criteria = parsed.map((entry) => entry.criterion);
-    return {
+    const parsedRequirement = {
       query,
       requirements: criteria.map((criterion) => criterion.label),
       criteria,
       sources: parsed.map((entry) => ({ id: entry.criterion.id, label: entry.criterion.label, source: entry.source }))
     };
+    requirementParseCache.set(query, parsedRequirement);
+    return parsedRequirement;
   }
 
   function extractCriteria(description) {
@@ -455,19 +460,23 @@
   }
 
   function scoreMaterial(description, item) {
+    const cacheKey = `${description}::${item.id}`;
+    if (scoreCache.has(cacheKey)) return scoreCache.get(cacheKey);
     const parsedRequirement = parseRequirement(description);
     const criteria = parsedRequirement.criteria;
     const similarity = textSimilarity(`${description} ${parsedRequirement.requirements.join(" ")}`, item);
 
     if (!criteria.length) {
       const fallbackScore = Math.round(clamp(0.35 + similarity * 0.65) * 100);
-      return {
+      const fallbackResult = {
         material: item,
         score: fallbackScore,
         reasons: similarity > 0 ? ["closest local text match"] : ["balanced fallback from local dataset"],
         warnings: ["no recognized requirement terms; ranked by local text similarity"],
         matchedCriteria: []
       };
+      scoreCache.set(cacheKey, fallbackResult);
+      return fallbackResult;
     }
 
     let weightedTotal = 0;
@@ -514,13 +523,15 @@
     if (!reasons.length) reasons.push("partial match against stated requirements");
     if (!warnings.length) warnings.push("no major unmatched requirement warnings");
 
-    return {
+    const result = {
       material: item,
       score: finalScore,
       reasons,
       warnings,
       matchedCriteria: parsedRequirement.requirements
     };
+    scoreCache.set(cacheKey, result);
+    return result;
   }
 
   function enforceUniqueDescendingScores(recommendations) {
