@@ -141,6 +141,24 @@ const i18n = {
     recommendButton: "Recommend",
     clearButton: "Clear",
     analysisPanelLabel: "AI Material Analysis",
+    copilotLabel: "MatFinder AI Copilot",
+    copilotTitle: "Ask about the selected material",
+    copilotContextEmpty: "No material selected",
+    copilotSend: "Ask",
+    copilotPlaceholder: "Ask about recommendation reasons, advantages, limitations, or alternatives",
+    copilotEmpty: "Run a recommendation or open a material detail, then ask the Copilot about that material.",
+    copilotNoContext: "Run a recommendation or open a material detail first so I can answer from a real material record.",
+    copilotDefaultQuestion: "How should I evaluate this material?",
+    copilotContextPrefix: "Using",
+    copilotWhyTitle: "Recommendation rationale",
+    copilotAdvantagesTitle: "Advantages",
+    copilotLimitationsTitle: "Limitations",
+    copilotAlternativesTitle: "Alternatives",
+    copilotOverviewTitle: "Material snapshot",
+    copilotScore: "Score",
+    copilotMatchedRequirements: "Matched requirements",
+    copilotNoRecommendation: "This material is not in the current recommendation result, so I am using the material profile only.",
+    copilotSourceNote: "Answer based on local material data and the current scoring result.",
     selectMaterial: "Select a material",
     gptExplanation: "GPT explanation",
     analysisEmpty: "Choose a material Details button to generate an OpenAI-backed explanation from the local dataset.",
@@ -289,7 +307,25 @@ const zhDetailLabels = {
   propertyFlexibility: "\u67d4\u97e7\u6027",
   propertyElectricalInsulation: "\u7535\u7edd\u7f18",
   propertyWaterproof: "\u9632\u6c34 / \u4f4e\u5438\u6c34",
-  propertyFlameRetardant: "\u963b\u71c3"
+  propertyFlameRetardant: "\u963b\u71c3",
+  copilotLabel: "MatFinder AI \u52a9\u624b",
+  copilotTitle: "\u8be2\u95ee\u5f53\u524d\u6750\u6599",
+  copilotContextEmpty: "\u5c1a\u672a\u9009\u62e9\u6750\u6599",
+  copilotSend: "\u63d0\u95ee",
+  copilotPlaceholder: "\u8be2\u95ee\u63a8\u8350\u539f\u56e0\u3001\u4f18\u52bf\u3001\u9650\u5236\u6216\u66ff\u4ee3\u6750\u6599",
+  copilotEmpty: "\u5148\u8fd0\u884c\u63a8\u8350\u6216\u6253\u5f00\u6750\u6599\u8be6\u60c5\uff0c\u7136\u540e\u5411 Copilot \u8be2\u95ee\u8be5\u6750\u6599\u3002",
+  copilotNoContext: "\u8bf7\u5148\u8fd0\u884c\u63a8\u8350\u6216\u6253\u5f00\u6750\u6599\u8be6\u60c5\uff0c\u6211\u624d\u80fd\u57fa\u4e8e\u771f\u5b9e\u6750\u6599\u6570\u636e\u56de\u7b54\u3002",
+  copilotDefaultQuestion: "\u5e94\u8be5\u5982\u4f55\u8bc4\u4f30\u8fd9\u79cd\u6750\u6599\uff1f",
+  copilotContextPrefix: "\u5f53\u524d\u6750\u6599",
+  copilotWhyTitle: "\u63a8\u8350\u7406\u7531",
+  copilotAdvantagesTitle: "\u4f18\u52bf",
+  copilotLimitationsTitle: "\u9650\u5236",
+  copilotAlternativesTitle: "\u66ff\u4ee3\u6750\u6599",
+  copilotOverviewTitle: "\u6750\u6599\u5feb\u7167",
+  copilotScore: "\u5206\u6570",
+  copilotMatchedRequirements: "\u5339\u914d\u9700\u6c42",
+  copilotNoRecommendation: "\u8be5\u6750\u6599\u4e0d\u5728\u5f53\u524d\u63a8\u8350\u7ed3\u679c\u4e2d\uff0c\u56e0\u6b64\u6211\u53ea\u4f7f\u7528\u6750\u6599\u6863\u6848\u56de\u7b54\u3002",
+  copilotSourceNote: "\u56de\u7b54\u57fa\u4e8e\u672c\u5730\u6750\u6599\u6570\u636e\u548c\u5f53\u524d\u8bc4\u5206\u7ed3\u679c\u3002"
 };
 
 const zhNames = {
@@ -335,6 +371,11 @@ const zhTerms = {
   Metals: "金属",
   Ceramics: "陶瓷",
   Rubber: "橡胶",
+  Foams: "泡沫材料",
+  Adhesives: "胶粘剂",
+  Sealants: "密封剂",
+  Coatings: "涂层",
+  "Specialty materials": "特种材料",
   "chemical resistant": "耐化学",
   "low moisture": "低吸水",
   lightweight: "轻量",
@@ -382,9 +423,12 @@ const zhTerms = {
   flexibility: "柔韧性",
   "wear resistance": "耐磨",
   "weather resistance": "耐候",
+  "UV resistant": "抗紫外",
   "flame resistance": "阻燃",
   "non-solid or soft form": "非固体或软质形态",
   "waterproof or sealing": "防水或密封",
+  "waterproof or low moisture": "防水或低吸水",
+  sealing: "密封",
   sustainability: "可持续",
   "medical suitability": "医疗适配",
   "food contact": "食品接触"
@@ -413,6 +457,7 @@ const state = {
   recommendations: [],
   recommendationCriteria: [],
   selectedMaterialId: null,
+  copilotMessages: [],
   analysisCache: new Map(),
   aiCompareCache: new Map()
 };
@@ -428,6 +473,11 @@ const elements = {
   analysisTitle: document.querySelector("#analysisTitle"),
   analysisStatus: document.querySelector("#analysisStatus"),
   analysisContent: document.querySelector("#analysisContent"),
+  copilotContext: document.querySelector("#copilotContext"),
+  copilotMessages: document.querySelector("#copilotMessages"),
+  copilotForm: document.querySelector("#copilotForm"),
+  copilotInput: document.querySelector("#copilotInput"),
+  copilotPromptButtons: document.querySelectorAll("[data-copilot-prompt-en]"),
   exampleButtons: document.querySelectorAll("[data-example]"),
   searchInput: document.querySelector("#searchInput"),
   filterToggleButton: document.querySelector("#filterToggleButton"),
@@ -532,6 +582,7 @@ function localizeRecommendationReasonFor(reason, language) {
     .replace(/^flexible behavior with (.+) elongation$/, "柔性表现突出，断裂伸长率 $1")
     .replace("wear or low-friction use profile", "具有耐磨或低摩擦应用特征")
     .replace("weathering resistance is represented in the dataset", "本地数据集中体现了耐候性")
+    .replace("UV or sunlight resistance is represented in the dataset", "本地数据集中体现了抗紫外或耐日照特征")
     .replace("flame-retardant profile", "具有阻燃特征")
     .replace("recyclable material family", "属于可回收材料体系")
     .replace("bio-based or specialty sustainability fit", "具有生物基或可持续适配特征")
@@ -542,9 +593,14 @@ function localizeRecommendationReasonFor(reason, language) {
     .replace("soft or non-rigid behavior is indicated by category, tags, or applications", "类别、标签或应用体现出软质或非刚性特征")
     .replace(/^soft or non-rigid fit with (.+) elongation$/, "软质或非刚性适配，断裂伸长率 $1")
     .replace("waterproof or sealing fit is indicated by tags, uses, or description", "标签、用途或描述体现出防水或密封适配")
+    .replace("waterproof fit is indicated by tags, uses, or description", "标签、用途或描述体现出防水适配")
     .replace(/^low water absorption \((.+)\) supports waterproof or sealing use$/, "低吸水率（$1）支持防水或密封用途")
+    .replace(/^low water absorption \((.+)\) supports waterproof use$/, "低吸水率（$1）支持防水用途")
+    .replace("sealing fit is indicated by elastomer, gasket, or seal applications", "弹性体、垫圈或密封应用体现出密封适配")
     .replace("non-solid or soft-form requirement is weakly supported by the local fields", "本地字段对非固体或软质形态需求支持较弱")
     .replace("waterproof or sealing requirement is weakly supported by the local fields", "本地字段对防水或密封需求支持较弱")
+    .replace("waterproof requirement is weakly supported by the local fields", "本地字段对防水需求支持较弱")
+    .replace("sealing requirement is weakly supported by the local fields", "本地字段对密封需求支持较弱")
     .replace("no recognized requirement terms; ranked by local text similarity", "未识别到明确需求词，按本地文本相似度排序")
     .replace("no major unmatched requirement warnings", "未发现明显未匹配需求警告")
     .replace("requirement is weakly supported by the local fields", "需求在本地字段中支持较弱")
@@ -558,6 +614,7 @@ function applyLanguage() {
 
   elements.requirementInput.placeholder = t("requirementPlaceholder");
   elements.searchInput.placeholder = t("searchPlaceholder");
+  elements.copilotInput.placeholder = t("copilotPlaceholder");
   elements.languageSelect.value = state.language;
   elements.emptyState.textContent = t("noMatches");
   elements.runAiCompareButton.textContent = t("compareWithAi");
@@ -578,6 +635,12 @@ function applyLanguage() {
   elements.exampleButtons.forEach((button, index) => {
     button.textContent = t("examples")[index];
   });
+
+  elements.copilotPromptButtons.forEach((button) => {
+    button.textContent = state.language === "zh" ? button.dataset.copilotPromptZh : button.dataset.copilotPromptEn;
+  });
+
+  updateCopilotContext();
 }
 
 function rerenderActiveAnalysis() {
@@ -620,6 +683,7 @@ async function init() {
   applyLanguage();
   renderRecommendations();
   render();
+  renderCopilotMessages();
 }
 
 async function loadMaterials() {
@@ -648,6 +712,7 @@ function bindEvents() {
     renderRecommendations();
     render();
     rerenderActiveAnalysis();
+    renderCopilotMessages();
   });
 
   elements.recommendButton.addEventListener("click", runRecommendation);
@@ -670,6 +735,21 @@ function bindEvents() {
       elements.requirementInput.value = state.language === "zh" ? button.dataset.exampleZh : button.dataset.exampleEn;
       runRecommendation();
     });
+  });
+
+  elements.copilotPromptButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const prompt = state.language === "zh" ? button.dataset.copilotPromptZh : button.dataset.copilotPromptEn;
+      askCopilot(prompt);
+    });
+  });
+
+  elements.copilotForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const prompt = elements.copilotInput.value.trim();
+    if (!prompt) return;
+    askCopilot(prompt);
+    elements.copilotInput.value = "";
   });
 
   elements.searchInput.addEventListener("input", (event) => {
@@ -1133,6 +1213,123 @@ function renderRankedAlternatives(item) {
   `;
 }
 
+function getCopilotContext() {
+  const selectedItem = state.selectedMaterialId ? materials.find((material) => material.id === state.selectedMaterialId) : null;
+  const recommendedItem = state.recommendations[0]?.material || null;
+  const item = selectedItem || recommendedItem;
+  if (!item) return { item: null, candidate: null };
+  return {
+    item,
+    candidate: getRecommendationForMaterial(item)
+  };
+}
+
+function updateCopilotContext() {
+  if (!elements.copilotContext) return;
+  const { item, candidate } = getCopilotContext();
+  elements.copilotContext.textContent = item
+    ? `${t("copilotContextPrefix")}: ${materialName(item)}${candidate ? ` · ${t("copilotScore")} ${candidate.score}` : ""}`
+    : t("copilotContextEmpty");
+}
+
+function detectCopilotIntent(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  if (/why|recommend|recommended|推荐|为什么|为何|原因/.test(text)) return "why";
+  if (/advantage|strength|benefit|优点|优势|好处|强项/.test(text)) return "advantages";
+  if (/limitation|weakness|risk|disadvantage|缺点|限制|风险|不足|弱点/.test(text)) return "limitations";
+  if (/alternative|similar|replace|substitute|替代|相似|备选|换/.test(text)) return "alternatives";
+  return "overview";
+}
+
+function copilotLineList(items) {
+  return items.filter(Boolean).map((item) => `- ${item}`).join("\n");
+}
+
+function formatCopilotAlternatives(item) {
+  const alternatives = rankSimilarMaterials(item, 4);
+  if (!alternatives.length) return `- ${t("noAlternativeMaterials")}`;
+  return alternatives
+    .map((entry, index) => {
+      const material = entry.material;
+      return `- #${index + 1} ${materialName(material)} (${material.abbr}) · ${t("similarityScore")} ${entry.score}: ${materialCategory(material)}, ${materialUses(material).slice(0, 2).join(state.language === "zh" ? "、" : ", ") || t("notSpecified")}`;
+    })
+    .join("\n");
+}
+
+function buildCopilotAnswer(prompt) {
+  const { item, candidate } = getCopilotContext();
+  if (!item) return t("copilotNoContext");
+
+  const intent = detectCopilotIntent(prompt);
+  const recommendationNote = candidate ? "" : `\n\n${t("copilotNoRecommendation")}`;
+  const sourceNote = `\n\n${t("copilotSourceNote")}`;
+
+  if (intent === "why") {
+    const reasons = (candidate?.reasons || []).map(localizeRecommendationReason);
+    const warnings = meaningfulWarnings(candidate).map(localizeRecommendationReason);
+    const lines = [
+      `${t("copilotWhyTitle")}: ${materialName(item)} (${item.abbr})`,
+      candidate ? `${t("copilotScore")}: ${candidate.score}/100` : null,
+      candidate?.matchedCriteria?.length ? `${t("copilotMatchedRequirements")}: ${candidate.matchedCriteria.map(localizeTerm).join(state.language === "zh" ? "、" : ", ")}` : null,
+      reasons.length ? copilotLineList(reasons) : `- ${materialSummary(item)}`,
+      warnings.length ? `${t("unmatchedWarnings")}:\n${copilotLineList(warnings)}` : null
+    ].filter(Boolean);
+    return `${lines.join("\n")}${recommendationNote}${sourceNote}`;
+  }
+
+  if (intent === "advantages") {
+    return `${t("copilotAdvantagesTitle")}: ${materialName(item)} (${item.abbr})\n${copilotLineList(materialAdvantageList(item))}${sourceNote}`;
+  }
+
+  if (intent === "limitations") {
+    const limitations = [...meaningfulWarnings(candidate).map(localizeRecommendationReason), ...materialDisadvantageList(item)];
+    return `${t("copilotLimitationsTitle")}: ${materialName(item)} (${item.abbr})\n${copilotLineList([...new Set(limitations)])}${recommendationNote}${sourceNote}`;
+  }
+
+  if (intent === "alternatives") {
+    return `${t("copilotAlternativesTitle")}: ${materialName(item)} (${item.abbr})\n${formatCopilotAlternatives(item)}${sourceNote}`;
+  }
+
+  const overview = [
+    `${t("copilotOverviewTitle")}: ${materialName(item)} (${item.abbr})`,
+    `${t("category")}: ${materialCategory(item)}`,
+    candidate ? `${t("copilotScore")}: ${candidate.score}/100` : null,
+    `${t("continuousUse")}: ${formatValue(item.maxTemp, " deg C")}`,
+    `${t("density")}: ${formatValue(item.density, " g/cm3")}`,
+    `${t("typicalUses")}: ${materialUses(item).slice(0, 4).join(state.language === "zh" ? "、" : ", ") || t("notSpecified")}`,
+    materialSummary(item)
+  ].filter(Boolean);
+  return `${overview.join("\n")}${recommendationNote}${sourceNote}`;
+}
+
+function askCopilot(prompt) {
+  const question = prompt || t("copilotDefaultQuestion");
+  state.copilotMessages.push({ role: "user", text: question });
+  state.copilotMessages.push({ role: "assistant", text: buildCopilotAnswer(question) });
+  renderCopilotMessages();
+}
+
+function renderCopilotMessages() {
+  if (!elements.copilotMessages) return;
+
+  if (!state.copilotMessages.length) {
+    elements.copilotMessages.innerHTML = `<p class="recommendation-empty">${t("copilotEmpty")}</p>`;
+    return;
+  }
+
+  elements.copilotMessages.innerHTML = state.copilotMessages
+    .slice(-8)
+    .map(
+      (message) => `
+        <article class="copilot-message ${message.role === "user" ? "is-user" : "is-assistant"}">
+          ${escapeHtml(message.text).replace(/\n/g, "<br>")}
+        </article>
+      `
+    )
+    .join("");
+  elements.copilotMessages.scrollTop = elements.copilotMessages.scrollHeight;
+}
+
 function renderScoringList(items) {
   const list = items.length ? items : [t("notSpecified")];
   return renderProfileList(list);
@@ -1245,6 +1442,7 @@ function render() {
   renderCards(filtered);
   renderCompare();
   renderAiComparePanel();
+  updateCopilotContext();
 }
 
 function renderRecommendations(result = null) {
@@ -1649,6 +1847,7 @@ function showDetail(id) {
 async function selectMaterialForAnalysis(item) {
   state.selectedMaterialId = item.id;
   elements.analysisTitle.textContent = `${materialName(item)} (${item.abbr})`;
+  updateCopilotContext();
 
   const cacheKey = getLanguageCacheKey(item.id);
   if (state.analysisCache.has(cacheKey)) {

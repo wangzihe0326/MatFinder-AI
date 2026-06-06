@@ -9,7 +9,7 @@ def main():
         raise SystemExit("Usage: write-materials-sqlite.py <database-path>")
 
     db_path = Path(sys.argv[1])
-    materials = json.load(sys.stdin)
+    materials = clean_value(json.load(sys.stdin))
 
     with sqlite3.connect(db_path) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
@@ -168,6 +168,16 @@ def default_sources(material_id):
             "notes": f"Original MatFinder seed record for {material_id}; grade-specific values should be verified before engineering use.",
         }
     ]
+
+
+def clean_value(value):
+    if isinstance(value, str):
+        return value.encode("utf-8", "replace").decode("utf-8")
+    if isinstance(value, list):
+        return [clean_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: clean_value(item) for key, item in value.items()}
+    return value
 
 
 def material_id(item):

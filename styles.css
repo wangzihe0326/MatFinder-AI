@@ -362,6 +362,73 @@ button:hover {
   padding-left: 18px;
 }
 
+.copilot-panel {
+  max-width: 1440px;
+  margin: 0 auto 18px;
+  padding: 16px;
+  border: 1px solid rgba(216, 222, 228, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow);
+}
+
+.copilot-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.copilot-suggestions button {
+  min-height: 34px;
+  border-color: rgba(49, 95, 140, 0.28);
+  background: #eef5fb;
+  color: #254b70;
+  font-size: 0.86rem;
+}
+
+.copilot-messages {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  -webkit-overflow-scrolling: touch;
+}
+
+.copilot-message {
+  width: min(760px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.copilot-message.is-user {
+  justify-self: end;
+  width: fit-content;
+  max-width: min(620px, 92%);
+  border-color: rgba(15, 118, 110, 0.22);
+  background: #e8f3f1;
+  color: var(--teal-dark);
+  font-weight: 700;
+}
+
+.copilot-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.copilot-form input {
+  margin-top: 0;
+}
+
 .rank {
   display: inline-grid;
   place-items: center;
@@ -933,6 +1000,7 @@ dialog::backdrop {
   .topbar,
   .ai-panel,
   .analysis-panel,
+  .copilot-panel,
   .workspace,
   .compare-panel {
     padding: 14px;
@@ -946,6 +1014,7 @@ dialog::backdrop {
 @media (max-width: 1024px) {
   .ai-panel,
   .analysis-panel,
+  .copilot-panel,
   .layout,
   .compare-panel,
   .topbar {
@@ -1071,6 +1140,7 @@ dialog::backdrop {
 
   .top-actions,
   .example-strip,
+  .copilot-suggestions,
   .toolbar-controls,
   .ai-actions,
   .card-actions {
@@ -1108,6 +1178,10 @@ dialog::backdrop {
 
   .toolbar-controls select {
     width: 100%;
+  }
+
+  .copilot-form {
+    grid-template-columns: 1fr;
   }
 
   .materials-grid {
@@ -1163,6 +1237,7 @@ dialog::backdrop {
   .topbar,
   .ai-panel,
   .analysis-panel,
+  .copilot-panel,
   .workspace,
   .compare-panel {
     padding: 12px;
@@ -1192,8 +1267,10 @@ dialog::backdrop {
   }
 
   .example-strip button,
+  .copilot-suggestions button,
   .ai-actions button,
   .card-actions button,
+  .copilot-form button,
   .compare-header button,
   .toolbar-controls select {
     width: 100%;

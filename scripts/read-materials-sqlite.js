@@ -4,48 +4,58 @@ function readMaterials(databasePath) {
   const database = new SQLiteDatabase(fs.readFileSync(databasePath));
   const tables = database.readTableMap();
 
-  const materials = database.readTable(tables.materials).map((row) => ({
-    id: row.material_id ?? row.id,
-    material_id: row.material_id ?? row.id,
-    name: row.name,
-    abbr: row.abbreviation ?? row.abbr,
-    abbreviation: row.abbreviation ?? row.abbr,
-    category: row.category,
-    family: row.family,
-    manufacturer: row.manufacturer,
-    trade_name: row.trade_name,
-    density: row.density,
-    tensile_strength: row.tensile_strength ?? row.tensile,
-    flexural_strength: row.flexural_strength,
-    impact_strength: row.impact_strength,
-    hardness: row.hardness,
-    tg: row.glass_transition_temperature ?? row.tg,
-    glass_transition_temperature: row.glass_transition_temperature ?? row.tg,
-    tm: row.melting_temperature ?? row.tm,
-    melting_temperature: row.melting_temperature ?? row.tm,
-    maxTemp: row.continuous_use_temperature ?? row.maxTemp,
-    continuous_use_temperature: row.continuous_use_temperature ?? row.maxTemp,
-    tensile: row.tensile_strength ?? row.tensile,
-    elongation: row.elongation,
-    thermal_conductivity: row.thermal_conductivity,
-    dielectric: row.dielectric_constant ?? row.dielectric,
-    dielectric_constant: row.dielectric_constant ?? row.dielectric,
-    chemical_resistance: row.chemical_resistance,
-    water_absorption: row.water_absorption,
-    flammability: row.flammability,
-    recyclability: row.recyclability ?? (row.recyclable ? "recyclable" : "not typically recyclable"),
-    recyclable: row.recyclable !== undefined && row.recyclable !== null ? Boolean(row.recyclable) : isRecyclable(row.recyclability),
-    cost_level: row.cost_level,
-    processing_methods: parseJsonList(row.processing_methods),
-    typical_applications: parseJsonList(row.typical_applications),
-    advantages: parseJsonList(row.advantages),
-    disadvantages: parseJsonList(row.disadvantages),
-    tags: [],
-    uses: [],
-    sources: [],
-    summary: row.summary,
-    notes: row.notes
-  }));
+  const materials = database.readTable(tables.materials).map((row) => {
+    const tags = [];
+    const uses = [];
+    const material = {
+      id: row.material_id ?? row.id,
+      material_id: row.material_id ?? row.id,
+      name: row.name,
+      abbr: row.abbreviation ?? row.abbr,
+      abbreviation: row.abbreviation ?? row.abbr,
+      category: row.category,
+      family: row.family,
+      manufacturer: row.manufacturer,
+      trade_name: row.trade_name,
+      density: row.density,
+      tensile_strength: row.tensile_strength ?? row.tensile,
+      flexural_strength: row.flexural_strength,
+      impact_strength: row.impact_strength,
+      hardness: row.hardness,
+      tg: row.glass_transition_temperature ?? row.tg,
+      glass_transition_temperature: row.glass_transition_temperature ?? row.tg,
+      tm: row.melting_temperature ?? row.tm,
+      melting_temperature: row.melting_temperature ?? row.tm,
+      maxTemp: row.continuous_use_temperature ?? row.maxTemp,
+      max_temperature: row.continuous_use_temperature ?? row.maxTemp,
+      continuous_use_temperature: row.continuous_use_temperature ?? row.maxTemp,
+      tensile: row.tensile_strength ?? row.tensile,
+      elongation: row.elongation,
+      thermal_conductivity: row.thermal_conductivity,
+      dielectric: row.dielectric_constant ?? row.dielectric,
+      dielectric_constant: row.dielectric_constant ?? row.dielectric,
+      chemical_resistance: row.chemical_resistance,
+      water_absorption: row.water_absorption,
+      flammability: row.flammability,
+      recyclability: row.recyclability ?? (row.recyclable ? "recyclable" : "not typically recyclable"),
+      recyclable: row.recyclable !== undefined && row.recyclable !== null ? Boolean(row.recyclable) : isRecyclable(row.recyclability),
+      cost_level: row.cost_level,
+      processing_methods: parseJsonList(row.processing_methods),
+      typical_applications: parseJsonList(row.typical_applications),
+      applications: uses,
+      advantages: parseJsonList(row.advantages),
+      disadvantages: parseJsonList(row.disadvantages),
+      tags,
+      features: tags,
+      uses,
+      sources: [],
+      summary: row.summary,
+      description: row.summary,
+      notes: row.notes
+    };
+    material.state = inferState(material);
+    return material;
+  });
 
   const byId = new Map(materials.map((material) => [material.id, material]));
 
@@ -86,6 +96,17 @@ function isRecyclable(value) {
   const text = String(value || "").toLowerCase();
   if (!text || text.includes("not ") || text.includes("non-recycl")) return false;
   return text.includes("recyclable") || text.includes("recycling");
+}
+
+function inferState(material) {
+  const text = [material.category, material.family, material.name, material.summary, ...(material.tags || [])].join(" ").toLowerCase();
+  if (text.includes("adhesive") || text.includes("sealant") || text.includes("coating")) {
+    return "liquid or paste before cure, solid after cure";
+  }
+  if (text.includes("foam")) return "cellular solid";
+  if (text.includes("elastomer") || text.includes("rubber")) return "flexible solid";
+  if (text.includes("liquid")) return "liquid";
+  return "solid";
 }
 
 class SQLiteDatabase {

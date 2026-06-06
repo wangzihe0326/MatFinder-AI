@@ -15,10 +15,12 @@
     impact: ["\u6297\u51b2\u51fb", "\u51b2\u51fb", "\u97e7\u6027", "\u9632\u62a4", "\u8dcc\u843d"],
     flexible: ["\u67d4\u6027", "\u67d4\u8f6f", "\u5f39\u6027", "\u6a61\u80f6", "\u5bc6\u5c01", "\u57ab\u5708"],
     wear: ["\u8010\u78e8", "\u6469\u64e6", "\u8f74\u627f", "\u9f7f\u8f6e", "\u6ed1\u52a8"],
-    weather: ["\u8010\u5019", "\u6237\u5916", "\u7d2b\u5916", "\u81ed\u6c27", "\u9633\u5149"],
+    weather: ["\u8010\u5019", "\u6237\u5916", "\u81ed\u6c27", "\u9633\u5149"],
+    uv: ["\u7d2b\u5916", "\u6297\u7d2b\u5916", "\u8010\u7d2b\u5916", "\u9632\u7d2b\u5916", "\u9632\u6652"],
     flame: ["\u963b\u71c3", "\u9632\u706b", "\u81ea\u7184"],
     nonSolid: ["\u975e\u56fa\u4f53", "\u975e\u786c\u8d28", "\u8f6f\u8d28", "\u6db2\u6001", "\u6d41\u4f53", "\u53ef\u53d1\u6ce1"],
-    waterproof: ["\u9632\u6c34", "\u8010\u6c34", "\u4f4e\u5438\u6c34", "\u9632\u6f6e", "\u5bc6\u5c01", "\u9632\u6e17"],
+    waterproof: ["\u9632\u6c34", "\u8010\u6c34", "\u4f4e\u5438\u6c34", "\u9632\u6f6e", "\u9632\u6e17"],
+    sealing: ["\u5bc6\u5c01", "\u5bc6\u5c01\u5708", "\u5bc6\u5c01\u4ef6", "\u57ab\u5708", "\u80f6\u5708", "O\u578b\u5708"],
     sustainable: ["\u53ef\u6301\u7eed", "\u53ef\u56de\u6536", "\u751f\u7269\u57fa", "\u53ef\u5806\u80a5", "\u53ef\u518d\u751f"],
     medical: ["\u533b\u7597", "\u690d\u5165", "\u751f\u7269\u76f8\u5bb9", "\u706d\u83cc", "\u65e0\u83cc"],
     food: ["\u98df\u54c1", "\u98df\u54c1\u63a5\u89e6", "\u5305\u88c5", "\u74f6"]
@@ -43,7 +45,7 @@
     },
     {
       id: "heat",
-      label: "heat resistance",
+      label: "heat resistant",
       weight: 1.25,
       keywords: ["heat", "hot", "thermal", "temperature", "high temp", "heat-resistant", "heat resistant", ...zh.heat],
       evaluate: (item) => {
@@ -96,7 +98,7 @@
     },
     {
       id: "chemical",
-      label: "chemical resistance",
+      label: "chemical resistant",
       weight: 1.15,
       keywords: ["chemical", "solvent", "corrosion", "acid", "alkali", "fluid", "fuel", ...zh.chemical],
       evaluate: (item) => {
@@ -107,7 +109,7 @@
     },
     {
       id: "transparent",
-      label: "transparency",
+      label: "transparent",
       weight: 1,
       keywords: ["transparent", "clear", "optical", "clarity", "window", "lens", ...zh.transparent],
       evaluate: (item) => (positiveMaterialText(item).includes("transparent") || positiveMaterialText(item).includes("optical") ? 1 : 0.15),
@@ -115,7 +117,7 @@
     },
     {
       id: "impact",
-      label: "impact resistance",
+      label: "impact resistant",
       weight: 1,
       keywords: ["impact", "tough", "shock", "protective", "drop", "armor", "ballistic", ...zh.impact],
       evaluate: (item) => {
@@ -126,7 +128,7 @@
     },
     {
       id: "flexible",
-      label: "flexibility",
+      label: "flexible",
       weight: 0.95,
       keywords: ["flexible", "soft", "elastic", "rubber", "elastomer", "stretch", "seal", "gasket", ...zh.flexible],
       evaluate: (item) => {
@@ -151,14 +153,27 @@
     },
     {
       id: "weather",
-      label: "weather resistance",
+      label: "weather resistant",
       weight: 0.9,
-      keywords: ["weather", "outdoor", "uv", "ozone", "sunlight", ...zh.weather],
+      keywords: ["weather", "outdoor", "outdoor use", "outside", "exterior", "ozone", "weathering", ...zh.weather],
       evaluate: (item) => {
         const text = materialText(item);
         return text.includes("weather resistant") || text.includes("ozone resistant") || text.includes("uv resistant") ? 1 : 0.25;
       },
       reason: () => "weathering resistance is represented in the dataset"
+    },
+    {
+      id: "uv",
+      label: "UV resistant",
+      weight: 0.9,
+      keywords: ["uv", "u.v.", "ultraviolet", "sunlight", "sun exposure", "uv resistant", "uv-resistant", "uv stabilized", "uv-stabilized", ...zh.uv],
+      evaluate: (item) => {
+        const text = materialText(item);
+        if (text.includes("uv resistant") || text.includes("uv stabilized") || text.includes("weather resistant") || text.includes("outdoor")) return 1;
+        if (text.includes("sunlight") || text.includes("ozone resistant") || text.includes("fluoropolymer")) return 0.75;
+        return 0.2;
+      },
+      reason: () => "UV or sunlight resistance is represented in the dataset"
     },
     {
       id: "flame",
@@ -198,9 +213,9 @@
     },
     {
       id: "waterproof",
-      label: "waterproof or sealing",
+      label: "waterproof or low moisture",
       weight: 1.05,
-      keywords: ["waterproof", "water resistant", "moisture resistant", "low moisture", "low water absorption", "seal", "sealing", "gasket", ...zh.waterproof],
+      keywords: ["waterproof", "water resistant", "moisture resistant", "low moisture", "low water absorption", "hydrolysis resistant", ...zh.waterproof],
       evaluate: (item) => {
         const text = materialText(item);
         const waterAbsorption = item.water_absorption ?? item.waterAbsorption;
@@ -209,8 +224,6 @@
           text.includes("low moisture") ||
           text.includes("low water") ||
           text.includes("hydrolysis resistant") ||
-          text.includes("seal") ||
-          text.includes("gasket") ||
           text.includes("pipe") ||
           text.includes("tank");
 
@@ -223,10 +236,26 @@
       reason: (item) => {
         const waterAbsorption = item.water_absorption ?? item.waterAbsorption;
         return waterAbsorption === null || waterAbsorption === undefined
-          ? "waterproof or sealing fit is indicated by tags, uses, or description"
-          : `low water absorption (${waterAbsorption}%) supports waterproof or sealing use`;
+          ? "waterproof fit is indicated by tags, uses, or description"
+          : `low water absorption (${waterAbsorption}%) supports waterproof use`;
       },
-      warning: () => "waterproof or sealing requirement is weakly supported by the local fields"
+      warning: () => "waterproof requirement is weakly supported by the local fields"
+    },
+    {
+      id: "sealing",
+      label: "sealing",
+      weight: 1.1,
+      keywords: ["seal", "sealing", "sealed", "gasket", "o-ring", "o ring", "oring", "washer seal", "pack seal", ...zh.sealing],
+      evaluate: (item) => {
+        const text = materialText(item);
+        const category = String(item.category || "").toLowerCase();
+        const flexibleFit = category.includes("elastomer") || category.includes("rubber") || text.includes("flexible") || text.includes("elastomer") || text.includes("rubber");
+        const sealFit = text.includes("seal") || text.includes("gasket") || text.includes("o-ring") || text.includes("o ring") || text.includes("密封");
+        const chemicalFit = text.includes("chemical resistant") || text.includes("oil resistant") || text.includes("fuel resistant") || text.includes("耐化学") || text.includes("耐油");
+        return clamp((sealFit ? 0.55 : 0.15) + (flexibleFit ? 0.3 : 0) + (chemicalFit ? 0.15 : 0));
+      },
+      reason: () => "sealing fit is indicated by elastomer, gasket, or seal applications",
+      warning: () => "sealing requirement is weakly supported by the local fields"
     },
     {
       id: "sustainable",
@@ -320,9 +349,101 @@
     return `${criterion.label} requirement is weakly supported by the local fields`;
   }
 
+  function matchesAny(text, patterns) {
+    return patterns.some((pattern) => (pattern instanceof RegExp ? pattern.test(text) : text.includes(pattern)));
+  }
+
+  function addCriterion(matches, id, source = "inferred") {
+    const criterion = synonymGroups.find((group) => group.id === id);
+    if (!criterion || matches.has(id)) return;
+    matches.set(id, { criterion, source });
+  }
+
+  function applyRequirementInference(text, matches) {
+    const hasBattery = matchesAny(text, [/\b(ev|electric vehicle|new energy vehicle|nev)\b/, "新能源汽车", "新能源车", "电动车", "电动汽车", "电池", "battery", "battery pack", "cell pack"]);
+    const hasSeal = matchesAny(text, ["密封", "密封圈", "密封件", "胶圈", "垫圈", "seal", "sealing", "gasket", "o-ring", "o ring", "oring"]);
+    const hasOutdoor = matchesAny(text, ["户外", "室外", "露天", "外部", "outdoor", "outside", "exterior", "sunlight", "weather exposure"]);
+    const hasTransparent = matchesAny(text, ["透明", "透光", "光学", "transparent", "clear", "optical", "see-through"]);
+    const hasProtectiveCover = matchesAny(text, ["防护罩", "保护罩", "护罩", "外罩", "罩壳", "protective cover", "protective housing", "cover", "guard", "shield", "window"]);
+    const hasElectricalContext = matchesAny(text, ["电池", "电气", "电控", "电子", "连接器", "battery", "electrical", "electronics", "connector", "busbar"]);
+    const hasFluidOrChemicalContext = matchesAny(text, ["电解液", "冷却液", "燃油", "油", "酸", "碱", "化学", "electrolyte", "coolant", "fuel", "oil", "acid", "alkali", "chemical"]);
+
+    if (hasBattery && hasSeal) {
+      ["heat", "electrical", "chemical", "sealing", "flexible"].forEach((id) => addCriterion(matches, id, "battery-seal inference"));
+    } else if (hasSeal) {
+      ["sealing", "flexible"].forEach((id) => addCriterion(matches, id, "seal inference"));
+      if (hasElectricalContext) addCriterion(matches, "electrical", "seal electrical-context inference");
+      if (hasFluidOrChemicalContext) addCriterion(matches, "chemical", "seal fluid-context inference");
+    }
+
+    if (hasBattery && !hasSeal) {
+      ["heat", "electrical", "chemical"].forEach((id) => addCriterion(matches, id, "battery inference"));
+    }
+
+    if (hasOutdoor) {
+      ["weather", "uv"].forEach((id) => addCriterion(matches, id, "outdoor inference"));
+    }
+
+    if (hasTransparent) {
+      addCriterion(matches, "transparent", "transparent inference");
+    }
+
+    if (hasProtectiveCover) {
+      addCriterion(matches, "impact", "protective-cover inference");
+      if (hasTransparent) addCriterion(matches, "transparent", "transparent-cover inference");
+      if (hasOutdoor) ["weather", "uv"].forEach((id) => addCriterion(matches, id, "outdoor-cover inference"));
+    }
+  }
+
+  function parseRequirement(description) {
+    const query = String(description || "").trim();
+    const text = query.toLowerCase();
+    const matches = new Map();
+    const priority = [
+      "heat",
+      "electrical",
+      "chemical",
+      "sealing",
+      "flexible",
+      "transparent",
+      "uv",
+      "impact",
+      "weather",
+      "waterproof",
+      "lightweight",
+      "strength",
+      "wear",
+      "flame",
+      "nonSolid",
+      "sustainable",
+      "medical",
+      "food"
+    ];
+
+    synonymGroups.forEach((group) => {
+      if (group.keywords.some((keyword) => text.includes(String(keyword).toLowerCase()))) {
+        addCriterion(matches, group.id, "keyword");
+      }
+    });
+
+    applyRequirementInference(text, matches);
+
+    const parsed = [...matches.values()].sort((a, b) => {
+      const aIndex = priority.indexOf(a.criterion.id);
+      const bIndex = priority.indexOf(b.criterion.id);
+      return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+    });
+    const criteria = parsed.map((entry) => entry.criterion);
+    return {
+      query,
+      requirements: criteria.map((criterion) => criterion.label),
+      criteria,
+      sources: parsed.map((entry) => ({ id: entry.criterion.id, label: entry.criterion.label, source: entry.source }))
+    };
+  }
+
   function extractCriteria(description) {
-    const text = description.toLowerCase();
-    return synonymGroups.filter((group) => group.keywords.some((keyword) => text.includes(keyword)));
+    return parseRequirement(description).criteria;
   }
 
   function textSimilarity(description, item) {
@@ -334,8 +455,9 @@
   }
 
   function scoreMaterial(description, item) {
-    const criteria = extractCriteria(description);
-    const similarity = textSimilarity(description, item);
+    const parsedRequirement = parseRequirement(description);
+    const criteria = parsedRequirement.criteria;
+    const similarity = textSimilarity(`${description} ${parsedRequirement.requirements.join(" ")}`, item);
 
     if (!criteria.length) {
       const fallbackScore = Math.round(clamp(0.35 + similarity * 0.65) * 100);
@@ -397,7 +519,7 @@
       score: finalScore,
       reasons,
       warnings,
-      matchedCriteria: criteria.map((criterion) => criterion.label)
+      matchedCriteria: parsedRequirement.requirements
     };
   }
 
@@ -415,11 +537,13 @@
       id: "local-rules-v2",
       async recommend({ description, materials, limit = 5 }) {
         const trimmed = description.trim();
+        const parsedRequirement = parseRequirement(trimmed);
         if (!trimmed) {
           return {
             provider: this.id,
             query: "",
             criteria: [],
+            parsedRequirement,
             recommendations: []
           };
         }
@@ -434,7 +558,8 @@
         return {
           provider: this.id,
           query: trimmed,
-          criteria: extractCriteria(trimmed).map((criterion) => criterion.label),
+          criteria: parsedRequirement.requirements,
+          parsedRequirement,
           recommendations
         };
       }
@@ -467,6 +592,7 @@
     createLocalRecommendationProvider,
     createOpenAIRecommendationProviderPlaceholder,
     createRecommendationService,
+    parseRequirement,
     scoreMaterial,
     extractCriteria
   };

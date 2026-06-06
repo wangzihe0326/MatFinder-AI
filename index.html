@@ -69,6 +69,27 @@
         </div>
       </section>
 
+      <section id="copilotPanel" class="copilot-panel" aria-label="MatFinder AI Copilot">
+        <div class="analysis-header">
+          <div>
+            <p class="result-label" data-i18n="copilotLabel">MatFinder AI Copilot</p>
+            <h2 data-i18n="copilotTitle">Ask about the selected material</h2>
+          </div>
+          <span id="copilotContext" class="analysis-status" data-i18n="copilotContextEmpty">No material selected</span>
+        </div>
+        <div class="copilot-suggestions" aria-label="Suggested Copilot questions">
+          <button type="button" data-copilot-prompt-zh="为什么推荐这种材料？" data-copilot-prompt-en="Why is this material recommended?">Why recommended?</button>
+          <button type="button" data-copilot-prompt-zh="它有什么优势？" data-copilot-prompt-en="What are the advantages?">Advantages</button>
+          <button type="button" data-copilot-prompt-zh="它有哪些限制？" data-copilot-prompt-en="What are the limitations?">Limitations</button>
+          <button type="button" data-copilot-prompt-zh="有哪些替代材料？" data-copilot-prompt-en="What alternatives exist?">Alternatives</button>
+        </div>
+        <div id="copilotMessages" class="copilot-messages" aria-live="polite"></div>
+        <form id="copilotForm" class="copilot-form">
+          <input id="copilotInput" type="text" autocomplete="off" placeholder="Ask about recommendation reasons, advantages, limitations, or alternatives" />
+          <button class="primary-button" type="submit" data-i18n="copilotSend">Ask</button>
+        </form>
+      </section>
+
       <main class="layout">
         <aside class="filters" aria-label="Database filters">
           <button id="filterToggleButton" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterBody">
