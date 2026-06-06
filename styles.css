@@ -765,6 +765,58 @@ dialog::backdrop {
   font-weight: 900;
 }
 
+.recommendation-detail-hero {
+  align-items: stretch;
+}
+
+.detail-score-card {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-width: 116px;
+  padding: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 8px;
+  background: #e8f3f1;
+  color: var(--teal-dark);
+}
+
+.detail-score-card span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.detail-score-card strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.detail-summary-section {
+  background: #f8fbfb;
+}
+
+.explanation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.key-property-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.key-property strong {
+  line-height: 1.35;
+}
+
+.ranked-alternative span {
+  display: block;
+}
+
 .profile-tags {
   display: flex;
   flex-wrap: wrap;
@@ -945,6 +997,11 @@ dialog::backdrop {
   .profile-grid {
     grid-template-columns: 1fr;
   }
+
+  .explanation-grid,
+  .key-property-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -1064,7 +1121,9 @@ dialog::backdrop {
   .detail-grid,
   .metrics,
   .analysis-grid,
-  .profile-grid {
+  .profile-grid,
+  .explanation-grid,
+  .key-property-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1076,6 +1135,11 @@ dialog::backdrop {
   .profile-abbr {
     width: 58px;
     height: 58px;
+  }
+
+  .detail-score-card {
+    justify-items: start;
+    min-width: 0;
   }
 
   .similar-grid {

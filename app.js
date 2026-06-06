@@ -171,6 +171,21 @@ const i18n = {
     noRecommendations: "No recommendations yet.",
     matchScore: "Match score",
     detailsAi: "Details + AI",
+    recommendationExplanation: "Recommendation explanation",
+    aiRecommendationSummary: "AI recommendation summary",
+    scoringReasons: "Scoring engine reasons",
+    unmatchedWarnings: "Unmatched warnings / limitations",
+    keyProperties: "Key properties",
+    alternativeMaterials: "Similar alternatives",
+    chineseExplanation: "Chinese explanation",
+    englishExplanation: "English explanation",
+    similarityScore: "Similarity",
+    noAlternativeMaterials: "No ranked similar materials are available in the local dataset.",
+    propertyTransparency: "Transparency",
+    propertyFlexibility: "Flexibility",
+    propertyElectricalInsulation: "Electrical insulation",
+    propertyWaterproof: "Waterproof / low moisture",
+    propertyFlameRetardant: "Flame retardant",
     aiScore: "AI score",
     added: "Added",
     compare: "Compare",
@@ -257,6 +272,24 @@ const i18n = {
       name: "Name"
     }
   }
+};
+
+const zhDetailLabels = {
+  recommendationExplanation: "\u63a8\u8350\u89e3\u91ca",
+  aiRecommendationSummary: "AI \u63a8\u8350\u6458\u8981",
+  scoringReasons: "\u8bc4\u5206\u5f15\u64ce\u5339\u914d\u539f\u56e0",
+  unmatchedWarnings: "\u672a\u5339\u914d\u8b66\u544a / \u9650\u5236",
+  keyProperties: "\u5173\u952e\u5c5e\u6027",
+  alternativeMaterials: "\u76f8\u4f3c\u66ff\u4ee3\u6750\u6599",
+  chineseExplanation: "\u4e2d\u6587\u89e3\u91ca",
+  englishExplanation: "\u82f1\u6587\u89e3\u91ca",
+  similarityScore: "\u76f8\u4f3c\u5ea6",
+  noAlternativeMaterials: "\u672c\u5730\u6570\u636e\u4e2d\u6682\u65e0\u53ef\u6392\u5e8f\u7684\u76f8\u4f3c\u6750\u6599\u3002",
+  propertyTransparency: "\u900f\u660e\u6027",
+  propertyFlexibility: "\u67d4\u97e7\u6027",
+  propertyElectricalInsulation: "\u7535\u7edd\u7f18",
+  propertyWaterproof: "\u9632\u6c34 / \u4f4e\u5438\u6c34",
+  propertyFlameRetardant: "\u963b\u71c3"
 };
 
 const zhNames = {
@@ -426,21 +459,36 @@ const elements = {
 let categories = [];
 
 function t(key, ...args) {
+  if (state.language === "zh" && Object.hasOwn(zhDetailLabels, key)) {
+    return zhDetailLabels[key];
+  }
   const value = i18n[state.language][key] ?? i18n.en[key] ?? key;
   return typeof value === "function" ? value(...args) : value;
 }
 
 function localizeTerm(value) {
-  if (state.language !== "zh") return value;
+  return localizeTermFor(value, state.language);
+}
+
+function localizeTermFor(value, language) {
+  if (language !== "zh") return value;
   return zhTerms[value] || value;
 }
 
 function materialName(item) {
-  return state.language === "zh" ? zhNames[item.id] || item.name : item.name;
+  return materialNameFor(item, state.language);
+}
+
+function materialNameFor(item, language) {
+  return language === "zh" ? zhNames[item.id] || item.name : item.name;
 }
 
 function materialCategory(item) {
-  return localizeTerm(item.category);
+  return materialCategoryFor(item, state.language);
+}
+
+function materialCategoryFor(item, language) {
+  return localizeTermFor(item.category, language);
 }
 
 function materialTags(item) {
@@ -448,7 +496,11 @@ function materialTags(item) {
 }
 
 function materialUses(item) {
-  return state.language === "zh" ? item.uses.map(localizeTerm) : item.uses;
+  return materialUsesFor(item, state.language);
+}
+
+function materialUsesFor(item, language) {
+  return language === "zh" ? item.uses.map((use) => localizeTermFor(use, language)) : item.uses;
 }
 
 function materialSummary(item) {
@@ -463,7 +515,11 @@ function materialNotes(item) {
 }
 
 function localizeRecommendationReason(reason) {
-  if (state.language !== "zh") return reason;
+  return localizeRecommendationReasonFor(reason, state.language);
+}
+
+function localizeRecommendationReasonFor(reason, language) {
+  if (language !== "zh") return reason;
   return reason
     .replace(/^low density \((.+)\)$/, "低密度（$1）")
     .replace(/^continuous use up to (.+)$/, "连续使用温度可达 $1")
@@ -903,6 +959,260 @@ function renderSimilarMaterials(item) {
   `;
 }
 
+function materialDataText(item) {
+  return [
+    item.name,
+    item.abbr,
+    item.category,
+    item.summary,
+    item.notes,
+    item.chemical_resistance,
+    item.flammability,
+    item.recyclability,
+    ...(item.tags || []),
+    ...(item.uses || []),
+    ...(item.processing_methods || []),
+    ...(item.typical_applications || [])
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function hasAnyText(item, terms) {
+  const text = materialDataText(item);
+  return terms.some((term) => text.includes(term));
+}
+
+function formatValueFor(value, suffix = "", language = state.language) {
+  if (value === null || value === undefined || value === "") {
+    return language === "zh" ? "\u672a\u8bf4\u660e" : "Not specified";
+  }
+  return `${value}${suffix}`;
+}
+
+function keyedText(en, zh, language = state.language) {
+  return language === "zh" ? zh : en;
+}
+
+function keyPropertyRows(item) {
+  const tags = new Set((item.tags || []).map((tag) => String(tag).toLowerCase()));
+  const text = materialDataText(item);
+  const flexibleByData = tags.has("flexible") || tags.has("elastomer") || /elastomer|rubber|seal|gasket/.test(text);
+  const transparentByData = hasAnyText(item, ["transparent", "clear", "optical", "window", "lens"]);
+  const electricalByData = tags.has("electrical insulation") || /electrical|dielectric|connector|cable/.test(text);
+  const waterproofByData = tags.has("low moisture") || hasAnyText(item, ["water resistant", "low water", "low moisture", "seal", "gasket", "pipe", "tank"]);
+  const flameByData = tags.has("flame retardant") || hasAnyText(item, ["flame retardant", "fire", "self extinguishing"]);
+
+  return [
+    [t("density"), formatValue(item.density, " g/cm3")],
+    [t("continuousUse"), formatValue(item.maxTemp, " deg C")],
+    [
+      t("propertyTransparency"),
+      transparentByData
+        ? keyedText("Indicated by local tags, uses, or summary.", "\u672c\u5730\u6807\u7b7e\u3001\u7528\u9014\u6216\u6458\u8981\u663e\u793a\u652f\u6301\u3002")
+        : keyedText("Not indicated by local tags or uses.", "\u672c\u5730\u6807\u7b7e\u6216\u7528\u9014\u672a\u663e\u793a\u3002")
+    ],
+    [
+      t("propertyFlexibility"),
+      item.elongation !== null && item.elongation !== undefined
+        ? `${formatValue(item.elongation, "%")} ${keyedText("elongation", "\u65ad\u88c2\u4f38\u957f\u7387")}`
+        : flexibleByData
+          ? keyedText("Indicated by local tags, category, or uses.", "\u672c\u5730\u6807\u7b7e\u3001\u7c7b\u522b\u6216\u7528\u9014\u663e\u793a\u652f\u6301\u3002")
+          : formatValueFor(null)
+    ],
+    [
+      t("propertyElectricalInsulation"),
+      item.dielectric !== null && item.dielectric !== undefined
+        ? `${t("dielectricConstant")} ${formatValue(item.dielectric)}`
+        : electricalByData
+          ? keyedText("Indicated by local tags or uses.", "\u672c\u5730\u6807\u7b7e\u6216\u7528\u9014\u663e\u793a\u652f\u6301\u3002")
+          : formatValueFor(null)
+    ],
+    [
+      t("propertyWaterproof"),
+      item.water_absorption !== null && item.water_absorption !== undefined
+        ? `${t("waterAbsorption")} ${formatValue(item.water_absorption, "%")}`
+        : waterproofByData
+          ? keyedText("Indicated by low-moisture, sealing, or fluid-handling data.", "\u4f4e\u5438\u6c34\u3001\u5bc6\u5c01\u6216\u6d41\u4f53\u4ecb\u8d28\u6570\u636e\u663e\u793a\u652f\u6301\u3002")
+          : formatValueFor(null)
+    ],
+    [
+      t("propertyFlameRetardant"),
+      item.flammability ? formatValue(item.flammability) : flameByData ? keyedText("Indicated by local tags or uses.", "\u672c\u5730\u6807\u7b7e\u6216\u7528\u9014\u663e\u793a\u652f\u6301\u3002") : formatValueFor(null)
+    ],
+    [
+      t("chemicalResistance"),
+      item.chemical_resistance ? formatValue(item.chemical_resistance) : tags.has("chemical resistant") ? keyedText("Indicated by local tags.", "\u672c\u5730\u6807\u7b7e\u663e\u793a\u652f\u6301\u3002") : formatValueFor(null)
+    ]
+  ];
+}
+
+function getRecommendationForMaterial(item) {
+  return state.recommendations.find((candidate) => candidate.material.id === item.id) || null;
+}
+
+function meaningfulWarnings(candidate) {
+  return (candidate?.warnings || []).filter(Boolean);
+}
+
+function buildRecommendationSummary(item, candidate, language) {
+  const name = materialNameFor(item, language);
+  const category = materialCategoryFor(item, language);
+  const score = candidate ? `${candidate.score}/100` : formatValueFor(null, "", language);
+  const reasons = (candidate?.reasons || []).map((reason) => localizeRecommendationReasonFor(reason, language)).filter(Boolean);
+  const warnings = meaningfulWarnings(candidate).map((warning) => localizeRecommendationReasonFor(warning, language));
+  const uses = materialUsesFor(item, language).slice(0, 3).join(language === "zh" ? "\u3001" : ", ");
+  const primaryReason = reasons.length ? reasons.join(language === "zh" ? "\u3001" : "; ") : (language === "zh" ? "\u672c\u5730\u6750\u6599\u6570\u636e\u7684\u7efc\u5408\u5339\u914d" : "the combined local material-data fit");
+  const warningText = warnings.length ? warnings[0] : (language === "zh" ? "\u8bc4\u5206\u5f15\u64ce\u672a\u6807\u51fa\u4e3b\u8981\u672a\u5339\u914d\u8b66\u544a" : "the scoring engine did not flag a major unmatched warning");
+
+  if (language === "zh") {
+    return `${name}\u5c5e\u4e8e${category}\uff0c\u63a8\u8350\u5206\u6570\u4e3a ${score}\u3002\u4e3b\u8981\u4f9d\u636e\u662f${primaryReason}\u3002\u672c\u5730\u6570\u636e\u96c6\u4e2d\u7684\u5178\u578b\u5e94\u7528\u5305\u62ec${uses || "\u672a\u8bf4\u660e"}\u3002\u9650\u5236\u63d0\u793a\uff1a${warningText}\u3002`;
+  }
+
+  return `${name} is a ${category} with a recommendation score of ${score}. The scoring engine favored it for ${primaryReason}. Typical local-dataset applications include ${uses || "not specified"}. Limitation signal: ${warningText}.`;
+}
+
+function rankSimilarMaterials(item, limit = 5) {
+  return materials
+    .filter((candidate) => candidate.id !== item.id)
+    .map((candidate) => {
+      const sharedTags = candidate.tags.filter((tag) => item.tags.includes(tag)).length;
+      const sharedUses = candidate.uses.filter((use) => item.uses.includes(use)).length;
+      const sameCategory = candidate.category === item.category ? 8 : 0;
+      const densityFit = item.density && candidate.density ? Math.max(0, 4 - Math.abs(item.density - candidate.density) * 4) : 0;
+      const tempFit = item.maxTemp !== null && candidate.maxTemp !== null ? Math.max(0, 5 - Math.abs(item.maxTemp - candidate.maxTemp) / 35) : 0;
+      const rawScore = sameCategory + sharedTags * 3 + sharedUses * 2 + densityFit + tempFit;
+      return {
+        material: candidate,
+        score: Math.round(Math.min(100, (rawScore / 24) * 100))
+      };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.material.name.localeCompare(b.material.name))
+    .slice(0, limit);
+}
+
+function renderKeyProperties(item) {
+  return `
+    <div class="key-property-grid">
+      ${keyPropertyRows(item)
+        .map(
+          ([label, value]) => `
+            <div class="metric key-property">
+              <span>${escapeHtml(label)}</span>
+              <strong>${escapeHtml(value)}</strong>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderRankedAlternatives(item) {
+  const alternatives = rankSimilarMaterials(item);
+  if (!alternatives.length) {
+    return `<p class="profile-muted">${t("noAlternativeMaterials")}</p>`;
+  }
+
+  return `
+    <div class="similar-grid ranked-alternatives">
+      ${alternatives
+        .map(
+          (entry, index) => `
+            <button class="similar-card ranked-alternative" type="button" data-profile-id="${entry.material.id}">
+              <span>#${index + 1} ${escapeHtml(entry.material.abbr)} · ${t("similarityScore")} ${entry.score}</span>
+              <strong>${escapeHtml(materialName(entry.material))}</strong>
+              <small>${escapeHtml(materialCategory(entry.material))}</small>
+            </button>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderScoringList(items) {
+  const list = items.length ? items : [t("notSpecified")];
+  return renderProfileList(list);
+}
+
+function renderRecommendationDetail(item) {
+  const candidate = getRecommendationForMaterial(item);
+  const scoreText = candidate ? candidate.score : formatValueFor(null);
+  const scoringReasons = (candidate?.reasons || []).map(localizeRecommendationReason);
+  const warningsAndLimitations = [
+    ...meaningfulWarnings(candidate).map(localizeRecommendationReason),
+    ...materialDisadvantageList(item)
+  ].filter(Boolean);
+
+  elements.detailContent.innerHTML = `
+    <div class="profile-hero recommendation-detail-hero">
+      <div>
+        <span class="category">${escapeHtml(materialCategory(item))}</span>
+        <p class="result-label">${t("recommendationExplanation")}</p>
+        <h2>${escapeHtml(materialName(item))} (${escapeHtml(item.abbr)})</h2>
+        <p class="summary">${escapeHtml(materialSummary(item))}</p>
+      </div>
+      <div class="detail-score-card">
+        <span>${t("matchScore")}</span>
+        <strong>${escapeHtml(scoreText)}</strong>
+      </div>
+    </div>
+
+    <section class="profile-section detail-summary-section">
+      <h3>${t("aiRecommendationSummary")}</h3>
+      <p>${escapeHtml(buildRecommendationSummary(item, candidate, state.language))}</p>
+    </section>
+
+    <div class="explanation-grid">
+      <section class="profile-section">
+        <h3>${t("chineseExplanation")}</h3>
+        <p lang="zh-CN">${escapeHtml(buildRecommendationSummary(item, candidate, "zh"))}</p>
+      </section>
+      <section class="profile-section">
+        <h3>${t("englishExplanation")}</h3>
+        <p lang="en">${escapeHtml(buildRecommendationSummary(item, candidate, "en"))}</p>
+      </section>
+    </div>
+
+    <div class="profile-grid">
+      <section class="profile-section">
+        <h3>${t("scoringReasons")}</h3>
+        ${renderScoringList(scoringReasons)}
+      </section>
+      <section class="profile-section">
+        <h3>${t("unmatchedWarnings")}</h3>
+        ${renderScoringList([...new Set(warningsAndLimitations)])}
+      </section>
+    </div>
+
+    <section class="profile-section">
+      <h3>${t("typicalUses")}</h3>
+      ${renderProfileList(materialUses(item))}
+    </section>
+
+    <section class="profile-section">
+      <h3>${t("keyProperties")}</h3>
+      ${renderKeyProperties(item)}
+    </section>
+
+    <section class="profile-section">
+      <h3>${t("alternativeMaterials")}</h3>
+      ${renderRankedAlternatives(item)}
+    </section>
+  `;
+
+  elements.detailContent.querySelectorAll("[data-profile-id]").forEach((button) => {
+    button.addEventListener("click", () => showDetail(button.dataset.profileId));
+  });
+
+  if (!elements.detailDialog.open) {
+    elements.detailDialog.showModal();
+  }
+}
+
 function getFilteredMaterials() {
   return materials
     .filter((item) => !state.query || getSearchText(item).includes(state.query))
@@ -1220,6 +1530,9 @@ function legacyShowDetail(id) {
 
   selectMaterialForAnalysis(item);
 
+  renderRecommendationDetail(item);
+  return;
+
   elements.detailContent.innerHTML = `
     <span class="category">${materialCategory(item)}</span>
     <h2>${materialName(item)} (${item.abbr})</h2>
@@ -1251,6 +1564,9 @@ function showDetail(id) {
   if (!item) return;
 
   selectMaterialForAnalysis(item);
+
+  renderRecommendationDetail(item);
+  return;
 
   elements.detailContent.innerHTML = `
     <div class="profile-hero">
