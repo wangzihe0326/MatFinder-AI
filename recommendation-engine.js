@@ -17,6 +17,8 @@
     wear: ["\u8010\u78e8", "\u6469\u64e6", "\u8f74\u627f", "\u9f7f\u8f6e", "\u6ed1\u52a8"],
     weather: ["\u8010\u5019", "\u6237\u5916", "\u7d2b\u5916", "\u81ed\u6c27", "\u9633\u5149"],
     flame: ["\u963b\u71c3", "\u9632\u706b", "\u81ea\u7184"],
+    nonSolid: ["\u975e\u56fa\u4f53", "\u975e\u786c\u8d28", "\u8f6f\u8d28", "\u6db2\u6001", "\u6d41\u4f53", "\u53ef\u53d1\u6ce1"],
+    waterproof: ["\u9632\u6c34", "\u8010\u6c34", "\u4f4e\u5438\u6c34", "\u9632\u6f6e", "\u5bc6\u5c01", "\u9632\u6e17"],
     sustainable: ["\u53ef\u6301\u7eed", "\u53ef\u56de\u6536", "\u751f\u7269\u57fa", "\u53ef\u5806\u80a5", "\u53ef\u518d\u751f"],
     medical: ["\u533b\u7597", "\u690d\u5165", "\u751f\u7269\u76f8\u5bb9", "\u706d\u83cc", "\u65e0\u83cc"],
     food: ["\u98df\u54c1", "\u98df\u54c1\u63a5\u89e6", "\u5305\u88c5", "\u74f6"]
@@ -167,6 +169,66 @@
       reason: () => "flame-retardant profile"
     },
     {
+      id: "nonSolid",
+      label: "non-solid or soft form",
+      weight: 1.05,
+      keywords: ["non-solid", "not solid", "non solid", "soft", "liquid", "fluid", "foam", "foamable", "gel", ...zh.nonSolid],
+      evaluate: (item) => {
+        const text = materialText(item);
+        const category = String(item.category || "").toLowerCase();
+        const explicitSoft =
+          category.includes("elastomer") ||
+          category.includes("rubber") ||
+          text.includes("flexible") ||
+          text.includes("soft") ||
+          text.includes("elastomer") ||
+          text.includes("rubber") ||
+          text.includes("foam") ||
+          text.includes("film") ||
+          text.includes("seal") ||
+          text.includes("gasket");
+        const rigidPenalty = text.includes("rigid") && !text.includes("rigid or flexible") ? -0.2 : 0;
+        return clamp((explicitSoft ? 0.72 : 0.18) + normalize(item.elongation, 80, 750) * 0.3 + rigidPenalty);
+      },
+      reason: (item) =>
+        item.elongation === null || item.elongation === undefined
+          ? "soft or non-rigid behavior is indicated by category, tags, or applications"
+          : `soft or non-rigid fit with ${item.elongation}% elongation`,
+      warning: () => "non-solid or soft-form requirement is weakly supported by the local fields"
+    },
+    {
+      id: "waterproof",
+      label: "waterproof or sealing",
+      weight: 1.05,
+      keywords: ["waterproof", "water resistant", "moisture resistant", "low moisture", "low water absorption", "seal", "sealing", "gasket", ...zh.waterproof],
+      evaluate: (item) => {
+        const text = materialText(item);
+        const waterAbsorption = item.water_absorption ?? item.waterAbsorption;
+        const explicitWaterFit =
+          text.includes("water resistant") ||
+          text.includes("low moisture") ||
+          text.includes("low water") ||
+          text.includes("hydrolysis resistant") ||
+          text.includes("seal") ||
+          text.includes("gasket") ||
+          text.includes("pipe") ||
+          text.includes("tank");
+
+        if (waterAbsorption !== null && waterAbsorption !== undefined && !Number.isNaN(Number(waterAbsorption))) {
+          return clamp((explicitWaterFit ? 0.45 : 0.15) + (1 - normalize(Number(waterAbsorption), 0.05, 2.5)) * 0.55);
+        }
+
+        return explicitWaterFit ? 0.82 : 0.25;
+      },
+      reason: (item) => {
+        const waterAbsorption = item.water_absorption ?? item.waterAbsorption;
+        return waterAbsorption === null || waterAbsorption === undefined
+          ? "waterproof or sealing fit is indicated by tags, uses, or description"
+          : `low water absorption (${waterAbsorption}%) supports waterproof or sealing use`;
+      },
+      warning: () => "waterproof or sealing requirement is weakly supported by the local fields"
+    },
+    {
       id: "sustainable",
       label: "sustainability",
       weight: 0.85,
@@ -254,6 +316,10 @@
       .filter((token) => token.length > 2);
   }
 
+  function criterionWarning(criterion) {
+    return `${criterion.label} requirement is weakly supported by the local fields`;
+  }
+
   function extractCriteria(description) {
     const text = description.toLowerCase();
     return synonymGroups.filter((group) => group.keywords.some((keyword) => text.includes(keyword)));
@@ -277,6 +343,7 @@
         material: item,
         score: fallbackScore,
         reasons: similarity > 0 ? ["closest local text match"] : ["balanced fallback from local dataset"],
+        warnings: ["no recognized requirement terms; ranked by local text similarity"],
         matchedCriteria: []
       };
     }
@@ -284,36 +351,63 @@
     let weightedTotal = 0;
     let maxTotal = 0;
     const reasonCandidates = [];
+    const warningCandidates = [];
+    let matchedCount = 0;
 
     criteria.forEach((criterion) => {
       const fit = clamp(criterion.evaluate(item));
       const contribution = fit * criterion.weight;
       weightedTotal += contribution;
       maxTotal += criterion.weight;
-      if (fit >= 0.52) {
+      if (fit >= 0.58) {
+        matchedCount += 1;
         reasonCandidates.push({
           fit,
           text: criterion.reason(item),
           label: criterion.label
         });
       }
+      if (fit < 0.5) {
+        warningCandidates.push({
+          fit,
+          text: typeof criterion.warning === "function" ? criterion.warning(item) : criterionWarning(criterion),
+          label: criterion.label
+        });
+      }
     });
 
     const criteriaScore = weightedTotal / maxTotal;
-    const finalScore = Math.round(clamp(criteriaScore * 0.88 + similarity * 0.12) * 100);
+    const coverageBonus = (matchedCount / criteria.length) * 0.08;
+    const warningPenalty = (warningCandidates.length / criteria.length) * 0.12;
+    const finalScore = Math.round(clamp(criteriaScore * 0.82 + similarity * 0.1 + coverageBonus - warningPenalty) * 100);
     const reasons = reasonCandidates
       .sort((a, b) => b.fit - a.fit)
       .slice(0, 3)
       .map((reason) => reason.text);
+    const warnings = warningCandidates
+      .sort((a, b) => a.fit - b.fit)
+      .slice(0, 3)
+      .map((warning) => warning.text);
 
     if (!reasons.length) reasons.push("partial match against stated requirements");
+    if (!warnings.length) warnings.push("no major unmatched requirement warnings");
 
     return {
       material: item,
       score: finalScore,
       reasons,
+      warnings,
       matchedCriteria: criteria.map((criterion) => criterion.label)
     };
+  }
+
+  function enforceUniqueDescendingScores(recommendations) {
+    let previousScore = 101;
+    return recommendations.map((entry) => {
+      const score = Math.max(0, Math.min(entry.score, previousScore - 1));
+      previousScore = score;
+      return { ...entry, score };
+    });
   }
 
   function createLocalRecommendationProvider() {
@@ -330,10 +424,12 @@
           };
         }
 
-        const recommendations = materials
+        const recommendations = enforceUniqueDescendingScores(
+          materials
           .map((item) => scoreMaterial(trimmed, item))
           .sort((a, b) => b.score - a.score || a.material.name.localeCompare(b.material.name))
-          .slice(0, limit);
+          .slice(0, limit)
+        );
 
         return {
           provider: this.id,

@@ -389,6 +389,11 @@ button:hover {
   font-weight: 700;
 }
 
+.reason.warning {
+  background: #fff1f0;
+  color: #8a2d22;
+}
+
 .score-box {
   display: grid;
   gap: 6px;

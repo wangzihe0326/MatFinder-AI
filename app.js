@@ -350,6 +350,8 @@ const zhTerms = {
   "wear resistance": "耐磨",
   "weather resistance": "耐候",
   "flame resistance": "阻燃",
+  "non-solid or soft form": "非固体或软质形态",
+  "waterproof or sealing": "防水或密封",
   sustainability: "可持续",
   "medical suitability": "医疗适配",
   "food contact": "食品接触"
@@ -481,6 +483,15 @@ function localizeRecommendationReason(reason) {
     .replace("common food or packaging applications", "常见于食品或包装应用")
     .replace("closest local text match", "最接近的本地文本匹配")
     .replace("balanced fallback from local dataset", "来自本地数据集的综合推荐")
+    .replace("soft or non-rigid behavior is indicated by category, tags, or applications", "类别、标签或应用体现出软质或非刚性特征")
+    .replace(/^soft or non-rigid fit with (.+) elongation$/, "软质或非刚性适配，断裂伸长率 $1")
+    .replace("waterproof or sealing fit is indicated by tags, uses, or description", "标签、用途或描述体现出防水或密封适配")
+    .replace(/^low water absorption \((.+)\) supports waterproof or sealing use$/, "低吸水率（$1）支持防水或密封用途")
+    .replace("non-solid or soft-form requirement is weakly supported by the local fields", "本地字段对非固体或软质形态需求支持较弱")
+    .replace("waterproof or sealing requirement is weakly supported by the local fields", "本地字段对防水或密封需求支持较弱")
+    .replace("no recognized requirement terms; ranked by local text similarity", "未识别到明确需求词，按本地文本相似度排序")
+    .replace("no major unmatched requirement warnings", "未发现明显未匹配需求警告")
+    .replace("requirement is weakly supported by the local fields", "需求在本地字段中支持较弱")
     .replace("partial match against stated requirements", "与需求部分匹配");
 }
 
@@ -960,6 +971,7 @@ function renderRecommendationCard(candidate, index) {
         <p class="summary">${materialSummary(item)}</p>
         <div class="recommendation-reasons">
           ${candidate.reasons.map((reason) => `<span class="reason">${localizeRecommendationReason(reason)}</span>`).join("")}
+          ${(candidate.warnings || []).map((warning) => `<span class="reason${warning === "no major unmatched requirement warnings" ? "" : " warning"}">${localizeRecommendationReason(warning)}</span>`).join("")}
         </div>
       </div>
       <div class="score-box">
