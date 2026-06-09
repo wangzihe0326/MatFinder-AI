@@ -4,6 +4,7 @@
     "start:prod": "node scripts/start-production.js",
     "build:frontend-config": "node scripts/build-frontend-config.js",
     "migrate:materials": "node scripts/migrate-materials-to-sqlite.js",
+    "validate:materials": "node scripts/validate-material-database.js",
     "smoke:openai": "node scripts/smoke-openai-analysis.js"
   },
   "dependencies": {}

@@ -29,7 +29,12 @@ def main():
               material_id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
               abbreviation TEXT NOT NULL,
+              material_family TEXT,
+              grade_name TEXT,
+              supplier_or_brand TEXT,
               category TEXT NOT NULL,
+              subcategory TEXT,
+              state TEXT,
               family TEXT,
               manufacturer TEXT,
               trade_name TEXT,
@@ -41,15 +46,25 @@ def main():
               elongation REAL,
               glass_transition_temperature REAL,
               melting_temperature REAL,
+              max_temperature REAL,
               continuous_use_temperature REAL,
               thermal_conductivity REAL,
               dielectric_constant REAL,
+              flame_rating TEXT,
+              electrical_insulation TEXT,
               chemical_resistance TEXT,
+              transparency TEXT,
+              flexibility TEXT,
+              waterproof_sealing TEXT,
               water_absorption REAL,
               flammability TEXT,
               recyclability TEXT,
               cost_level TEXT,
               processing_methods TEXT NOT NULL,
+              applications TEXT NOT NULL,
+              limitations TEXT NOT NULL,
+              alternatives TEXT NOT NULL,
+              source_note TEXT NOT NULL,
               typical_applications TEXT NOT NULL,
               advantages TEXT NOT NULL,
               disadvantages TEXT NOT NULL,
@@ -89,21 +104,35 @@ def main():
             connection.execute(
                 """
                 INSERT INTO materials (
-                  material_id, name, abbreviation, category, family, manufacturer,
-                  trade_name, density, tensile_strength, flexural_strength,
+                  material_id, name, abbreviation, material_family, grade_name,
+                  supplier_or_brand, category, subcategory, state, family,
+                  manufacturer, trade_name, density, tensile_strength, flexural_strength,
                   impact_strength, hardness, elongation, glass_transition_temperature,
-                  melting_temperature, continuous_use_temperature, thermal_conductivity,
-                  dielectric_constant, chemical_resistance, water_absorption,
+                  melting_temperature, max_temperature, continuous_use_temperature,
+                  thermal_conductivity, dielectric_constant, flame_rating,
+                  electrical_insulation, chemical_resistance, transparency,
+                  flexibility, waterproof_sealing, water_absorption,
                   flammability, recyclability, cost_level, processing_methods,
+                  applications, limitations, alternatives, source_note,
                   typical_applications, advantages, disadvantages, summary, notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
                 """,
                 (
                     material_id(item),
                     item["name"],
                     item.get("abbreviation", item.get("abbr")),
+                    item.get("material_family", item.get("family")),
+                    item.get("grade_name", item.get("trade_name", "Generic")),
+                    item.get("supplier_or_brand", item.get("manufacturer", "Generic / multiple suppliers")),
                     item["category"],
+                    item.get("subcategory"),
+                    item.get("state"),
                     item.get("family"),
                     item.get("manufacturer"),
                     item.get("trade_name"),
@@ -115,15 +144,25 @@ def main():
                     item.get("elongation"),
                     item.get("glass_transition_temperature", item.get("tg")),
                     item.get("melting_temperature", item.get("tm")),
+                    item.get("max_temperature", item.get("continuous_use_temperature", item.get("maxTemp"))),
                     item.get("continuous_use_temperature", item.get("maxTemp")),
                     item.get("thermal_conductivity"),
                     item.get("dielectric_constant", item.get("dielectric")),
+                    item.get("flame_rating", item.get("flammability")),
+                    item.get("electrical_insulation"),
                     item.get("chemical_resistance"),
+                    item.get("transparency"),
+                    item.get("flexibility"),
+                    item.get("waterproof_sealing"),
                     item.get("water_absorption"),
                     item.get("flammability"),
                     item.get("recyclability", legacy_recyclability(item)),
                     item.get("cost_level"),
                     json.dumps(list_value(item, "processing_methods"), ensure_ascii=False),
+                    json.dumps(list_value(item, "applications", "typical_applications"), ensure_ascii=False),
+                    json.dumps(list_value(item, "limitations", "disadvantages"), ensure_ascii=False),
+                    json.dumps(list_value(item, "alternatives"), ensure_ascii=False),
+                    item.get("source_note", source_note(item)),
                     json.dumps(list_value(item, "typical_applications", "uses"), ensure_ascii=False),
                     json.dumps(list_value(item, "advantages"), ensure_ascii=False),
                     json.dumps(list_value(item, "disadvantages"), ensure_ascii=False),
@@ -204,6 +243,16 @@ def legacy_recyclability(item):
     if "recyclable" not in item:
         return None
     return "recyclable" if item["recyclable"] else "not typically recyclable"
+
+
+def source_note(item):
+    if item.get("source_note"):
+        return item["source_note"]
+    sources = item.get("sources") or default_sources(material_id(item))
+    titles = [source.get("source_title") for source in sources if source.get("source_title")]
+    if not titles:
+        return "MatFinder local material database; verify grade-specific datasheets before engineering use."
+    return "Representative MatFinder record based on: " + "; ".join(titles[:3]) + "."
 
 
 if __name__ == "__main__":

@@ -78,12 +78,25 @@ function enrichMaterials(items) {
     const tags = listValue(item.tags);
     const uses = listValue(item.typical_applications, item.uses);
     const processing = listValue(item.processing_methods);
-    const summary = item.summary || `${item.name} is a ${item.category} material used for ${uses.slice(0, 2).join(" and ") || "engineering applications"}.`;
+    const category = normalizeCategory(item, tags, uses);
+    const applications = uses.length ? uses : profile.uses;
+    const disadvantages = listValue(item.disadvantages).length ? listValue(item.disadvantages) : profile.disadvantages;
+    const limitations = listValue(item.limitations).length ? listValue(item.limitations) : normalizeLimitations(item, disadvantages);
+    const summary = item.summary || `${item.name} is a ${category.subcategory.toLowerCase()} material used for ${applications.slice(0, 2).join(" and ") || "engineering applications"}.`;
+    const family = item.material_family || item.family || profile.family || category.subcategory;
+    const maxTemperature = numericValue(item.max_temperature, numericValue(item.continuous_use_temperature, numericValue(item.maxTemp, profile.maxTemp)));
 
     return {
       ...item,
       abbr: item.abbr || item.abbreviation || profile.abbr,
       abbreviation: item.abbreviation || item.abbr || profile.abbr,
+      material_family: family,
+      grade_name: item.grade_name || item.trade_name || inferGradeName(item),
+      supplier_or_brand: item.supplier_or_brand || item.manufacturer || inferSupplierOrBrand(item),
+      category: category.category,
+      subcategory: item.subcategory || category.subcategory,
+      state: item.state || profile.state,
+      family,
       density: numericValue(item.density, profile.density),
       tensile: numericValue(item.tensile, numericValue(item.tensile_strength, profile.tensile)),
       tensile_strength: numericValue(item.tensile_strength, numericValue(item.tensile, profile.tensile)),
@@ -95,25 +108,35 @@ function enrichMaterials(items) {
       glass_transition_temperature: numericValue(item.glass_transition_temperature, numericValue(item.tg, profile.tg)),
       tm: numericValue(item.tm, numericValue(item.melting_temperature, profile.tm)),
       melting_temperature: numericValue(item.melting_temperature, numericValue(item.tm, profile.tm)),
-      maxTemp: numericValue(item.maxTemp, numericValue(item.continuous_use_temperature, profile.maxTemp)),
-      continuous_use_temperature: numericValue(item.continuous_use_temperature, numericValue(item.maxTemp, profile.maxTemp)),
+      maxTemp: maxTemperature,
+      max_temperature: maxTemperature,
+      continuous_use_temperature: maxTemperature,
       thermal_conductivity: numericValue(item.thermal_conductivity, profile.thermal),
       dielectric: numericValue(item.dielectric, numericValue(item.dielectric_constant, profile.dielectric)),
       dielectric_constant: numericValue(item.dielectric_constant, numericValue(item.dielectric, profile.dielectric)),
+      flame_rating: item.flame_rating || item.flammability || inferFlameRating(item, tags),
+      electrical_insulation: item.electrical_insulation || inferElectricalInsulation(item, tags),
       chemical_resistance: item.chemical_resistance || profile.chemical,
+      transparency: item.transparency || inferTransparency(item, tags),
+      flexibility: item.flexibility || inferFlexibility(item, tags),
+      waterproof_sealing: item.waterproof_sealing || inferWaterproofSealing(item, tags),
       water_absorption: numericValue(item.water_absorption, profile.waterAbsorption),
       flammability: item.flammability || profile.flammability,
       recyclability: item.recyclability || profile.recyclability,
       recyclable: item.recyclable ?? profile.recyclable,
       cost_level: item.cost_level || profile.cost,
       processing_methods: processing.length ? processing : profile.processing,
-      typical_applications: uses.length ? uses : profile.uses,
-      uses: uses.length ? uses : profile.uses,
+      typical_applications: applications,
+      applications,
+      uses: applications,
       advantages: listValue(item.advantages).length ? listValue(item.advantages) : profile.advantages,
-      disadvantages: listValue(item.disadvantages).length ? listValue(item.disadvantages) : profile.disadvantages,
+      disadvantages,
+      limitations,
+      alternatives: listValue(item.alternatives).length ? listValue(item.alternatives) : inferAlternatives(item, category, tags),
       tags: tags.length ? tags : profile.tags,
       summary,
-      notes: item.notes || profile.notes
+      notes: item.notes || profile.notes,
+      source_note: item.source_note || sourceNote(item)
     };
   });
 }
@@ -240,6 +263,153 @@ function profile(state, density, tensile, flexural, elongation, tg, tm, maxTemp,
     advantages: [`Representative ${state} material profile for screening and search.`],
     disadvantages: ["Estimated values require validation against grade-specific datasheets."]
   };
+}
+
+function normalizeCategory(item, tags = [], uses = []) {
+  const original = String(item.category || item.material_family || item.family || "General material").trim();
+  const text = [
+    original,
+    item.name,
+    item.material_family,
+    item.family,
+    item.summary,
+    ...tags,
+    ...uses
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const rules = [
+    ["Adhesives", /adhesive|glue|bonding|hot-melt|pressure-sensitive/],
+    ["Sealants", /sealant|caulk|gasket seal|waterproofing/],
+    ["Coatings", /coating|paint|plating|powder coat|surface protection/],
+    ["Foams", /foam|cellular|sponge/],
+    ["Elastomers", /rubber|elastomer|silicone|epdm|nitrile|fkm|ffkm|tpu|tpv|tpee|sbs|sebs|flexible solid/],
+    ["Thermosets", /thermoset|epoxy|phenolic|bismaleimide|cyanate ester|benzoxazine|polyurethane resin/],
+    ["Composites", /composite|fiber|fibre|laminate|frp|cfrp|gfrp|prepreg|carbon\/|glass\//],
+    ["Metals", /metal|steel|aluminum|aluminium|titanium|copper|bronze|brass|nickel|magnesium|zinc|tungsten|molybdenum|tantalum|cobalt/],
+    ["Ceramics", /ceramic|alumina|zirconia|silicon carbide|nitride|porcelain|glass|sialon|carbide/],
+    ["Plastics", /plastic|polymer|thermoplastic|resin|polyolefin|polyamide|polyester|fluoropolymer|nylon|abs|pc|pet|pbt|pp|pe|pvc|bio-based/]
+  ];
+  const category = rules.find(([, pattern]) => pattern.test(text))?.[0] || "General materials";
+  return {
+    category,
+    subcategory: normalizeSubcategory(original, category)
+  };
+}
+
+function normalizeSubcategory(original, category) {
+  const cleaned = String(original || "").trim();
+  if (!cleaned) return category.replace(/s$/, "");
+  return cleaned
+    .replace(/\bplastic\b/i, "plastic")
+    .replace(/\bplastics\b/i, "plastics")
+    .replace(/\bthermoplastic\b/i, "thermoplastic")
+    .replace(/\s+/g, " ");
+}
+
+function inferGradeName(item) {
+  const text = [item.name, item.abbr, item.abbreviation].filter(Boolean).join(" ");
+  if (/\b(gf|cf|fr|filled|reinforced|blend|copolymer|homopolymer|foam|film|coating|compound)\b/i.test(text)) {
+    return item.name;
+  }
+  return "Generic family screening grade";
+}
+
+function inferSupplierOrBrand(item) {
+  if (item.trade_name && !sameText(item.trade_name, item.name)) return item.trade_name;
+  return "Generic / multiple suppliers";
+}
+
+function inferFlameRating(item, tags = []) {
+  const text = searchableText(item, tags);
+  if (/noncombustible|ceramic|metal|glass/.test(text)) return "noncombustible or not UL-rated";
+  if (/flame|fire|fr-|ul 94|v-0|v0/.test(text)) return "flame-retardant grade available; verify UL 94 rating by grade";
+  return "grade dependent; not specified";
+}
+
+function inferElectricalInsulation(item, tags = []) {
+  const text = searchableText(item, tags);
+  if (/conductive|electrically conductive|metal|carbon-filled/.test(text)) return "not insulating or grade dependent";
+  if (/electrical|dielectric|insulat|connector|cable|wire|circuit/.test(text)) return "good electrical insulation potential";
+  if (numericValue(item.dielectric, item.dielectric_constant) !== undefined) return "dielectric data available; verify grade";
+  return "not specified";
+}
+
+function inferTransparency(item, tags = []) {
+  const text = searchableText(item, tags);
+  if (/transparent amber/.test(text)) return "transparent amber";
+  if (/transparent|clear|optical|lens|window|light guide/.test(text)) return "transparent or optical grades available";
+  if (/opaque|filled|carbon|metal|ceramic|rubber/.test(text)) return "opaque";
+  return "grade dependent";
+}
+
+function inferFlexibility(item, tags = []) {
+  const text = searchableText(item, tags);
+  if (/elastomer|rubber|flexible|soft|seal|gasket|film|tubing/.test(text)) return "flexible";
+  if (/rigid|stiff|ceramic|metal|glass-filled|carbon-filled|structural/.test(text)) return "rigid";
+  return "semi-rigid or grade dependent";
+}
+
+function inferWaterproofSealing(item, tags = []) {
+  const text = searchableText(item, tags);
+  if (/seal|gasket|waterproof|water pipe|low moisture|barrier|marine|roofing|liner/.test(text)) {
+    return "suitable for sealing or low-moisture applications by grade";
+  }
+  if (/water soluble|hydrolysis/.test(text)) return "limited; moisture compatibility must be checked";
+  return "grade dependent; verify water absorption and joint design";
+}
+
+function normalizeLimitations(item, disadvantages) {
+  const values = listValue(disadvantages);
+  if (item.notes) values.push(item.notes);
+  return [...new Set(values)].slice(0, 4);
+}
+
+function inferAlternatives(item, category, tags = []) {
+  const text = searchableText(item, tags);
+  if (category.category === "Metals") return ["aluminum alloy", "stainless steel", "titanium alloy"];
+  if (category.category === "Ceramics") return ["alumina ceramic", "zirconia ceramic", "silicon carbide"];
+  if (category.category === "Composites") return ["glass fiber composite", "carbon fiber composite", "aluminum alloy"];
+  if (category.category === "Elastomers") return ["EPDM", "silicone rubber", "TPU"];
+  if (category.category === "Adhesives") return ["epoxy adhesive", "acrylic adhesive", "polyurethane adhesive"];
+  if (category.category === "Sealants") return ["silicone sealant", "polyurethane sealant", "EPDM gasket"];
+  if (/transparent|optical|clear/.test(text)) return ["polycarbonate", "PMMA", "COC"];
+  if (/high[-\s]?temperature|heat resistant|flame/.test(text)) return ["PPS", "PEEK", "PEI"];
+  if (/chemical|fluoro/.test(text)) return ["PTFE", "PFA", "PVDF"];
+  if (/flexible|film|packaging/.test(text)) return ["LDPE", "LLDPE", "TPE"];
+  return ["ABS", "polycarbonate", "polypropylene"];
+}
+
+function sourceNote(item) {
+  const sources = listValue(item.sources).map((source) => source.source_title).filter(Boolean);
+  if (sources.length) {
+    return `Representative MatFinder record based on ${sources.slice(0, 3).join("; ")}. Verify grade-specific datasheets before engineering use.`;
+  }
+  return "MatFinder local material database screening record. Verify grade-specific supplier datasheets before engineering use.";
+}
+
+function searchableText(item, tags = []) {
+  return [
+    item.name,
+    item.abbr,
+    item.abbreviation,
+    item.category,
+    item.material_family,
+    item.family,
+    item.summary,
+    ...(item.uses || []),
+    ...(item.typical_applications || []),
+    ...tags
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function sameText(left, right) {
+  return normalizeName(left) === normalizeName(right);
 }
 
 function numericValue(value, fallback) {

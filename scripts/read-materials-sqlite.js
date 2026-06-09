@@ -13,7 +13,12 @@ function readMaterials(databasePath) {
       name: row.name,
       abbr: row.abbreviation ?? row.abbr,
       abbreviation: row.abbreviation ?? row.abbr,
+      material_family: row.material_family ?? row.family,
+      grade_name: row.grade_name ?? row.trade_name ?? "Generic",
+      supplier_or_brand: row.supplier_or_brand ?? row.manufacturer ?? "Generic / multiple suppliers",
       category: row.category,
+      subcategory: row.subcategory,
+      state: row.state,
       family: row.family,
       manufacturer: row.manufacturer,
       trade_name: row.trade_name,
@@ -26,15 +31,20 @@ function readMaterials(databasePath) {
       glass_transition_temperature: row.glass_transition_temperature ?? row.tg,
       tm: row.melting_temperature ?? row.tm,
       melting_temperature: row.melting_temperature ?? row.tm,
-      maxTemp: row.continuous_use_temperature ?? row.maxTemp,
-      max_temperature: row.continuous_use_temperature ?? row.maxTemp,
-      continuous_use_temperature: row.continuous_use_temperature ?? row.maxTemp,
+      maxTemp: row.max_temperature ?? row.continuous_use_temperature ?? row.maxTemp,
+      max_temperature: row.max_temperature ?? row.continuous_use_temperature ?? row.maxTemp,
+      continuous_use_temperature: row.continuous_use_temperature ?? row.max_temperature ?? row.maxTemp,
       tensile: row.tensile_strength ?? row.tensile,
       elongation: row.elongation,
       thermal_conductivity: row.thermal_conductivity,
       dielectric: row.dielectric_constant ?? row.dielectric,
       dielectric_constant: row.dielectric_constant ?? row.dielectric,
+      flame_rating: row.flame_rating ?? row.flammability,
+      electrical_insulation: row.electrical_insulation,
       chemical_resistance: row.chemical_resistance,
+      transparency: row.transparency,
+      flexibility: row.flexibility,
+      waterproof_sealing: row.waterproof_sealing,
       water_absorption: row.water_absorption,
       flammability: row.flammability,
       recyclability: row.recyclability ?? (row.recyclable ? "recyclable" : "not typically recyclable"),
@@ -42,7 +52,10 @@ function readMaterials(databasePath) {
       cost_level: row.cost_level,
       processing_methods: parseJsonList(row.processing_methods),
       typical_applications: parseJsonList(row.typical_applications),
-      applications: uses,
+      applications: parseJsonList(row.applications),
+      limitations: parseJsonList(row.limitations),
+      alternatives: parseJsonList(row.alternatives),
+      source_note: row.source_note,
       advantages: parseJsonList(row.advantages),
       disadvantages: parseJsonList(row.disadvantages),
       tags,
@@ -53,7 +66,7 @@ function readMaterials(databasePath) {
       description: row.summary,
       notes: row.notes
     };
-    material.state = inferState(material);
+    material.state = material.state || inferState(material);
     return material;
   });
 
