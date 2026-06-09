@@ -731,6 +731,65 @@ const zhTerms = {
   "food contact": "食品接触"
 };
 
+const zhDisplayTermMap = {
+  plastics: "\u5851\u6599",
+  plastic: "\u5851\u6599",
+  metals: "\u91d1\u5c5e",
+  metal: "\u91d1\u5c5e",
+  elastomers: "\u5f39\u6027\u4f53",
+  elastomer: "\u5f39\u6027\u4f53",
+  fibers: "\u7ea4\u7ef4",
+  fiber: "\u7ea4\u7ef4",
+  thermosets: "\u70ed\u56fa\u6027\u6750\u6599",
+  thermoset: "\u70ed\u56fa\u6027\u6750\u6599",
+  ceramics: "\u9676\u74f7",
+  ceramic: "\u9676\u74f7",
+  composites: "\u590d\u5408\u6750\u6599",
+  composite: "\u590d\u5408\u6750\u6599",
+  adhesives: "\u80f6\u7c98\u5242",
+  adhesive: "\u80f6\u7c98\u5242",
+  coatings: "\u6d82\u5c42",
+  coating: "\u6d82\u5c42",
+  foams: "\u6ce1\u6cab\u6750\u6599",
+  foam: "\u6ce1\u6cab\u6750\u6599",
+  glasses: "\u73bb\u7483",
+  glass: "\u73bb\u7483",
+  gears: "\u9f7f\u8f6e",
+  bearings: "\u8f74\u627f",
+  valves: "\u9600\u95e8",
+  springs: "\u5f39\u7c27",
+  rollers: "\u6eda\u8f6e",
+  "automotive seals": "\u6c7d\u8f66\u5bc6\u5c01\u4ef6",
+  "transmission seals": "\u4f20\u52a8\u5bc6\u5c01\u4ef6",
+  hoses: "\u8f6f\u7ba1",
+  "electronic housings": "\u7535\u5b50\u5916\u58f3",
+  "electronic housing": "\u7535\u5b50\u5916\u58f3",
+  "consumer products": "\u6d88\u8d39\u54c1",
+  electronics: "\u7535\u5b50\u4ea7\u54c1",
+  "automotive trim": "\u6c7d\u8f66\u5185\u9970\u4ef6",
+  "low friction": "\u4f4e\u6469\u64e6",
+  "wear resistant": "\u8010\u78e8",
+  "dimensional stability": "\u5c3a\u5bf8\u7a33\u5b9a",
+  machinable: "\u6613\u52a0\u5de5",
+  "high stiffness": "\u9ad8\u521a\u6027",
+  "fatigue resistant": "\u8010\u75b2\u52b3",
+  "oil resistant": "\u8010\u6cb9",
+  "heat resistant": "\u8010\u70ed",
+  "weather resistant": "\u8010\u5019",
+  conductive: "\u5bfc\u7535",
+  antistatic: "\u6297\u9759\u7535",
+  "flame retardant": "\u963b\u71c3",
+  "impact resistant": "\u6297\u51b2\u51fb"
+};
+
+const zhMaterialNameMap = {
+  "acetal copolymer": "\u5171\u805a\u7532\u919b",
+  "acetal homopolymer": "\u5747\u805a\u7532\u919b",
+  "acrylic rubber": "\u4e19\u70ef\u9178\u916f\u6a61\u80f6",
+  "abs resin": "ABS \u6811\u8102",
+  "acrylonitrile butadiene styrene": "\u4e19\u70ef\u8148-\u4e01\u4e8c\u70ef-\u82ef\u4e59\u70ef"
+};
+
 const performanceFilterGroups = [
   {
     id: "thermal",
@@ -942,13 +1001,19 @@ function t(key, ...args) {
   return typeof value === "function" ? value(...args) : value;
 }
 
+function normalizeDisplayKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 function localizeTerm(value) {
   return localizeTermFor(value, state.language);
 }
 
 function localizeTermFor(value, language) {
   if (language !== "zh") return value;
-  return zhTerms[value] || value;
+  if (!value) return value;
+  const text = String(value).trim();
+  return zhDisplayTermMap[normalizeDisplayKey(text)] || zhTerms[text] || value;
 }
 
 function numberValue(value) {
@@ -1051,7 +1116,8 @@ function materialName(item) {
 }
 
 function materialNameFor(item, language) {
-  return language === "zh" ? zhNames[item.id] || item.name : item.name;
+  if (language !== "zh") return item.name;
+  return zhMaterialNameMap[normalizeDisplayKey(item.name)] || item.name;
 }
 
 function materialCategory(item) {
@@ -1074,7 +1140,7 @@ function materialUsesFor(item, language) {
   return language === "zh" ? item.uses.map((use) => localizeTermFor(use, language)) : item.uses;
 }
 
-function materialSummary(item) {
+function legacyMaterialSummary(item) {
   if (state.language !== "zh") return item.summary;
   const uses = materialUses(item).slice(0, 3).join("、");
   return `${materialName(item)}属于${materialCategory(item)}，典型用途包括${uses || t("notSpecified")}，连续使用温度约 ${formatValue(item.maxTemp, " deg C")}。`;
@@ -1083,6 +1149,12 @@ function materialSummary(item) {
 function materialNotes(item) {
   if (state.language !== "zh") return item.notes;
   return `请结合工况、加工方式、长期载荷和环境介质进一步验证；本地数据库备注：${item.notes}`;
+}
+
+function materialSummary(item) {
+  if (state.language !== "zh") return item.summary;
+  const uses = materialUses(item).slice(0, 3).join("\u3001");
+  return `${materialName(item)}\u5c5e\u4e8e${materialCategory(item)}\uff0c\u5178\u578b\u7528\u9014\u5305\u62ec${uses || t("notSpecified")}\uff0c\u8fde\u7eed\u4f7f\u7528\u6e29\u5ea6\u7ea6 ${formatValue(item.maxTemp, " deg C")}\u3002`;
 }
 
 function localizeRecommendationReason(reason) {
