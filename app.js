@@ -4,7 +4,7 @@ const apiBaseUrl = String(window.MatFinderConfig?.apiBaseUrl || "").replace(/\/$
 
 const i18n = {
   zh: {
-    brandEyebrow: "本地材料数据库 + AI",
+    brandEyebrow: "高分子为核心的工程材料数据库 + AI",
     languageLabel: "语言",
     filtersToggle: "筛选",
     materialsUnit: "种材料",
@@ -28,7 +28,7 @@ const i18n = {
     resetButton: "重置",
     databaseLabel: "材料数据库",
     sortLabel: "排序",
-    allMaterials: "全部材料",
+    allMaterials: "全部记录",
     noMatches: "没有匹配的材料。",
     comparisonLabel: "材料对比",
     performanceSnapshot: "性能速览",
@@ -36,7 +36,7 @@ const i18n = {
     selectTwoMaterials: "选择两种材料",
     compareWithAi: "AI 对比",
     gptComparison: "GPT 对比",
-    aiCompareEmpty: "添加两种材料进行对比，即可基于本地数据集生成 GPT 对比。",
+    aiCompareEmpty: "添加两种材料进行对比，即可基于本地高分子为核心数据集生成 GPT 对比。",
     matchingMaterials: "个匹配材料",
     recommendedMaterials: "推荐材料",
     matchedRequirements: "匹配需求",
@@ -131,7 +131,7 @@ const i18n = {
     }
   },
   en: {
-    brandEyebrow: "Local Material Database + AI",
+    brandEyebrow: "Polymer-Centered Engineering Materials Database + AI",
     navHome: "Home",
     navMaterials: "Materials",
     navCompare: "Compare",
@@ -143,7 +143,7 @@ const i18n = {
     comparedUnit: "compared",
     homeHeroLabel: "MatFinder AI",
     homeHeroTitle: "AI-powered material selection assistant",
-    homeHeroBody: "Helps users find suitable engineering materials based on natural language requirements.",
+    homeHeroBody: "Focused on polymer engineering materials such as plastics, elastomers, and composites, with selected metals and other engineering materials for comparison.",
     startSelection: "Start Material Selection",
     homeStatMaterials: "materials",
     homeStatScoringValue: "Live",
@@ -170,8 +170,8 @@ const i18n = {
     copilotContextEmpty: "No material selected",
     copilotSend: "Ask",
     copilotPlaceholder: "Ask about recommendation reasons, advantages, limitations, or alternatives",
-    copilotEmpty: "Open a material detail from Home recommendations or the Materials Database, then use Copilot for follow-up questions about that real material record.",
-    copilotNoContext: "Open a material detail from Home or Materials Database first so I can answer from a real material record.",
+    copilotEmpty: "Open a material detail from Home recommendations or the polymer-centered library, then use Copilot for follow-up questions about that real material record.",
+    copilotNoContext: "Open a material detail from Home or the polymer-centered library first so I can answer from a real material record.",
     copilotDefaultQuestion: "How should I evaluate this material?",
     copilotContextPrefix: "Using",
     copilotWhyTitle: "Recommendation rationale",
@@ -188,14 +188,16 @@ const i18n = {
     analysisEmpty: "Open a material detail to make optional AI analysis available for that selected material.",
     keywordSearch: "Keyword search",
     searchPlaceholder: "Name, abbreviation, use, property",
-    materialsPageLabel: "Materials database",
-    materialsPageTitle: "Browse the material library",
-    materialsPageBody: "Search, filter, and compare material records from the local engineering database.",
+    materialsPageLabel: "Polymer-centered database",
+    materialsPageTitle: "Browse the polymer-centered engineering library",
+    materialsPageBody: "Search plastics, elastomers, thermosets, composites, adhesives, coatings, foams, and selected comparison references such as metals and ceramics.",
     catalogTotalMaterials: "Total materials",
     catalogCategories: "Categories",
     catalogTopCategory: "Largest category",
     materialCategory: "Material category",
     allCategories: "All categories",
+    polymerCategoryGroup: "Polymer materials",
+    otherCategoryGroup: "Other engineering materials",
     performanceFocus: "Performance focus",
     applicationDomain: "Application domain",
     allDomains: "All domains",
@@ -203,27 +205,27 @@ const i18n = {
     minimumStrength: "Minimum tensile strength",
     recyclableOnly: "Recyclable only",
     resetButton: "Reset",
-    databaseLabel: "Material Database",
+    databaseLabel: "Polymer-centered material database",
     sortLabel: "Sort",
-    allMaterials: "All materials",
+    allMaterials: "All records",
     noMatches: "No matching materials.",
     comparisonLabel: "Material Comparison",
     performanceSnapshot: "Performance snapshot",
     comparePageLabel: "Material comparison",
     comparePageTitle: "Build a side-by-side shortlist",
     comparePageBody: "Compare selected materials in one focused table without the database browser in the way.",
-    compareGuidance: "Select materials from Home or Materials Database to compare.",
+    compareGuidance: "Select materials from Home or the polymer-centered library to compare.",
     selectedMaterials: "Selected materials",
     compareEmptyTitle: "No materials selected yet",
-    compareEmptyBody: "Select materials from Home recommendation results or the Materials Database to build a comparison.",
+    compareEmptyBody: "Select materials from Home recommendation results or the polymer-centered library to build a comparison.",
     openHome: "Open Home",
-    browseMaterials: "Browse Materials",
+    browseMaterials: "Browse Library",
     remove: "Remove",
     aiComparisonLabel: "Contextual AI Comparison",
     selectTwoMaterials: "Select two materials",
     compareWithAi: "Compare with AI",
     gptComparison: "GPT comparison",
-    aiCompareEmpty: "Add two materials to Compare to generate a GPT comparison from the local dataset.",
+    aiCompareEmpty: "Add two materials to Compare to generate a GPT comparison from the local polymer-centered dataset.",
     matchingMaterials: "matching materials",
     recommendedMaterials: "Recommended Materials",
     matchedRequirements: "Matched requirements",
@@ -248,26 +250,26 @@ const i18n = {
     reportProject: "Project",
     reportNoWarnings: "No major unmatched requirement warnings were flagged by the scoring engine.",
     aboutLabel: "About MatFinder AI",
-    aboutTitle: "A focused workflow for early material selection",
-    aboutIntro: "MatFinder AI turns product requirements into ranked material candidates, explains the match, and produces a report you can review with engineering, sourcing, or suppliers.",
+    aboutTitle: "A polymer-centered workflow for early material selection",
+    aboutIntro: "MatFinder AI turns polymer-centered engineering requirements into ranked material candidates, explains the match, and produces a report you can review with engineering, sourcing, or suppliers.",
     aboutCategoriesUnit: "categories",
     aboutDatasetTitle: "Dataset",
     aboutProblemTitle: "Problem",
-    aboutProblemBody: "Early material selection is slow because requirements are written in natural language while material data lives in tables, datasheets, and supplier notes.",
+    aboutProblemBody: "Early polymer and engineering material selection is slow because requirements are written in natural language while grade data lives in tables, datasheets, and supplier notes.",
     aboutSolutionTitle: "Solution",
-    aboutSolutionBody: "MatFinder AI turns a plain-language requirement into a ranked shortlist, explains the match, supports comparison, and exports a selection brief.",
+    aboutSolutionBody: "MatFinder AI turns a plain-language requirement into a ranked shortlist for plastics, elastomers, composites, thermosets, adhesives, coatings, and foams, then keeps selected metals and other materials available as comparison references.",
     aboutEngineTitle: "Recommendation Logic",
     aboutEngineBody: "The engine parses Chinese and English requirements, detects performance needs, scores each material, and explains matched reasons and limitations.",
     aboutScoringOne: "Parse the requirement for material, performance, application, and constraint signals.",
-    aboutScoringTwo: "Match those signals against tags, properties, uses, and numeric thresholds in the local dataset.",
+    aboutScoringTwo: "Match those signals against polymer-centered tags, properties, uses, and numeric thresholds in the local dataset.",
     aboutScoringThree: "Rank candidates with explainable reasons, warnings, and similar alternatives.",
     aboutFeaturesTitle: "Key features",
     aboutFeatureOne: "Requirement-to-shortlist recommendation workflow.",
-    aboutFeatureTwo: "Searchable, filterable material catalog.",
+    aboutFeatureTwo: "Searchable, filterable polymer-centered material catalog.",
     aboutFeatureThree: "Side-by-side comparison for up to three materials.",
     aboutFeatureFour: "PDF-style report export for selection reviews.",
     aboutTrustTitle: "Current Limitations",
-    aboutTrustBody: "Scores are a screening aid, not a certification. Numeric fields are normalized from the local dataset and should be checked against supplier datasheets before final material selection.",
+    aboutTrustBody: "MatFinder AI is not trying to be a complete all-materials database. It is a screening aid for polymer-centered engineering materials; selected metal and ceramic records are retained as useful comparison references, and all final choices should be checked against supplier datasheets.",
     aboutValidationTitle: "Before final selection",
     aboutValidationOne: "Confirm grade-level datasheets and supplier availability.",
     aboutValidationTwo: "Validate processing method, environment, and long-term load.",
@@ -343,7 +345,7 @@ const i18n = {
     viewSource: "View source",
     noSources: "No source records are available for this material.",
     sourceOfTruth: "Source of truth",
-    sourceSingle: (name) => `GPT received only the local dataset entry for ${name}. Numeric properties and applications remain sourced from MatFinder's local material database.`,
+    sourceSingle: (name) => `GPT received only the local dataset entry for ${name}. Numeric properties and applications remain sourced from MatFinder's local dataset.`,
     sourcePair: (a, b) => `GPT received only the local dataset profiles for ${a} and ${b}. The standard comparison table remains unchanged.`,
     selectReady: (a, b) => `Ready to compare ${a} and ${b}. The existing comparison table above remains unchanged.`,
     sendingAnalysis: (name) => `Sending ${name} properties from the local database to GPT for explanation.`,
@@ -385,14 +387,14 @@ const zhDetailLabels = {
   navCompare: "\u6750\u6599\u5bf9\u6bd4",
   navCopilot: "AI \u52a9\u624b",
   navAbout: "\u5173\u4e8e",
-  brandEyebrow: "\u672c\u5730\u6750\u6599\u6570\u636e\u5e93 + AI",
+  brandEyebrow: "\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u5de5\u7a0b\u6750\u6599\u6570\u636e\u5e93 + AI",
   languageLabel: "\u8bed\u8a00",
   filtersToggle: "\u7b5b\u9009",
   materialsUnit: "\u79cd\u6750\u6599",
   comparedUnit: "\u4e2a\u5bf9\u6bd4",
   homeHeroLabel: "MatFinder AI",
   homeHeroTitle: "AI \u6750\u6599\u9009\u578b\u52a9\u624b",
-  homeHeroBody: "\u57fa\u4e8e\u81ea\u7136\u8bed\u8a00\u9700\u6c42\uff0c\u5e2e\u52a9\u7528\u6237\u5feb\u901f\u627e\u5230\u9002\u5408\u7684\u5de5\u7a0b\u6750\u6599\u3002",
+  homeHeroBody: "\u4e13\u6ce8\u5851\u6599\u3001\u5f39\u6027\u4f53\u3001\u590d\u5408\u6750\u6599\u7b49\u9ad8\u5206\u5b50\u5de5\u7a0b\u6750\u6599\uff0c\u5e76\u652f\u6301\u90e8\u5206\u91d1\u5c5e\u4e0e\u5176\u4ed6\u5de5\u7a0b\u6750\u6599\u7684\u5bf9\u6bd4\u5206\u6790\u3002",
   startSelection: "\u5f00\u59cb\u6750\u6599\u9009\u578b",
   homeStatMaterials: "\u6750\u6599\u6570\u636e",
   homeStatScoringValue: "\u52a8\u6001",
@@ -419,14 +421,16 @@ const zhDetailLabels = {
   analysisEmpty: "\u6253\u5f00\u6750\u6599\u8be6\u60c5\u540e\uff0c\u53ef\u4ee5\u5728\u8fd9\u91cc\u67e5\u770b\u8be5\u6750\u6599\u7684\u53ef\u9009 AI \u5206\u6790\u3002",
   keywordSearch: "\u5173\u952e\u8bcd\u641c\u7d22",
   searchPlaceholder: "\u540d\u79f0\u3001\u7f29\u5199\u3001\u7528\u9014\u3001\u6027\u80fd",
-  materialsPageLabel: "\u6750\u6599\u6570\u636e\u5e93",
-  materialsPageTitle: "\u6d4f\u89c8\u6750\u6599\u56fe\u4e66\u9986",
-  materialsPageBody: "\u641c\u7d22\u3001\u7b5b\u9009\u5e76\u5bf9\u6bd4\u672c\u5730\u5de5\u7a0b\u6750\u6599\u6570\u636e\u5e93\u4e2d\u7684\u6750\u6599\u8bb0\u5f55\u3002",
+  materialsPageLabel: "\u9ad8\u5206\u5b50\u6750\u6599\u6570\u636e\u5e93",
+  materialsPageTitle: "\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u5de5\u7a0b\u6750\u6599\u5e93",
+  materialsPageBody: "\u641c\u7d22\u3001\u7b5b\u9009\u5e76\u5bf9\u6bd4\u5851\u6599\u3001\u5f39\u6027\u4f53\u3001\u70ed\u56fa\u6027\u6750\u6599\u3001\u590d\u5408\u6750\u6599\u3001\u80f6\u7c98\u5242\u3001\u6d82\u5c42\u548c\u6ce1\u6cab\u6750\u6599\uff0c\u540c\u65f6\u4fdd\u7559\u90e8\u5206\u91d1\u5c5e\u4e0e\u5176\u4ed6\u5de5\u7a0b\u6750\u6599\u4f5c\u4e3a\u6a2a\u5411\u5bf9\u6bd4\u53c2\u8003\u3002",
   catalogTotalMaterials: "\u6750\u6599\u603b\u6570",
   catalogCategories: "\u6750\u6599\u7c7b\u522b",
   catalogTopCategory: "\u6700\u5927\u7c7b\u522b",
   materialCategory: "\u6750\u6599\u7c7b\u522b",
   allCategories: "\u5168\u90e8\u7c7b\u522b",
+  polymerCategoryGroup: "\u9ad8\u5206\u5b50\u6750\u6599",
+  otherCategoryGroup: "\u5176\u4ed6\u5de5\u7a0b\u6750\u6599",
   performanceFocus: "\u6027\u80fd\u91cd\u70b9",
   applicationDomain: "\u5e94\u7528\u9886\u57df",
   allDomains: "\u5168\u90e8\u9886\u57df",
@@ -434,16 +438,16 @@ const zhDetailLabels = {
   minimumStrength: "\u6700\u4f4e\u62c9\u4f38\u5f3a\u5ea6",
   recyclableOnly: "\u4ec5\u53ef\u56de\u6536",
   resetButton: "\u91cd\u7f6e",
-  databaseLabel: "\u6750\u6599\u6570\u636e\u5e93",
+  databaseLabel: "\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u5de5\u7a0b\u6750\u6599\u5e93",
   sortLabel: "\u6392\u5e8f",
-  allMaterials: "\u5168\u90e8\u6750\u6599",
+  allMaterials: "\u5168\u90e8\u8bb0\u5f55",
   noMatches: "\u6ca1\u6709\u5339\u914d\u7684\u6750\u6599\u3002",
   comparisonLabel: "\u6750\u6599\u5bf9\u6bd4",
   performanceSnapshot: "\u6027\u80fd\u901f\u89c8",
   selectTwoMaterials: "\u9009\u62e9\u4e24\u79cd\u6750\u6599",
   compareWithAi: "AI \u5bf9\u6bd4",
   gptComparison: "GPT \u5bf9\u6bd4",
-  aiCompareEmpty: "\u6dfb\u52a0\u4e24\u79cd\u6750\u6599\u8fdb\u884c\u5bf9\u6bd4\uff0c\u5373\u53ef\u57fa\u4e8e\u672c\u5730\u6570\u636e\u96c6\u751f\u6210 GPT \u5bf9\u6bd4\u3002",
+  aiCompareEmpty: "\u6dfb\u52a0\u4e24\u79cd\u6750\u6599\u8fdb\u884c\u5bf9\u6bd4\uff0c\u5373\u53ef\u57fa\u4e8e\u672c\u5730\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u6570\u636e\u96c6\u751f\u6210 GPT \u5bf9\u6bd4\u3002",
   matchingMaterials: "\u4e2a\u5339\u914d\u6750\u6599",
   recommendedMaterials: "\u63a8\u8350\u6750\u6599",
   matchedRequirements: "\u5339\u914d\u9700\u6c42",
@@ -559,8 +563,8 @@ const zhDetailLabels = {
   copilotContextEmpty: "\u5c1a\u672a\u9009\u62e9\u6750\u6599",
   copilotSend: "\u63d0\u95ee",
   copilotPlaceholder: "\u8be2\u95ee\u63a8\u8350\u539f\u56e0\u3001\u4f18\u52bf\u3001\u9650\u5236\u6216\u66ff\u4ee3\u6750\u6599",
-  copilotEmpty: "\u5148\u4ece\u9996\u9875\u63a8\u8350\u7ed3\u679c\u6216\u6750\u6599\u6570\u636e\u5e93\u6253\u5f00\u4e00\u4e2a\u6750\u6599\u8be6\u60c5\uff0c\u7136\u540e\u7528 Copilot \u8ffd\u95ee\u8be5\u6750\u6599\u7684\u4f18\u52bf\u3001\u9650\u5236\u6216\u66ff\u4ee3\u65b9\u6848\u3002",
-  copilotNoContext: "\u8bf7\u5148\u4ece\u9996\u9875\u6216\u6750\u6599\u6570\u636e\u5e93\u6253\u5f00\u4e00\u4e2a\u6750\u6599\u8be6\u60c5\uff0c\u6211\u624d\u80fd\u57fa\u4e8e\u771f\u5b9e\u6750\u6599\u6570\u636e\u56de\u7b54\u3002",
+  copilotEmpty: "\u5148\u4ece\u9996\u9875\u63a8\u8350\u7ed3\u679c\u6216\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u6750\u6599\u5e93\u6253\u5f00\u4e00\u4e2a\u6750\u6599\u8be6\u60c5\uff0c\u7136\u540e\u7528 Copilot \u8ffd\u95ee\u8be5\u6750\u6599\u7684\u4f18\u52bf\u3001\u9650\u5236\u6216\u66ff\u4ee3\u65b9\u6848\u3002",
+  copilotNoContext: "\u8bf7\u5148\u4ece\u9996\u9875\u6216\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u6750\u6599\u5e93\u6253\u5f00\u4e00\u4e2a\u6750\u6599\u8be6\u60c5\uff0c\u6211\u624d\u80fd\u57fa\u4e8e\u771f\u5b9e\u6750\u6599\u6570\u636e\u56de\u7b54\u3002",
   copilotDefaultQuestion: "\u5e94\u8be5\u5982\u4f55\u8bc4\u4f30\u8fd9\u79cd\u6750\u6599\uff1f",
   copilotContextPrefix: "\u5f53\u524d\u6750\u6599",
   copilotWhyTitle: "\u63a8\u8350\u7406\u7531",
@@ -586,35 +590,35 @@ const zhDetailLabels = {
   comparePageLabel: "\u6750\u6599\u5bf9\u6bd4",
   comparePageTitle: "\u5efa\u7acb\u5e76\u6392\u7684\u6750\u6599\u5019\u9009\u6e05\u5355",
   comparePageBody: "\u5728\u4e13\u95e8\u7684\u8868\u683c\u4e2d\u5bf9\u6bd4\u5df2\u9009\u6750\u6599\uff0c\u4e0d\u518d\u6df7\u5165\u6750\u6599\u5e93\u6d4f\u89c8\u5668\u3002",
-  compareGuidance: "\u8bf7\u4ece\u9996\u9875\u6216\u6750\u6599\u6570\u636e\u5e93\u9009\u62e9\u6750\u6599\u8fdb\u884c\u5bf9\u6bd4\u3002",
+  compareGuidance: "\u8bf7\u4ece\u9996\u9875\u6216\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u6750\u6599\u5e93\u9009\u62e9\u6750\u6599\u8fdb\u884c\u5bf9\u6bd4\u3002",
   selectedMaterials: "\u5df2\u9009\u6750\u6599",
   compareEmptyTitle: "\u5c1a\u672a\u9009\u62e9\u6750\u6599",
-  compareEmptyBody: "\u4ece\u9996\u9875\u63a8\u8350\u7ed3\u679c\u6216\u6750\u6599\u6570\u636e\u5e93\u9009\u62e9\u6750\u6599\uff0c\u5373\u53ef\u751f\u6210\u5bf9\u6bd4\u8868\u3002",
+  compareEmptyBody: "\u4ece\u9996\u9875\u63a8\u8350\u7ed3\u679c\u6216\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u6750\u6599\u5e93\u9009\u62e9\u6750\u6599\uff0c\u5373\u53ef\u751f\u6210\u5bf9\u6bd4\u8868\u3002",
   openHome: "\u6253\u5f00\u9996\u9875",
-  browseMaterials: "\u6d4f\u89c8\u6750\u6599\u5e93",
+  browseMaterials: "\u6d4f\u89c8\u9ad8\u5206\u5b50\u6750\u6599\u5e93",
   remove: "\u79fb\u9664",
   aiComparisonLabel: "\u4e0a\u4e0b\u6587 AI \u5bf9\u6bd4",
   aboutLabel: "\u5173\u4e8e MatFinder AI",
-  aboutTitle: "\u9762\u5411\u65e9\u671f\u9009\u6750\u7684\u805a\u7126\u5de5\u4f5c\u6d41",
-  aboutIntro: "MatFinder AI \u628a\u4ea7\u54c1\u9700\u6c42\u8f6c\u6210\u6750\u6599\u5019\u9009\u3001\u89e3\u91ca\u5339\u914d\u7406\u7531\uff0c\u5e76\u751f\u6210\u53ef\u4e0e\u5de5\u7a0b\u3001\u91c7\u8d2d\u6216\u4f9b\u5e94\u5546\u8ba8\u8bba\u7684\u9009\u578b\u62a5\u544a\u3002",
+  aboutTitle: "\u4ee5\u9ad8\u5206\u5b50\u6750\u6599\u4e3a\u6838\u5fc3\u7684\u65e9\u671f\u9009\u578b\u5de5\u4f5c\u6d41",
+  aboutIntro: "MatFinder AI \u9762\u5411\u9ad8\u5206\u5b50\u5de5\u7a0b\u6750\u6599\u9009\u578b\uff0c\u628a\u4ea7\u54c1\u9700\u6c42\u8f6c\u6210\u5019\u9009\u6750\u6599\u3001\u89e3\u91ca\u5339\u914d\u7406\u7531\uff0c\u5e76\u751f\u6210\u53ef\u4e0e\u5de5\u7a0b\u3001\u91c7\u8d2d\u6216\u4f9b\u5e94\u5546\u8ba8\u8bba\u7684\u9009\u578b\u62a5\u544a\u3002",
   aboutCategoriesUnit: "\u4e2a\u7c7b\u522b",
   aboutDatasetTitle: "\u6570\u636e\u96c6",
   aboutProblemTitle: "\u95ee\u9898",
-  aboutProblemBody: "\u65e9\u671f\u6750\u6599\u9009\u578b\u5f80\u5f80\u5f88\u6162\uff1a\u9700\u6c42\u662f\u81ea\u7136\u8bed\u8a00\uff0c\u800c\u6750\u6599\u6570\u636e\u5206\u6563\u5728\u8868\u683c\u3001\u6570\u636e\u8868\u548c\u4f9b\u5e94\u5546\u8bf4\u660e\u4e2d\u3002",
+  aboutProblemBody: "\u65e9\u671f\u9ad8\u5206\u5b50\u6750\u6599\u9009\u578b\u5f80\u5f80\u5f88\u6162\uff1a\u9700\u6c42\u662f\u81ea\u7136\u8bed\u8a00\uff0c\u800c\u5851\u6599\u3001\u5f39\u6027\u4f53\u3001\u590d\u5408\u6750\u6599\u7b49\u6570\u636e\u5206\u6563\u5728\u8868\u683c\u3001\u6570\u636e\u8868\u548c\u4f9b\u5e94\u5546\u8bf4\u660e\u4e2d\u3002",
   aboutSolutionTitle: "\u89e3\u51b3\u65b9\u6848",
-  aboutSolutionBody: "MatFinder AI \u5c06\u666e\u901a\u8bed\u8a00\u9700\u6c42\u8f6c\u6210\u6750\u6599\u5019\u9009\u6392\u540d\uff0c\u89e3\u91ca\u5339\u914d\u7406\u7531\uff0c\u652f\u6301\u5bf9\u6bd4\uff0c\u5e76\u5bfc\u51fa\u9009\u578b\u7b80\u62a5\u3002",
+  aboutSolutionBody: "MatFinder AI \u805a\u7126\u5851\u6599\u3001\u5f39\u6027\u4f53\u3001\u70ed\u56fa\u6027\u6750\u6599\u3001\u590d\u5408\u6750\u6599\u3001\u80f6\u7c98\u5242\u3001\u6d82\u5c42\u548c\u6ce1\u6cab\u6750\u6599\u7684\u65e9\u671f\u7b5b\u9009\uff0c\u540c\u65f6\u4fdd\u7559\u90e8\u5206\u91d1\u5c5e\u3001\u9676\u74f7\u7b49\u5de5\u7a0b\u6750\u6599\u4f5c\u4e3a\u6a2a\u5411\u5bf9\u6bd4\u53c2\u8003\u3002",
   aboutEngineTitle: "\u63a8\u8350\u903b\u8f91",
   aboutEngineBody: "\u5f15\u64ce\u652f\u6301\u4e2d\u82f1\u6587\u9700\u6c42\u89e3\u6790\uff0c\u8bc6\u522b\u6027\u80fd\u9700\u6c42\uff0c\u4e3a\u6750\u6599\u6253\u5206\uff0c\u5e76\u89e3\u91ca\u5339\u914d\u539f\u56e0\u548c\u9650\u5236\u3002",
   aboutScoringOne: "\u89e3\u6790\u9700\u6c42\u4e2d\u7684\u6750\u6599\u3001\u6027\u80fd\u3001\u5e94\u7528\u548c\u9650\u5236\u4fe1\u53f7\u3002",
-  aboutScoringTwo: "\u5c06\u8fd9\u4e9b\u4fe1\u53f7\u4e0e\u672c\u5730\u6570\u636e\u96c6\u7684\u6807\u7b7e\u3001\u5c5e\u6027\u3001\u7528\u9014\u548c\u6570\u503c\u9608\u503c\u5339\u914d\u3002",
+  aboutScoringTwo: "\u5c06\u8fd9\u4e9b\u4fe1\u53f7\u4e0e\u672c\u5730\u9ad8\u5206\u5b50\u6750\u6599\u4e3a\u6838\u5fc3\u7684\u6570\u636e\u96c6\u4e2d\u7684\u6807\u7b7e\u3001\u5c5e\u6027\u3001\u7528\u9014\u548c\u6570\u503c\u9608\u503c\u5339\u914d\u3002",
   aboutScoringThree: "\u4f7f\u7528\u53ef\u89e3\u91ca\u7684\u539f\u56e0\u3001\u8b66\u544a\u548c\u76f8\u4f3c\u66ff\u4ee3\u6750\u6599\u5bf9\u5019\u9009\u8fdb\u884c\u6392\u540d\u3002",
   aboutFeaturesTitle: "\u6838\u5fc3\u529f\u80fd",
   aboutFeatureOne: "\u4ece\u9700\u6c42\u5230\u5019\u9009\u6e05\u5355\u7684\u63a8\u8350\u5de5\u4f5c\u6d41\u3002",
-  aboutFeatureTwo: "\u53ef\u641c\u7d22\u3001\u53ef\u7b5b\u9009\u7684\u6750\u6599\u76ee\u5f55\u3002",
+  aboutFeatureTwo: "\u53ef\u641c\u7d22\u3001\u53ef\u7b5b\u9009\u7684\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u6750\u6599\u76ee\u5f55\u3002",
   aboutFeatureThree: "\u6700\u591a\u4e09\u79cd\u6750\u6599\u7684\u5e76\u6392\u5bf9\u6bd4\u3002",
   aboutFeatureFour: "\u9762\u5411\u9009\u578b\u8bc4\u5ba1\u7684 PDF \u5f0f\u62a5\u544a\u5bfc\u51fa\u3002",
   aboutTrustTitle: "\u5f53\u524d\u5c40\u9650",
-  aboutTrustBody: "\u5206\u6570\u662f\u7b5b\u9009\u8f85\u52a9\uff0c\u4e0d\u662f\u8ba4\u8bc1\u7ed3\u8bba\u3002\u6570\u503c\u5b57\u6bb5\u6765\u81ea\u672c\u5730\u6570\u636e\u96c6\u5e76\u7ecf\u8fc7\u5f52\u4e00\u5316\uff0c\u6700\u7ec8\u9009\u578b\u524d\u5e94\u6838\u5bf9\u4f9b\u5e94\u5546\u6570\u636e\u8868\u3002",
+  aboutTrustBody: "MatFinder AI \u4e0d\u662f\u5b8c\u6574\u5168\u6750\u6599\u6570\u636e\u5e93\uff0c\u800c\u662f\u9762\u5411\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u5de5\u7a0b\u6750\u6599\u7684\u7b5b\u9009\u8f85\u52a9\u5de5\u5177\u3002\u73b0\u6709\u91d1\u5c5e\u548c\u9676\u74f7\u7b49\u8bb0\u5f55\u4f1a\u4fdd\u7559\uff0c\u7528\u4f5c\u8de8\u6750\u6599\u5bf9\u6bd4\u53c2\u8003\uff1b\u6700\u7ec8\u9009\u578b\u4ecd\u9700\u6838\u5bf9\u4f9b\u5e94\u5546\u6570\u636e\u8868\u3002",
   aboutValidationTitle: "\u6700\u7ec8\u9009\u578b\u524d",
   aboutValidationOne: "\u786e\u8ba4\u724c\u53f7\u7ea7\u6570\u636e\u8868\u548c\u4f9b\u5e94\u53ef\u5f97\u6027\u3002",
   aboutValidationTwo: "\u9a8c\u8bc1\u52a0\u5de5\u65b9\u5f0f\u3001\u4f7f\u7528\u73af\u5883\u548c\u957f\u671f\u8f7d\u8377\u3002",
@@ -750,6 +754,8 @@ const zhDisplayTermMap = {
   adhesive: "\u80f6\u7c98\u5242",
   coatings: "\u6d82\u5c42",
   coating: "\u6d82\u5c42",
+  sealants: "\u5bc6\u5c01\u80f6",
+  sealant: "\u5bc6\u5c01\u80f6",
   foams: "\u6ce1\u6cab\u6750\u6599",
   foam: "\u6ce1\u6cab\u6750\u6599",
   glasses: "\u73bb\u7483",
@@ -993,6 +999,19 @@ const elements = {
 
 let categories = [];
 
+const polymerCategoryOrder = [
+  "Plastics",
+  "Elastomers",
+  "Thermosets",
+  "Composites",
+  "Fibers",
+  "Adhesives",
+  "Coatings",
+  "Foams",
+  "Sealants"
+];
+const comparisonCategoryOrder = ["Metals", "Ceramics", "Glasses"];
+
 function t(key, ...args) {
   if (state.language === "zh" && Object.hasOwn(zhDetailLabels, key)) {
     return zhDetailLabels[key];
@@ -1232,10 +1251,7 @@ function applyLanguage() {
   elements.emptyState.textContent = t("noMatches");
   elements.runAiCompareButton.textContent = t("compareWithAi");
 
-  const categoryOptions = elements.categoryFilter.querySelectorAll("option");
-  categoryOptions.forEach((option) => {
-    option.textContent = option.value === "all" ? t("allCategories") : localizeTerm(option.value);
-  });
+  renderCategoryOptions();
 
   renderLegacyPropertyOptions();
   renderPropertyFacets();
@@ -1277,6 +1293,52 @@ function rerenderActiveAnalysis() {
 
 function getLanguageCacheKey(id) {
   return `${state.language}:${id}`;
+}
+
+function renderCategoryOptions() {
+  if (!elements.categoryFilter) return;
+  const selectedValue = state.category;
+  const fragment = document.createDocumentFragment();
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = t("allCategories");
+  allOption.selected = selectedValue === "all";
+  fragment.append(allOption);
+
+  const remaining = new Set(categories);
+  const appendGroup = (label, orderedCategories) => {
+    const groupCategories = orderedCategories.filter((category) => remaining.has(category));
+    if (!groupCategories.length) return;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    groupCategories.forEach((category) => {
+      remaining.delete(category);
+      group.append(createCategoryOption(category, selectedValue));
+    });
+    fragment.append(group);
+  };
+
+  appendGroup(t("polymerCategoryGroup"), polymerCategoryOrder);
+  appendGroup(t("otherCategoryGroup"), comparisonCategoryOrder);
+
+  if (remaining.size) {
+    const group = document.createElement("optgroup");
+    group.label = t("otherCategoryGroup");
+    [...remaining].sort((a, b) => a.localeCompare(b)).forEach((category) => {
+      group.append(createCategoryOption(category, selectedValue));
+    });
+    fragment.append(group);
+  }
+
+  elements.categoryFilter.replaceChildren(fragment);
+}
+
+function createCategoryOption(category, selectedValue) {
+  const option = document.createElement("option");
+  option.value = category;
+  option.textContent = localizeTerm(category);
+  option.selected = selectedValue === category;
+  return option;
 }
 
 function renderLegacyPropertyOptions() {
@@ -1429,13 +1491,7 @@ async function init() {
   await loadMaterials();
   recommendationService = window.MatFinderAI.createRecommendationService({ materials });
   categories = [...new Set(materials.map((material) => material.category))].sort((a, b) => a.localeCompare(b));
-
-  categories.forEach((category) => {
-    const option = document.createElement("option");
-    option.value = category;
-    option.textContent = localizeTerm(category);
-    elements.categoryFilter.append(option);
-  });
+  renderCategoryOptions();
 
   elements.totalCount.textContent = materials.length;
   elements.homeMaterialCount.textContent = materials.length;
