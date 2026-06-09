@@ -1175,6 +1175,49 @@ output {
   margin-top: 0;
 }
 
+@media (min-width: 901px) {
+  body.route-materials {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  body.route-materials .app-shell {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 18px;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.route-materials .topbar,
+  body.route-materials .catalog-hero,
+  body.route-materials .catalog-layout {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  body.route-materials .catalog-layout {
+    align-items: stretch;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.route-materials .filters,
+  body.route-materials .workspace {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  body.route-materials .filters {
+    position: static;
+    align-self: stretch;
+  }
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

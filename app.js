@@ -1401,6 +1401,9 @@ function setRoute(route, options = {}) {
 }
 
 function renderRoute() {
+  document.body.dataset.route = state.route;
+  document.body.classList.toggle("route-materials", state.route === "materials");
+
   const routeTitles = {
     home: "MatFinder AI",
     materials: `${t("navMaterials")} - MatFinder AI`,
