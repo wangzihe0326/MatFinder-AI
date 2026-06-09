@@ -1,19 +1,19 @@
 {
   "database": "C:\\Users\\35766\\Documents\\New project\\matfinder.db",
-  "generated_at": "2026-06-09T02:28:02.800Z",
+  "generated_at": "2026-06-09T08:37:14.874Z",
   "total_materials": 7531,
   "category_statistics": {
-    "Plastics": 1465,
-    "Coatings": 494,
-    "Foams": 410,
-    "Elastomers": 869,
-    "Fibers": 589,
-    "Adhesives": 517,
-    "Composites": 356,
+    "Plastics": 1694,
+    "Fibers": 491,
+    "Elastomers": 775,
+    "Coatings": 490,
+    "Adhesives": 506,
     "Thermosets": 635,
-    "Sealants": 390,
     "Metals": 1315,
-    "Ceramics": 491
+    "Composites": 354,
+    "Foams": 406,
+    "Ceramics": 491,
+    "Sealants": 374
   },
   "subcategory_statistics": {
     "Commodity plastic": 371,
@@ -153,30 +153,6 @@
   "representative_entries_by_category": {
     "Adhesives": [
       {
-        "id": "eva",
-        "name": "Ethylene vinyl acetate",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "shoe foam",
-          "solar encapsulant",
-          "hot-melt adhesive",
-          "packaging film"
-        ]
-      },
-      {
-        "id": "sbs",
-        "name": "Styrene butadiene styrene",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "footwear",
-          "bitumen modification",
-          "pressure-sensitive adhesives",
-          "impact modifiers"
-        ]
-      },
-      {
         "id": "epoxy",
         "name": "Epoxy resin",
         "grade_name": "Generic family screening grade",
@@ -210,6 +186,30 @@
           "molded parts",
           "electrical fittings",
           "coatings"
+        ]
+      },
+      {
+        "id": "thermosets-bisphenol-a-epoxy",
+        "name": "Bisphenol A epoxy",
+        "grade_name": "Generic family screening grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "adhesives",
+          "composites",
+          "potting",
+          "coatings"
+        ]
+      },
+      {
+        "id": "thermosets-novolac-epoxy",
+        "name": "Novolac epoxy",
+        "grade_name": "Generic family screening grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "chemical coatings",
+          "laminates",
+          "adhesives",
+          "encapsulation"
         ]
       }
     ],
@@ -277,30 +277,6 @@
     ],
     "Coatings": [
       {
-        "id": "ldpe",
-        "name": "Low-density polyethylene",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "film",
-          "tubing",
-          "wire coating",
-          "packaging"
-        ]
-      },
-      {
-        "id": "pi",
-        "name": "Polyimide",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "flex circuits",
-          "aerospace insulation",
-          "high-temperature tape",
-          "precision spacers"
-        ]
-      },
-      {
         "id": "etfe",
         "name": "Ethylene tetrafluoroethylene",
         "grade_name": "Generic family screening grade",
@@ -335,33 +311,33 @@
           "coatings",
           "molded electrical parts"
         ]
+      },
+      {
+        "id": "high-performance-polymers-ectfe-coating-grade",
+        "name": "ECTFE coating grade",
+        "grade_name": "ECTFE coating grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "chemical vessel linings",
+          "coatings",
+          "wire jackets",
+          "films"
+        ]
+      },
+      {
+        "id": "thermosets-silicone-resin",
+        "name": "Silicone resin",
+        "grade_name": "Generic family screening grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "high-temperature coatings",
+          "electrical varnish",
+          "mold release",
+          "binders"
+        ]
       }
     ],
     "Composites": [
-      {
-        "id": "pekk",
-        "name": "Polyetherketoneketone",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "aerospace composites",
-          "3D printing",
-          "high-temperature brackets",
-          "medical devices"
-        ]
-      },
-      {
-        "id": "thermoplastics-polyvinyl-fluoride",
-        "name": "Polyvinyl fluoride",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "architectural films",
-          "solar backsheets",
-          "aircraft interiors",
-          "protective laminates"
-        ]
-      },
       {
         "id": "high-performance-polymers-peek-composite-tape",
         "name": "PEEK composite tape",
@@ -397,21 +373,33 @@
           "ducting",
           "brackets"
         ]
+      },
+      {
+        "id": "composites-carbon-fiber-peek-composite",
+        "name": "Carbon fiber PEEK composite",
+        "grade_name": "Carbon fiber PEEK composite",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "aircraft brackets",
+          "clips",
+          "medical devices",
+          "oilfield components"
+        ]
+      },
+      {
+        "id": "composites-glass-fiber-pps-composite",
+        "name": "Glass fiber PPS composite",
+        "grade_name": "Glass fiber PPS composite",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "aircraft interiors",
+          "ducting",
+          "electrical parts",
+          "panels"
+        ]
       }
     ],
     "Elastomers": [
-      {
-        "id": "abs",
-        "name": "Acrylonitrile butadiene styrene",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "electronics housings",
-          "automotive trim",
-          "consumer products",
-          "office equipment"
-        ]
-      },
       {
         "id": "tpu",
         "name": "Thermoplastic polyurethane",
@@ -422,6 +410,18 @@
           "hoses",
           "phone cases",
           "film"
+        ]
+      },
+      {
+        "id": "eva",
+        "name": "Ethylene vinyl acetate",
+        "grade_name": "Generic family screening grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "shoe foam",
+          "solar encapsulant",
+          "hot-melt adhesive",
+          "packaging film"
         ]
       },
       {
@@ -449,31 +449,19 @@
         ]
       },
       {
-        "id": "san",
-        "name": "Styrene acrylonitrile",
+        "id": "tpee",
+        "name": "Thermoplastic polyester elastomer",
         "grade_name": "Generic family screening grade",
         "supplier_or_brand": "Generic / multiple suppliers",
         "applications": [
-          "cosmetic packaging",
-          "kitchenware",
-          "appliance parts",
-          "containers"
+          "boots",
+          "hoses",
+          "cable jackets",
+          "automotive flex parts"
         ]
       }
     ],
     "Fibers": [
-      {
-        "id": "pet",
-        "name": "Polyethylene terephthalate",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "bottles",
-          "film",
-          "fibers",
-          "electrical parts"
-        ]
-      },
       {
         "id": "pla",
         "name": "Polylactic acid",
@@ -487,30 +475,6 @@
         ]
       },
       {
-        "id": "pa610",
-        "name": "Polyamide 610",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "brush filaments",
-          "tubing",
-          "cable ties",
-          "consumer goods"
-        ]
-      },
-      {
-        "id": "pa612",
-        "name": "Polyamide 612",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "tubing",
-          "cable jackets",
-          "monofilaments",
-          "industrial parts"
-        ]
-      },
-      {
         "id": "pef",
         "name": "Polyethylene furanoate",
         "grade_name": "Generic family screening grade",
@@ -521,45 +485,43 @@
           "films",
           "fibers"
         ]
+      },
+      {
+        "id": "pga",
+        "name": "Polyglycolic acid",
+        "grade_name": "Generic family screening grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "absorbable sutures",
+          "barrier packaging",
+          "medical devices",
+          "fibers"
+        ]
+      },
+      {
+        "id": "gen-fluoropolymer-ethylene-tetrafluoroethylene-glass-fiber-10-reinforced-grade",
+        "name": "Ethylene tetrafluoroethylene glass fiber 10% reinforced grade",
+        "grade_name": "Ethylene tetrafluoroethylene glass fiber 10% reinforced grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "architectural film",
+          "wire coating",
+          "耐候薄膜"
+        ]
+      },
+      {
+        "id": "gen-fluoropolymer-ethylene-tetrafluoroethylene-glass-fiber-20-reinforced-grade",
+        "name": "Ethylene tetrafluoroethylene glass fiber 20% reinforced grade",
+        "grade_name": "Ethylene tetrafluoroethylene glass fiber 20% reinforced grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "architectural film",
+          "wire coating",
+          "耐候薄膜"
+        ]
       }
     ],
     "Foams": [
-      {
-        "id": "ps",
-        "name": "Polystyrene",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "clear boxes",
-          "foam packaging",
-          "appliance housings",
-          "labware"
-        ]
-      },
-      {
-        "id": "thermoplastics-polymethyl-methacrylimide-foam",
-        "name": "Polymethyl methacrylimide foam",
-        "grade_name": "Polymethyl methacrylimide foam",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "aerospace sandwich cores",
-          "radomes",
-          "marine panels",
-          "sports equipment"
-        ]
-      },
-      {
-        "id": "thermoplastics-thermoplastic-starch",
-        "name": "Thermoplastic starch",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "compostable packaging",
-          "loose-fill foam",
-          "bags",
-          "blends"
-        ]
-      },
       {
         "id": "thermosets-rigid-polyurethane-foam",
         "name": "Rigid polyurethane foam",
@@ -582,6 +544,40 @@
           "mattresses",
           "packaging foam",
           "acoustic foam"
+        ]
+      },
+      {
+        "id": "composites-foam-core-pvc-composite",
+        "name": "Foam core PVC composite",
+        "grade_name": "Foam core PVC composite",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "boat hulls",
+          "wind blades",
+          "panels",
+          "transport structures"
+        ]
+      },
+      {
+        "id": "composites-pet-foam-core",
+        "name": "PET foam core",
+        "grade_name": "PET foam core",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "wind blades",
+          "marine panels",
+          "transport panels",
+          "building panels"
+        ]
+      },
+      {
+        "id": "gen-foams-rigid-polyurethane-foam-low-density-grade",
+        "name": "Rigid polyurethane foam low density grade",
+        "grade_name": "Rigid polyurethane foam low density grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "insulation panels",
+          "冷库保温"
         ]
       }
     ],
@@ -661,6 +657,18 @@
         ]
       },
       {
+        "id": "ldpe",
+        "name": "Low-density polyethylene",
+        "grade_name": "Generic family screening grade",
+        "supplier_or_brand": "Generic / multiple suppliers",
+        "applications": [
+          "film",
+          "tubing",
+          "wire coating",
+          "packaging"
+        ]
+      },
+      {
         "id": "pp",
         "name": "Polypropylene",
         "grade_name": "Generic family screening grade",
@@ -685,89 +693,67 @@
         ]
       },
       {
-        "id": "pbt",
-        "name": "Polybutylene terephthalate",
+        "id": "ps",
+        "name": "Polystyrene",
         "grade_name": "Generic family screening grade",
         "supplier_or_brand": "Generic / multiple suppliers",
         "applications": [
-          "connectors",
-          "relay housings",
-          "sensors",
-          "automotive electrical parts"
-        ]
-      },
-      {
-        "id": "pc",
-        "name": "Polycarbonate",
-        "grade_name": "Generic family screening grade",
-        "supplier_or_brand": "Generic / multiple suppliers",
-        "applications": [
-          "protective windows",
-          "optical lenses",
-          "electrical housings",
-          "medical devices"
+          "clear boxes",
+          "foam packaging",
+          "appliance housings",
+          "labware"
         ]
       }
     ],
     "Sealants": [
       {
-        "id": "thermoplastics-ethylene-butyl-acrylate",
-        "name": "Ethylene butyl acrylate",
-        "grade_name": "Generic family screening grade",
+        "id": "gen-foams-silicone-foam-low-density-grade",
+        "name": "Silicone foam low density grade",
+        "grade_name": "Silicone foam low density grade",
         "supplier_or_brand": "Generic / multiple suppliers",
         "applications": [
-          "seal layers",
-          "flexible packaging",
-          "polymer modification",
-          "wire coating"
+          "fire seals",
+          "电池缓冲"
         ]
       },
       {
-        "id": "elastomers-polysulfide-rubber",
-        "name": "Polysulfide rubber",
-        "grade_name": "Generic family screening grade",
+        "id": "gen-foams-silicone-foam-medium-density-grade",
+        "name": "Silicone foam medium density grade",
+        "grade_name": "Silicone foam medium density grade",
         "supplier_or_brand": "Generic / multiple suppliers",
         "applications": [
-          "aircraft sealants",
-          "construction sealants",
-          "fuel tank sealants",
-          "gaskets"
+          "fire seals",
+          "电池缓冲"
         ]
       },
       {
-        "id": "gen-rubber-natural-rubber-food-contact-sealing-grade",
-        "name": "Natural rubber food contact sealing grade",
-        "grade_name": "Generic family screening grade",
+        "id": "gen-foams-silicone-foam-high-density-load-bearing-grade",
+        "name": "Silicone foam high density load-bearing grade",
+        "grade_name": "Silicone foam high density load-bearing grade",
         "supplier_or_brand": "Generic / multiple suppliers",
         "applications": [
-          "vibration mounts",
-          "tires",
-          "减震件",
-          "food seals"
+          "fire seals",
+          "电池缓冲"
         ]
       },
       {
-        "id": "gen-rubber-styrene-butadiene-rubber-food-contact-sealing-grade",
-        "name": "Styrene butadiene rubber food contact sealing grade",
-        "grade_name": "Generic family screening grade",
+        "id": "gen-foams-silicone-foam-flame-retardant-grade",
+        "name": "Silicone foam flame retardant grade",
+        "grade_name": "Silicone foam flame retardant grade",
         "supplier_or_brand": "Generic / multiple suppliers",
         "applications": [
-          "tires",
-          "shoe soles",
-          "轮胎",
-          "food seals"
+          "fire seals",
+          "电池缓冲"
         ]
       },
       {
-        "id": "gen-rubber-nitrile-rubber-food-contact-sealing-grade",
-        "name": "Nitrile rubber food contact sealing grade",
-        "grade_name": "Generic family screening grade",
+        "id": "gen-foams-silicone-foam-closed-cell-waterproof-grade",
+        "name": "Silicone foam closed cell waterproof grade",
+        "grade_name": "Silicone foam closed cell waterproof grade",
         "supplier_or_brand": "Generic / multiple suppliers",
         "applications": [
-          "seals",
-          "gaskets",
-          "密封件",
-          "fuel hoses"
+          "fire seals",
+          "电池缓冲"
         ]
       }
     ],

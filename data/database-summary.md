@@ -1,6 +1,6 @@
 # MatFinder Database Summary
 
-Generated: 2026-06-09T02:28:02.800Z
+Generated: 2026-06-09T08:37:14.874Z
 Database: matfinder.db
 Total materials: 7531
 
@@ -8,17 +8,17 @@ Total materials: 7531
 
 | Category | Count |
 | --- | --- |
-| Plastics | 1465 |
+| Plastics | 1694 |
 | Metals | 1315 |
-| Elastomers | 869 |
+| Elastomers | 775 |
 | Thermosets | 635 |
-| Fibers | 589 |
-| Adhesives | 517 |
-| Coatings | 494 |
+| Adhesives | 506 |
+| Fibers | 491 |
 | Ceramics | 491 |
-| Foams | 410 |
-| Sealants | 390 |
-| Composites | 356 |
+| Coatings | 490 |
+| Foams | 406 |
+| Sealants | 374 |
+| Composites | 354 |
 
 ## Commercial Coverage
 
@@ -62,11 +62,11 @@ Total materials: 7531
 
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
-| Ethylene vinyl acetate | Generic family screening grade | Generic / multiple suppliers | shoe foam; solar encapsulant; hot-melt adhesive; packaging film |
-| Styrene butadiene styrene | Generic family screening grade | Generic / multiple suppliers | footwear; bitumen modification; pressure-sensitive adhesives; impact modifiers |
 | Epoxy resin | Generic family screening grade | Generic / multiple suppliers | composites; adhesives; encapsulation; coatings |
 | Phenolic resin | Generic family screening grade | Generic / multiple suppliers | electrical laminates; brake components; molded handles; adhesives |
 | Urea formaldehyde | Generic family screening grade | Generic / multiple suppliers | wood adhesives; molded parts; electrical fittings; coatings |
+| Bisphenol A epoxy | Generic family screening grade | Generic / multiple suppliers | adhesives; composites; potting; coatings |
+| Novolac epoxy | Generic family screening grade | Generic / multiple suppliers | chemical coatings; laminates; adhesives; encapsulation |
 
 ### Ceramics
 
@@ -82,51 +82,51 @@ Total materials: 7531
 
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
-| Low-density polyethylene | Generic family screening grade | Generic / multiple suppliers | film; tubing; wire coating; packaging |
-| Polyimide | Generic family screening grade | Generic / multiple suppliers | flex circuits; aerospace insulation; high-temperature tape; precision spacers |
 | Ethylene tetrafluoroethylene | Generic family screening grade | Generic / multiple suppliers | architectural film; wire coating; chemical parts; solar panel films |
 | Ethylene chlorotrifluoroethylene | Generic family screening grade | Generic / multiple suppliers | chemical linings; wire jackets; films; coatings |
 | Melamine formaldehyde | Generic family screening grade | Generic / multiple suppliers | laminates; tableware; coatings; molded electrical parts |
+| ECTFE coating grade | ECTFE coating grade | Generic / multiple suppliers | chemical vessel linings; coatings; wire jackets; films |
+| Silicone resin | Generic family screening grade | Generic / multiple suppliers | high-temperature coatings; electrical varnish; mold release; binders |
 
 ### Composites
 
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
-| Polyetherketoneketone | Generic family screening grade | Generic / multiple suppliers | aerospace composites; 3D printing; high-temperature brackets; medical devices |
-| Polyvinyl fluoride | Generic family screening grade | Generic / multiple suppliers | architectural films; solar backsheets; aircraft interiors; protective laminates |
 | PEEK composite tape | Generic family screening grade | Generic / multiple suppliers | aerospace laminates; consolidated panels; brackets; reinforcements |
 | PEKK composite tape | Generic family screening grade | Generic / multiple suppliers | aircraft structures; clips; brackets; laminates |
 | PPS composite tape | Generic family screening grade | Generic / multiple suppliers | aircraft interiors; panels; ducting; brackets |
+| Carbon fiber PEEK composite | Carbon fiber PEEK composite | Generic / multiple suppliers | aircraft brackets; clips; medical devices; oilfield components |
+| Glass fiber PPS composite | Glass fiber PPS composite | Generic / multiple suppliers | aircraft interiors; ducting; electrical parts; panels |
 
 ### Elastomers
 
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
-| Acrylonitrile butadiene styrene | Generic family screening grade | Generic / multiple suppliers | electronics housings; automotive trim; consumer products; office equipment |
 | Thermoplastic polyurethane | Generic family screening grade | Generic / multiple suppliers | footwear; hoses; phone cases; film |
+| Ethylene vinyl acetate | Generic family screening grade | Generic / multiple suppliers | shoe foam; solar encapsulant; hot-melt adhesive; packaging film |
 | Ethylene propylene diene rubber | Generic family screening grade | Generic / multiple suppliers | automotive seals; roofing membranes; hoses; gaskets |
 | Silicone rubber | Generic family screening grade | Generic / multiple suppliers | seals; medical tubing; keypads; bakeware |
-| Styrene acrylonitrile | Generic family screening grade | Generic / multiple suppliers | cosmetic packaging; kitchenware; appliance parts; containers |
+| Thermoplastic polyester elastomer | Generic family screening grade | Generic / multiple suppliers | boots; hoses; cable jackets; automotive flex parts |
 
 ### Fibers
 
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
-| Polyethylene terephthalate | Generic family screening grade | Generic / multiple suppliers | bottles; film; fibers; electrical parts |
 | Polylactic acid | Generic family screening grade | Generic / multiple suppliers | packaging; 3D printing filament; disposable foodware; fibers |
-| Polyamide 610 | Generic family screening grade | Generic / multiple suppliers | brush filaments; tubing; cable ties; consumer goods |
-| Polyamide 612 | Generic family screening grade | Generic / multiple suppliers | tubing; cable jackets; monofilaments; industrial parts |
 | Polyethylene furanoate | Generic family screening grade | Generic / multiple suppliers | bottles; barrier packaging; films; fibers |
+| Polyglycolic acid | Generic family screening grade | Generic / multiple suppliers | absorbable sutures; barrier packaging; medical devices; fibers |
+| Ethylene tetrafluoroethylene glass fiber 10% reinforced grade | Ethylene tetrafluoroethylene glass fiber 10% reinforced grade | Generic / multiple suppliers | architectural film; wire coating; 耐候薄膜 |
+| Ethylene tetrafluoroethylene glass fiber 20% reinforced grade | Ethylene tetrafluoroethylene glass fiber 20% reinforced grade | Generic / multiple suppliers | architectural film; wire coating; 耐候薄膜 |
 
 ### Foams
 
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
-| Polystyrene | Generic family screening grade | Generic / multiple suppliers | clear boxes; foam packaging; appliance housings; labware |
-| Polymethyl methacrylimide foam | Polymethyl methacrylimide foam | Generic / multiple suppliers | aerospace sandwich cores; radomes; marine panels; sports equipment |
-| Thermoplastic starch | Generic family screening grade | Generic / multiple suppliers | compostable packaging; loose-fill foam; bags; blends |
 | Rigid polyurethane foam | Rigid polyurethane foam | Generic / multiple suppliers | building insulation; refrigeration panels; sandwich panels; buoyancy |
 | Flexible polyurethane foam | Flexible polyurethane foam | Generic / multiple suppliers | seating; mattresses; packaging foam; acoustic foam |
+| Foam core PVC composite | Foam core PVC composite | Generic / multiple suppliers | boat hulls; wind blades; panels; transport structures |
+| PET foam core | PET foam core | Generic / multiple suppliers | wind blades; marine panels; transport panels; building panels |
+| Rigid polyurethane foam low density grade | Rigid polyurethane foam low density grade | Generic / multiple suppliers | insulation panels; 冷库保温 |
 
 ### Metals
 
@@ -143,20 +143,20 @@ Total materials: 7531
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
 | High-density polyethylene | Generic family screening grade | Generic / multiple suppliers | pipes; containers; chemical tanks; food packaging |
+| Low-density polyethylene | Generic family screening grade | Generic / multiple suppliers | film; tubing; wire coating; packaging |
 | Polypropylene | Generic family screening grade | Generic / multiple suppliers | automotive trim; living hinges; appliances; medical disposables |
 | Polyvinyl chloride | Generic family screening grade | Generic / multiple suppliers | profiles; cable jackets; flooring; medical tubing |
-| Polybutylene terephthalate | Generic family screening grade | Generic / multiple suppliers | connectors; relay housings; sensors; automotive electrical parts |
-| Polycarbonate | Generic family screening grade | Generic / multiple suppliers | protective windows; optical lenses; electrical housings; medical devices |
+| Polystyrene | Generic family screening grade | Generic / multiple suppliers | clear boxes; foam packaging; appliance housings; labware |
 
 ### Sealants
 
 | Material | Grade | Supplier/brand | Applications |
 | --- | --- | --- | --- |
-| Ethylene butyl acrylate | Generic family screening grade | Generic / multiple suppliers | seal layers; flexible packaging; polymer modification; wire coating |
-| Polysulfide rubber | Generic family screening grade | Generic / multiple suppliers | aircraft sealants; construction sealants; fuel tank sealants; gaskets |
-| Natural rubber food contact sealing grade | Generic family screening grade | Generic / multiple suppliers | vibration mounts; tires; 减震件; food seals |
-| Styrene butadiene rubber food contact sealing grade | Generic family screening grade | Generic / multiple suppliers | tires; shoe soles; 轮胎; food seals |
-| Nitrile rubber food contact sealing grade | Generic family screening grade | Generic / multiple suppliers | seals; gaskets; 密封件; fuel hoses |
+| Silicone foam low density grade | Silicone foam low density grade | Generic / multiple suppliers | fire seals; 电池缓冲 |
+| Silicone foam medium density grade | Silicone foam medium density grade | Generic / multiple suppliers | fire seals; 电池缓冲 |
+| Silicone foam high density load-bearing grade | Silicone foam high density load-bearing grade | Generic / multiple suppliers | fire seals; 电池缓冲 |
+| Silicone foam flame retardant grade | Silicone foam flame retardant grade | Generic / multiple suppliers | fire seals; 电池缓冲 |
+| Silicone foam closed cell waterproof grade | Silicone foam closed cell waterproof grade | Generic / multiple suppliers | fire seals; 电池缓冲 |
 
 ### Thermosets
 

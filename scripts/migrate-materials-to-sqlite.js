@@ -17,13 +17,14 @@ const additionalMaterials = require("./additional-materials");
 const matwebStyleExpansion = require("./matweb-style-expansion");
 const generatedMaterialExpansion = require("./generated-material-expansion");
 const commercialGradeExpansion = require("./commercial-grade-expansion");
-const materials = enrichMaterials(dedupeMaterials([
+const { generateBilingualMaterials } = require("./bilingual-material-rules");
+const materials = generateBilingualMaterials(enrichMaterials(dedupeMaterials([
   ...sandbox.window.MatFinderData.materials,
   ...additionalMaterials,
   ...matwebStyleExpansion,
   ...generatedMaterialExpansion,
   ...commercialGradeExpansion
-]));
+])));
 const result = spawnSync(findPython(), [writerPath, databasePath], {
   cwd: rootDir,
   input: JSON.stringify(materials),
@@ -286,6 +287,19 @@ function profile(state, density, tensile, flexural, elongation, tg, tm, maxTemp,
 
 function normalizeCategory(item, tags = [], uses = []) {
   const original = String(item.category || item.material_family || item.family || "General material").trim();
+  const originalLower = original.toLowerCase();
+  if (/\b(engineering|commodity|high-performance|high performance)?\s*plastics?\b|\bthermoplastics?\b/.test(originalLower)) {
+    return {
+      category: "Plastics",
+      subcategory: normalizeSubcategory(original, "Plastics")
+    };
+  }
+  if (/\brubbers?\b|\belastomers?\b/.test(originalLower)) {
+    return {
+      category: "Elastomers",
+      subcategory: normalizeSubcategory(original, "Elastomers")
+    };
+  }
   const text = [
     original,
     item.name,

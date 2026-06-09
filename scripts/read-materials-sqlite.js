@@ -11,12 +11,16 @@ function readMaterials(databasePath) {
       id: row.material_id ?? row.id,
       material_id: row.material_id ?? row.id,
       name: row.name,
+      name_en: row.name_en ?? row.name,
+      name_zh: row.name_zh ?? row.name,
       abbr: row.abbreviation ?? row.abbr,
       abbreviation: row.abbreviation ?? row.abbr,
       material_family: row.material_family ?? row.family,
       grade_name: row.grade_name ?? row.trade_name ?? "Generic",
       supplier_or_brand: row.supplier_or_brand ?? row.manufacturer ?? "Generic / multiple suppliers",
       category: row.category,
+      category_en: row.category_en ?? row.category,
+      category_zh: row.category_zh ?? row.category,
       subcategory: row.subcategory,
       state: row.state,
       family: row.family,
@@ -53,17 +57,24 @@ function readMaterials(databasePath) {
       processing_methods: parseJsonList(row.processing_methods),
       typical_applications: parseJsonList(row.typical_applications),
       applications: parseJsonList(row.applications),
+      applications_en: parseJsonList(row.applications_en ?? row.applications),
+      applications_zh: parseJsonList(row.applications_zh ?? row.applications),
       limitations: parseJsonList(row.limitations),
       alternatives: parseJsonList(row.alternatives),
       source_note: row.source_note,
       advantages: parseJsonList(row.advantages),
       disadvantages: parseJsonList(row.disadvantages),
+      tags_en: parseJsonList(row.tags_en),
+      tags_zh: parseJsonList(row.tags_zh),
       tags,
       features: tags,
       uses,
       sources: [],
       summary: row.summary,
       description: row.summary,
+      description_en: row.description_en ?? row.summary,
+      description_zh: row.description_zh ?? row.summary,
+      translation_status: row.translation_status ?? "partial",
       notes: row.notes
     };
     material.state = material.state || inferState(material);
@@ -81,6 +92,13 @@ function readMaterials(databasePath) {
     .readTable(tables.material_uses)
     .sort((a, b) => a.position - b.position)
     .forEach((row) => byId.get(row.material_id)?.uses.push(row.use));
+
+  materials.forEach((material) => {
+    if (!material.tags_en.length) material.tags_en = [...material.tags];
+    if (!material.tags_zh.length) material.tags_zh = [...material.tags];
+    if (!material.applications_en.length) material.applications_en = [...material.applications];
+    if (!material.applications_zh.length) material.applications_zh = [...material.applications];
+  });
 
   database.readTable(tables.material_sources).forEach((row) => {
     byId.get(row.material_id)?.sources.push({

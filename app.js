@@ -1025,9 +1025,13 @@ function getMaterialSignalText(item) {
   if (item.__signalText) return item.__signalText;
   item.__signalText = [
     item.name,
+    item.name_en,
+    item.name_zh,
     item.abbr,
     item.abbreviation,
     item.category,
+    item.category_en,
+    item.category_zh,
     item.subcategory,
     item.family,
     item.material_family,
@@ -1035,6 +1039,8 @@ function getMaterialSignalText(item) {
     item.supplier_or_brand,
     item.summary,
     item.description,
+    item.description_en,
+    item.description_zh,
     item.notes,
     item.flame_rating,
     item.electrical_insulation,
@@ -1044,8 +1050,12 @@ function getMaterialSignalText(item) {
     item.waterproof_sealing,
     item.recyclability,
     ...(item.tags || []),
+    ...(item.tags_en || []),
+    ...(item.tags_zh || []),
     ...(item.uses || []),
     ...(item.applications || []),
+    ...(item.applications_en || []),
+    ...(item.applications_zh || []),
     ...(item.typical_applications || []),
     ...(item.processing_methods || []),
     ...(item.advantages || []),
@@ -1081,10 +1091,14 @@ function getApplicationSignalText(item) {
   if (item.__applicationSignalText) return item.__applicationSignalText;
   item.__applicationSignalText = [
     ...(item.applications || []),
+    ...(item.applications_en || []),
+    ...(item.applications_zh || []),
     ...(item.uses || []),
     ...(item.typical_applications || []),
     item.summary,
     item.description,
+    item.description_en,
+    item.description_zh,
     item.source_note
   ]
     .filter(Boolean)
@@ -1116,8 +1130,8 @@ function materialName(item) {
 }
 
 function materialNameFor(item, language) {
-  if (language !== "zh") return item.name;
-  return zhMaterialNameMap[normalizeDisplayKey(item.name)] || item.name;
+  if (language !== "zh") return item.name_en || item.name;
+  return item.name_zh || zhMaterialNameMap[normalizeDisplayKey(item.name)] || item.name;
 }
 
 function materialCategory(item) {
@@ -1125,10 +1139,13 @@ function materialCategory(item) {
 }
 
 function materialCategoryFor(item, language) {
-  return localizeTermFor(item.category, language);
+  if (language !== "zh") return item.category_en || item.category;
+  return item.category_zh || localizeTermFor(item.category, language);
 }
 
 function materialTags(item) {
+  const translatedTags = state.language === "zh" ? item.tags_zh : item.tags_en;
+  if (Array.isArray(translatedTags) && translatedTags.length) return translatedTags;
   return item.tags.map(localizeTerm);
 }
 
@@ -1137,6 +1154,8 @@ function materialUses(item) {
 }
 
 function materialUsesFor(item, language) {
+  const localizedApplications = language === "zh" ? item.applications_zh : item.applications_en;
+  if (Array.isArray(localizedApplications) && localizedApplications.length) return localizedApplications;
   return language === "zh" ? item.uses.map((use) => localizeTermFor(use, language)) : item.uses;
 }
 
@@ -1152,7 +1171,8 @@ function materialNotes(item) {
 }
 
 function materialSummary(item) {
-  if (state.language !== "zh") return item.summary;
+  if (state.language !== "zh") return item.description_en || item.summary;
+  if (item.description_zh) return item.description_zh;
   const uses = materialUses(item).slice(0, 3).join("\u3001");
   return `${materialName(item)}\u5c5e\u4e8e${materialCategory(item)}\uff0c\u5178\u578b\u7528\u9014\u5305\u62ec${uses || t("notSpecified")}\uff0c\u8fde\u7eed\u4f7f\u7528\u6e29\u5ea6\u7ea6 ${formatValue(item.maxTemp, " deg C")}\u3002`;
 }
@@ -1741,10 +1761,14 @@ function escapeAttribute(value) {
 function getSearchText(item) {
   return [
     item.name,
+    item.name_en,
+    item.name_zh,
     materialName(item),
     item.abbr,
     item.abbreviation,
     item.category,
+    item.category_en,
+    item.category_zh,
     item.subcategory,
     item.family,
     item.material_family,
@@ -1754,6 +1778,9 @@ function getSearchText(item) {
     item.trade_name,
     materialCategory(item),
     item.summary,
+    item.description,
+    item.description_en,
+    item.description_zh,
     materialSummary(item),
     item.notes,
     item.chemical_resistance,
@@ -1767,9 +1794,13 @@ function getSearchText(item) {
     item.recyclability,
     item.cost_level,
     ...(item.tags || []),
+    ...(item.tags_en || []),
+    ...(item.tags_zh || []),
     ...materialTags(item),
     ...(item.uses || []),
     ...(item.applications || []),
+    ...(item.applications_en || []),
+    ...(item.applications_zh || []),
     ...materialUses(item),
     ...(item.processing_methods || []),
     ...(item.typical_applications || []),
