@@ -197,6 +197,8 @@ const i18n = {
     materialCategory: "Material category",
     allCategories: "All categories",
     performanceFocus: "Performance focus",
+    applicationDomain: "Application domain",
+    allDomains: "All domains",
     continuousTemp: "Continuous use temperature",
     minimumStrength: "Minimum tensile strength",
     recyclableOnly: "Recyclable only",
@@ -426,6 +428,8 @@ const zhDetailLabels = {
   materialCategory: "\u6750\u6599\u7c7b\u522b",
   allCategories: "\u5168\u90e8\u7c7b\u522b",
   performanceFocus: "\u6027\u80fd\u91cd\u70b9",
+  applicationDomain: "\u5e94\u7528\u9886\u57df",
+  allDomains: "\u5168\u90e8\u9886\u57df",
   continuousTemp: "\u8fde\u7eed\u4f7f\u7528\u6e29\u5ea6",
   minimumStrength: "\u6700\u4f4e\u62c9\u4f38\u5f3a\u5ea6",
   recyclableOnly: "\u4ec5\u53ef\u56de\u6536",
@@ -727,15 +731,124 @@ const zhTerms = {
   "food contact": "食品接触"
 };
 
-const propertyPredicates = {
-  "high-temp": (item) => item.maxTemp >= 150 || item.tags.includes("heat resistant"),
-  strength: (item) => item.tensile >= 70 || item.flexural_strength >= 100 || item.tags.includes("high strength"),
-  chemical: (item) => item.tags.includes("chemical resistant") || String(item.chemical_resistance || "").toLowerCase().includes("resistant"),
-  transparent: (item) => item.tags.includes("transparent") || item.tags.includes("optical"),
-  elastomer: (item) => item.category === "Elastomer" || item.category === "Elastomers" || item.category === "Rubber" || item.tags.includes("elastomer"),
-  sustainable: (item) => item.tags.includes("bio-based") || item.tags.includes("compostable") || item.recyclable,
-  electrical: (item) => item.tags.includes("electrical insulation") || item.uses.some((use) => use.includes("electrical")) || item.typical_applications?.some((use) => use.includes("electrical"))
-};
+const performanceFilterGroups = [
+  {
+    id: "thermal",
+    labels: { en: "Thermal", zh: "热性能" },
+    options: [
+      { id: "heat-resistant", legacyIds: ["high-temp"], labels: { en: "Heat Resistant", zh: "耐热" }, match: (item) => numberValue(item.maxTemp) >= 150 || hasMaterialSignal(item, ["heat resistant", "high temperature", "thermal", "耐热", "高温"]) },
+      { id: "flame-retardant", labels: { en: "Flame Retardant", zh: "阻燃" }, match: (item) => hasMaterialSignal(item, ["flame retardant", "fire resistant", "ul 94", "v-0", "noncombustible", "阻燃", "防火"]) },
+      { id: "low-temperature-resistant", labels: { en: "Low Temperature Resistant", zh: "耐低温" }, match: (item) => numberValue(item.tg) <= -30 || hasMaterialSignal(item, ["low temperature", "cryogenic", "cold resistant", "耐低温", "低温"]) }
+    ]
+  },
+  {
+    id: "mechanical",
+    labels: { en: "Mechanical", zh: "机械性能" },
+    options: [
+      { id: "high-strength", legacyIds: ["strength"], labels: { en: "High Strength", zh: "高强度" }, match: (item) => numberValue(item.tensile) >= 70 || numberValue(item.tensile_strength) >= 70 || numberValue(item.flexural_strength) >= 100 || hasMaterialSignal(item, ["high strength", "reinforced", "structural", "高强度", "增强"]) },
+      { id: "high-toughness", labels: { en: "High Toughness", zh: "高韧性" }, match: (item) => numberValue(item.elongation) >= 80 || hasMaterialSignal(item, ["tough", "toughened", "high toughness", "韧性", "增韧"]) },
+      { id: "wear-resistant", labels: { en: "Wear Resistant", zh: "耐磨" }, match: (item) => hasMaterialSignal(item, ["wear resistant", "abrasion resistant", "low friction", "bearing", "耐磨", "低摩擦"]) },
+      { id: "impact-resistant", labels: { en: "Impact Resistant", zh: "抗冲击" }, match: (item) => hasMaterialSignal(item, ["impact resistant", "impact modified", "energy absorption", "抗冲击", "抗冲"]) }
+    ]
+  },
+  {
+    id: "chemical",
+    labels: { en: "Chemical", zh: "化学性能" },
+    options: [
+      { id: "chemical-resistant", legacyIds: ["chemical"], labels: { en: "Chemical Resistant", zh: "耐化学" }, match: (item) => hasMaterialSignal(item, ["chemical resistant", "chemical resistance", "good to excellent", "耐化学", "化工"]) },
+      { id: "acid-resistant", labels: { en: "Acid Resistant", zh: "耐酸" }, match: (item) => hasMaterialSignal(item, ["acid resistant", "acid", "硫酸", "盐酸", "耐酸"]) || hasStrongChemicalResistance(item) },
+      { id: "alkali-resistant", labels: { en: "Alkali Resistant", zh: "耐碱" }, match: (item) => hasMaterialSignal(item, ["alkali resistant", "alkaline", "caustic", "耐碱", "碱"]) || hasStrongChemicalResistance(item) },
+      { id: "oil-resistant", labels: { en: "Oil Resistant", zh: "耐油" }, match: (item) => hasMaterialSignal(item, ["oil resistant", "fuel resistant", "hydrocarbon", "耐油", "燃油"]) }
+    ]
+  },
+  {
+    id: "electrical",
+    labels: { en: "Electrical", zh: "电气性能" },
+    options: [
+      { id: "electrical-insulation", legacyIds: ["electrical"], labels: { en: "Electrical Insulation", zh: "电绝缘" }, match: (item) => hasMaterialSignal(item, ["electrical insulation", "dielectric", "insulator", "connector", "电绝缘", "绝缘"]) },
+      { id: "high-dielectric", labels: { en: "High Dielectric", zh: "高介电" }, match: (item) => numberValue(item.dielectric) >= 4 || hasMaterialSignal(item, ["high dielectric", "dielectric constant", "高介电"]) },
+      { id: "low-dielectric", labels: { en: "Low Dielectric", zh: "低介电" }, match: (item) => numberValue(item.dielectric) > 0 && numberValue(item.dielectric) <= 2.8 || hasMaterialSignal(item, ["low dielectric", "rf", "radome", "低介电"]) },
+      { id: "conductive-antistatic", labels: { en: "Conductive / Antistatic", zh: "导电 / 防静电" }, match: (item) => hasMaterialSignal(item, ["conductive", "antistatic", "esd", "emi shielding", "导电", "防静电", "电磁屏蔽"]) }
+    ]
+  },
+  {
+    id: "optical",
+    labels: { en: "Optical", zh: "光学性能" },
+    options: [
+      { id: "transparent", legacyIds: ["transparent"], labels: { en: "Transparent", zh: "透明" }, match: (item) => hasMaterialSignal(item, ["transparent", "clear", "透明"]) },
+      { id: "optical-clarity", labels: { en: "Optical Clarity", zh: "光学级" }, match: (item) => hasMaterialSignal(item, ["optical", "lens", "light guide", "clarity", "光学", "透镜"]) },
+      { id: "uv-resistant", labels: { en: "UV Resistant", zh: "抗紫外" }, match: (item) => hasMaterialSignal(item, ["uv resistant", "uv stabilized", "weather resistant", "抗紫外", "耐候"]) }
+    ]
+  },
+  {
+    id: "sealing-elastomer",
+    labels: { en: "Sealing & Elastomer", zh: "密封与弹性体" },
+    options: [
+      { id: "elastomer", legacyIds: ["elastomer"], labels: { en: "Elastomer", zh: "弹性体" }, match: (item) => ["Elastomer", "Elastomers", "Rubber", "Sealants"].includes(item.category) || hasMaterialSignal(item, ["elastomer", "rubber", "弹性体", "橡胶"]) },
+      { id: "flexible", labels: { en: "Flexible", zh: "柔性" }, match: (item) => numberValue(item.elongation) >= 150 || hasMaterialSignal(item, ["flexible", "soft", "flexibility", "柔性", "柔韧"]) },
+      { id: "waterproof-sealing", labels: { en: "Waterproof Sealing", zh: "防水密封" }, match: (item) => hasMaterialSignal(item, ["waterproof", "sealing", "sealant", "gasket", "low moisture", "防水", "密封"]) || numberValue(item.water_absorption) <= 0.2 },
+      { id: "gasket-seal", labels: { en: "Gasket / O-ring", zh: "垫片 / O 形圈" }, match: (item) => hasMaterialSignal(item, ["gasket", "o-ring", "seal", "flange", "垫片", "密封圈"]) }
+    ]
+  },
+  {
+    id: "sustainability",
+    labels: { en: "Sustainability", zh: "可持续" },
+    options: [
+      { id: "recyclable", legacyIds: ["sustainable"], labels: { en: "Recyclable", zh: "可回收" }, match: (item) => Boolean(item.recyclable) || hasMaterialSignal(item, ["recyclable", "recycling", "可回收"]) },
+      { id: "bio-based", labels: { en: "Bio-based", zh: "生物基" }, match: (item) => hasMaterialSignal(item, ["bio-based", "biobased", "renewable", "生物基"]) },
+      { id: "compostable", labels: { en: "Compostable", zh: "可堆肥" }, match: (item) => hasMaterialSignal(item, ["compostable", "biodegradable", "可堆肥", "可降解"]) },
+      { id: "low-density-lightweight", labels: { en: "Lightweight", zh: "轻量" }, match: (item) => numberValue(item.density) > 0 && numberValue(item.density) <= 1.2 || hasMaterialSignal(item, ["lightweight", "low density", "轻量", "低密度"]) }
+    ]
+  }
+];
+
+const performanceFilterOptions = performanceFilterGroups.flatMap((group) => group.options.map((option) => ({ ...option, groupId: group.id })));
+const propertyPredicates = Object.fromEntries(
+  performanceFilterOptions.flatMap((option) => [[option.id, option.match], ...(option.legacyIds || []).map((id) => [id, option.match])])
+);
+
+const applicationDomainFilters = [
+  {
+    id: "automotive",
+    labels: { en: "Automotive", zh: "汽车" },
+    keywords: ["automotive", "vehicle", "under-hood", "bumper", "interior trim", "fuel system", "mirror housings", "汽车", "车身", "内饰"]
+  },
+  {
+    id: "ev-battery",
+    labels: { en: "EV Battery", zh: "动力电池" },
+    keywords: ["ev battery", "battery", "battery pack", "battery packs", "cell", "thermal gap", "thermal interface", "fire barrier", "power electronics", "电池", "动力电池", "电池包"]
+  },
+  {
+    id: "electronics",
+    labels: { en: "Electronics", zh: "电子电气" },
+    keywords: ["electronics", "electronic", "electrical", "connector", "connectors", "circuit", "pcb", "semiconductor", "potting", "wire", "cable", "relay", "switch", "电气", "电子", "连接器", "半导体"]
+  },
+  {
+    id: "aerospace",
+    labels: { en: "Aerospace", zh: "航空航天" },
+    keywords: ["aerospace", "aircraft", "radome", "satellite", "turbine", "rocket", "aircraft interiors", "flight", "航空", "航天", "飞机"]
+  },
+  {
+    id: "medical",
+    labels: { en: "Medical", zh: "医疗" },
+    keywords: ["medical", "healthcare", "biocompatible", "sterilizable", "surgical", "diagnostic", "implant", "medical devices", "医疗", "医用", "植入"]
+  },
+  {
+    id: "construction",
+    labels: { en: "Construction", zh: "建筑施工" },
+    keywords: ["construction", "building", "architectural", "roofing", "flooring", "window", "profiles", "pipe", "plumbing", "concrete", "建筑", "施工", "屋面", "管道"]
+  },
+  {
+    id: "industrial-sealing",
+    labels: { en: "Industrial Sealing", zh: "工业密封" },
+    keywords: ["seal", "seals", "sealing", "gasket", "gaskets", "o-ring", "o-rings", "valve", "flange", "pump", "chemical seal", "weather seals", "密封", "垫片", "阀门", "泵"]
+  },
+  {
+    id: "consumer-electronics",
+    labels: { en: "Consumer Electronics", zh: "消费电子" },
+    keywords: ["consumer electronics", "phone", "laptop", "tablet", "wearable", "display", "clear cover", "housings", "keyboard", "speaker", "消费电子", "手机", "显示"]
+  }
+];
 
 const state = {
   route: "home",
@@ -743,6 +856,7 @@ const state = {
   query: "",
   category: "all",
   property: "all",
+  domain: "all",
   minTemp: 60,
   minStrength: 5,
   recyclableOnly: false,
@@ -791,6 +905,8 @@ const elements = {
   filterToggleButton: document.querySelector("#filterToggleButton"),
   categoryFilter: document.querySelector("#categoryFilter"),
   propertyFilter: document.querySelector("#propertyFilter"),
+  propertyFacetFilter: document.querySelector("#propertyFacetFilter"),
+  domainFacetFilter: document.querySelector("#domainFacetFilter"),
   tempRange: document.querySelector("#tempRange"),
   tempOutput: document.querySelector("#tempOutput"),
   strengthRange: document.querySelector("#strengthRange"),
@@ -833,6 +949,101 @@ function localizeTerm(value) {
 function localizeTermFor(value, language) {
   if (language !== "zh") return value;
   return zhTerms[value] || value;
+}
+
+function numberValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getMaterialSignalText(item) {
+  if (item.__signalText) return item.__signalText;
+  item.__signalText = [
+    item.name,
+    item.abbr,
+    item.abbreviation,
+    item.category,
+    item.subcategory,
+    item.family,
+    item.material_family,
+    item.grade_name,
+    item.supplier_or_brand,
+    item.summary,
+    item.description,
+    item.notes,
+    item.flame_rating,
+    item.electrical_insulation,
+    item.chemical_resistance,
+    item.transparency,
+    item.flexibility,
+    item.waterproof_sealing,
+    item.recyclability,
+    ...(item.tags || []),
+    ...(item.uses || []),
+    ...(item.applications || []),
+    ...(item.typical_applications || []),
+    ...(item.processing_methods || []),
+    ...(item.advantages || []),
+    ...(item.disadvantages || []),
+    ...(item.limitations || [])
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return item.__signalText;
+}
+
+function hasMaterialSignal(item, signals) {
+  const text = getMaterialSignalText(item);
+  return signals.some((signal) => text.includes(String(signal).toLowerCase()));
+}
+
+function hasStrongChemicalResistance(item) {
+  const value = String(item.chemical_resistance || "").toLowerCase();
+  return value.includes("excellent") || value.includes("good") || value.includes("resistant");
+}
+
+function getApplicationDomain(id) {
+  return applicationDomainFilters.find((domain) => domain.id === id);
+}
+
+function domainLabel(id) {
+  const domain = getApplicationDomain(id);
+  return domain ? domain.labels[state.language] || domain.labels.en : id;
+}
+
+function getApplicationSignalText(item) {
+  if (item.__applicationSignalText) return item.__applicationSignalText;
+  item.__applicationSignalText = [
+    ...(item.applications || []),
+    ...(item.uses || []),
+    ...(item.typical_applications || []),
+    item.summary,
+    item.description,
+    item.source_note
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return item.__applicationSignalText;
+}
+
+function matchesApplicationDomain(item, domain) {
+  const text = getApplicationSignalText(item);
+  return domain.keywords.some((keyword) => text.includes(String(keyword).toLowerCase()));
+}
+
+function getPerformanceOption(id) {
+  return performanceFilterOptions.find((option) => option.id === id || option.legacyIds?.includes(id));
+}
+
+function getPerformanceGroup(id) {
+  return performanceFilterGroups.find((group) => group.id === id);
+}
+
+function performanceLabel(id) {
+  const option = getPerformanceOption(id);
+  return option ? option.labels[state.language] || option.labels.en : t("propertyOptions")[id] || id;
 }
 
 function materialName(item) {
@@ -934,9 +1145,9 @@ function applyLanguage() {
     option.textContent = option.value === "all" ? t("allCategories") : localizeTerm(option.value);
   });
 
-  elements.propertyFilter.querySelectorAll("option").forEach((option) => {
-    option.textContent = t("propertyOptions")[option.value];
-  });
+  renderLegacyPropertyOptions();
+  renderPropertyFacets();
+  renderDomainFacets();
 
   elements.sortSelect.querySelectorAll("option").forEach((option) => {
     option.textContent = t("sortOptions")[option.value];
@@ -974,6 +1185,152 @@ function rerenderActiveAnalysis() {
 
 function getLanguageCacheKey(id) {
   return `${state.language}:${id}`;
+}
+
+function renderLegacyPropertyOptions() {
+  if (!elements.propertyFilter) return;
+  const options = [
+    { id: "all", label: t("propertyOptions").all },
+    ...performanceFilterOptions.map((option) => ({ id: option.id, label: option.labels[state.language] || option.labels.en })),
+    ...performanceFilterOptions.flatMap((option) => (option.legacyIds || []).map((id) => ({ id, label: option.labels[state.language] || option.labels.en })))
+  ];
+  const seen = new Set();
+  elements.propertyFilter.replaceChildren(
+    ...options
+      .filter((option) => {
+        if (seen.has(option.id)) return false;
+        seen.add(option.id);
+        return true;
+      })
+      .map((option) => {
+        const node = document.createElement("option");
+        node.value = option.id;
+        node.textContent = option.label;
+        node.selected = state.property === option.id;
+        return node;
+      })
+  );
+}
+
+function renderPropertyFacets() {
+  if (!elements.propertyFacetFilter) return;
+  const counts = getPerformanceFilterCounts();
+  const selectedGroupId = getPerformanceOption(state.property)?.groupId;
+  const fragment = document.createDocumentFragment();
+  const allButton = createPropertyFacetButton({
+    id: "all",
+    label: t("propertyOptions").all,
+    count: counts.get("all") || 0,
+    selected: state.property === "all",
+    className: "property-facet-all"
+  });
+  fragment.append(allButton);
+
+  performanceFilterGroups.forEach((group) => {
+    const details = document.createElement("details");
+    details.className = "property-group";
+    details.open = selectedGroupId === group.id || window.matchMedia("(min-width: 901px)").matches;
+
+    const summary = document.createElement("summary");
+    const groupCount = countGroupMatches(group, counts);
+    summary.innerHTML = `<span>${escapeHtml(group.labels[state.language] || group.labels.en)}</span><strong>${groupCount}</strong>`;
+    details.append(summary);
+
+    const options = document.createElement("div");
+    options.className = "property-options";
+    group.options.forEach((option) => {
+      options.append(
+        createPropertyFacetButton({
+          id: option.id,
+          label: option.labels[state.language] || option.labels.en,
+          count: counts.get(option.id) || 0,
+          selected: option.id === state.property || option.legacyIds?.includes(state.property)
+        })
+      );
+    });
+    details.append(options);
+    fragment.append(details);
+  });
+
+  elements.propertyFacetFilter.replaceChildren(fragment);
+}
+
+function createPropertyFacetButton({ id, label, count, selected, className = "" }) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `property-facet ${className}`.trim();
+  button.dataset.property = id;
+  button.setAttribute("aria-pressed", String(selected));
+  button.innerHTML = `<span>${escapeHtml(label)}</span><strong>${count}</strong>`;
+  return button;
+}
+
+function getPerformanceFilterCounts() {
+  const counts = new Map();
+  const baseItems = materials.filter((item) => matchesCatalogFilters(item, { includeProperty: false }));
+  counts.set("all", baseItems.length);
+  performanceFilterOptions.forEach((option) => {
+    const count = baseItems.filter((item) => option.match(item)).length;
+    counts.set(option.id, count);
+  });
+  performanceFilterGroups.forEach((group) => {
+    counts.set(`group:${group.id}`, baseItems.filter((item) => group.options.some((option) => option.match(item))).length);
+  });
+  return counts;
+}
+
+function countGroupMatches(group, counts) {
+  return counts.get(`group:${group.id}`) || 0;
+}
+
+function renderDomainFacets() {
+  if (!elements.domainFacetFilter) return;
+  const counts = getApplicationDomainCounts();
+  const fragment = document.createDocumentFragment();
+  fragment.append(
+    createFacetButton({
+      id: "all",
+      label: t("allDomains"),
+      count: counts.get("all") || 0,
+      selected: state.domain === "all",
+      className: "property-facet-all",
+      dataName: "domain"
+    })
+  );
+
+  applicationDomainFilters.forEach((domain) => {
+    fragment.append(
+      createFacetButton({
+        id: domain.id,
+        label: domain.labels[state.language] || domain.labels.en,
+        count: counts.get(domain.id) || 0,
+        selected: state.domain === domain.id,
+        dataName: "domain"
+      })
+    );
+  });
+
+  elements.domainFacetFilter.replaceChildren(fragment);
+}
+
+function createFacetButton({ id, label, count, selected, className = "", dataName }) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `property-facet ${className}`.trim();
+  button.dataset[dataName] = id;
+  button.setAttribute("aria-pressed", String(selected));
+  button.innerHTML = `<span>${escapeHtml(label)}</span><strong>${count}</strong>`;
+  return button;
+}
+
+function getApplicationDomainCounts() {
+  const counts = new Map();
+  const baseItems = materials.filter((item) => matchesCatalogFilters(item, { includeDomain: false }));
+  counts.set("all", baseItems.length);
+  applicationDomainFilters.forEach((domain) => {
+    counts.set(domain.id, baseItems.filter((item) => matchesApplicationDomain(item, domain)).length);
+  });
+  return counts;
 }
 
 async function init() {
@@ -1191,6 +1548,23 @@ function bindEvents() {
     render();
   });
 
+  elements.propertyFacetFilter.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-property]");
+    if (!button) return;
+    state.property = button.dataset.property;
+    resetMaterialsPage();
+    syncControls();
+    render();
+  });
+
+  elements.domainFacetFilter.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-domain]");
+    if (!button) return;
+    state.domain = button.dataset.domain;
+    resetMaterialsPage();
+    render();
+  });
+
   elements.tempRange.addEventListener("input", (event) => {
     state.minTemp = Number(event.target.value);
     resetMaterialsPage();
@@ -1219,6 +1593,7 @@ function bindEvents() {
     state.query = "";
     state.category = "all";
     state.property = "all";
+    state.domain = "all";
     state.minTemp = 60;
     state.minStrength = 5;
     state.recyclableOnly = false;
@@ -1295,7 +1670,11 @@ function getSearchText(item) {
     item.abbr,
     item.abbreviation,
     item.category,
+    item.subcategory,
     item.family,
+    item.material_family,
+    item.grade_name,
+    item.supplier_or_brand,
     item.manufacturer,
     item.trade_name,
     materialCategory(item),
@@ -1303,17 +1682,26 @@ function getSearchText(item) {
     materialSummary(item),
     item.notes,
     item.chemical_resistance,
+    item.flame_rating,
+    item.electrical_insulation,
+    item.transparency,
+    item.flexibility,
+    item.waterproof_sealing,
+    item.source_note,
     item.flammability,
     item.recyclability,
     item.cost_level,
     ...(item.tags || []),
     ...materialTags(item),
     ...(item.uses || []),
+    ...(item.applications || []),
     ...materialUses(item),
     ...(item.processing_methods || []),
     ...(item.typical_applications || []),
     ...(item.advantages || []),
-    ...(item.disadvantages || [])
+    ...(item.disadvantages || []),
+    ...(item.limitations || []),
+    ...(item.alternatives || [])
   ]
     .filter(Boolean)
     .join(" ")
@@ -1870,6 +2258,7 @@ function getFilteredMaterials() {
     query: state.query,
     category: state.category,
     property: state.property,
+    domain: state.domain,
     minTemp: state.minTemp,
     minStrength: state.minStrength,
     recyclableOnly: state.recyclableOnly,
@@ -1882,16 +2271,25 @@ function getFilteredMaterials() {
   }
 
   const items = materials
-    .filter((item) => !state.query || getSearchText(item).includes(state.query))
-    .filter((item) => state.category === "all" || item.category === state.category)
-    .filter((item) => state.property === "all" || propertyPredicates[state.property](item))
-    .filter((item) => item.maxTemp >= state.minTemp)
-    .filter((item) => item.tensile >= state.minStrength)
-    .filter((item) => !state.recyclableOnly || item.recyclable)
+    .filter((item) => matchesCatalogFilters(item, { includeProperty: true }))
     .sort(sortMaterials);
 
   state.filteredMaterialsCache = { key: cacheKey, items };
   return items;
+}
+
+function matchesCatalogFilters(item, options = {}) {
+  const includeProperty = options.includeProperty !== false;
+  const includeDomain = options.includeDomain !== false;
+  const propertyPredicate = propertyPredicates[state.property];
+  const domain = getApplicationDomain(state.domain);
+  return (!state.query || getSearchText(item).includes(state.query))
+    && (state.category === "all" || item.category === state.category)
+    && (!includeProperty || state.property === "all" || (propertyPredicate && propertyPredicate(item)))
+    && (!includeDomain || state.domain === "all" || (domain && matchesApplicationDomain(item, domain)))
+    && numberValue(item.maxTemp) >= state.minTemp
+    && numberValue(item.tensile) >= state.minStrength
+    && (!state.recyclableOnly || item.recyclable);
 }
 
 function sortMaterials(a, b) {
@@ -1943,6 +2341,8 @@ function render() {
   elements.strengthOutput.textContent = `>= ${state.minStrength} MPa`;
   elements.selectedCount.textContent = state.selected.size;
   renderCatalogStats();
+  renderPropertyFacets();
+  renderDomainFacets();
 
   if (needsMaterialGrid) {
     const totalPages = Math.max(1, Math.ceil(filtered.length / state.materialsPageSize));
@@ -2237,7 +2637,8 @@ function renderChips() {
   const chips = [];
   if (state.query) chips.push(`${t("keyword")}: ${state.query}`);
   if (state.category !== "all") chips.push(`${t("category")}: ${localizeTerm(state.category)}`);
-  if (state.property !== "all") chips.push(`${t("focus")}: ${elements.propertyFilter.selectedOptions[0].textContent}`);
+  if (state.property !== "all") chips.push(`${t("focus")}: ${performanceLabel(state.property)}`);
+  if (state.domain !== "all") chips.push(`${t("applicationDomain")}: ${domainLabel(state.domain)}`);
   if (state.minTemp > 60) chips.push(`${t("temp")} >= ${state.minTemp} deg C`);
   if (state.minStrength > 5) chips.push(`${t("strength")} >= ${state.minStrength} MPa`);
   if (state.recyclableOnly) chips.push(t("recyclable"));

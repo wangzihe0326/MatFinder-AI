@@ -162,8 +162,8 @@
           </div>
 
           <div class="filter-group">
-            <label for="propertyFilter" data-i18n="performanceFocus">性能重点</label>
-            <select id="propertyFilter">
+            <label id="performanceFocusLabel" for="propertyFilter" data-i18n="performanceFocus">性能重点</label>
+            <select id="propertyFilter" class="legacy-property-select" tabindex="-1" aria-hidden="true">
               <option value="all">综合</option>
               <option value="high-temp">耐热</option>
               <option value="strength">高强度</option>
@@ -173,6 +173,12 @@
               <option value="sustainable">可持续</option>
               <option value="electrical">电绝缘</option>
             </select>
+            <div id="propertyFacetFilter" class="property-facets" role="group" aria-labelledby="performanceFocusLabel"></div>
+          </div>
+
+          <div class="filter-group">
+            <label id="applicationDomainLabel" data-i18n="applicationDomain">应用领域</label>
+            <div id="domainFacetFilter" class="domain-facets" role="group" aria-labelledby="applicationDomainLabel"></div>
           </div>
 
           <fieldset class="range-group">
