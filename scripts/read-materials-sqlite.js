@@ -74,6 +74,7 @@ function readMaterials(databasePath) {
       description: row.summary,
       description_en: row.description_en ?? row.summary,
       description_zh: row.description_zh ?? row.summary,
+      translation_quality: row.translation_quality ?? row.translation_status ?? "partial",
       translation_status: row.translation_status ?? "partial",
       notes: row.notes
     };

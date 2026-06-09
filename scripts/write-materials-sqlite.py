@@ -79,6 +79,7 @@ def main():
               summary TEXT NOT NULL,
               description_en TEXT NOT NULL,
               description_zh TEXT NOT NULL,
+              translation_quality TEXT NOT NULL,
               translation_status TEXT NOT NULL,
               notes TEXT NOT NULL
             );
@@ -129,7 +130,7 @@ def main():
                   limitations, alternatives, source_note,
                   typical_applications, advantages, disadvantages, summary, notes,
                   tags_en, tags_zh, description_en, description_zh,
-                  translation_status
+                  translation_quality, translation_status
                 )
                 VALUES (
                   :material_id, :name, :name_en, :name_zh, :abbreviation,
@@ -147,7 +148,7 @@ def main():
                   :limitations, :alternatives, :source_note,
                   :typical_applications, :advantages, :disadvantages, :summary,
                   :notes, :tags_en, :tags_zh, :description_en, :description_zh,
-                  :translation_status
+                  :translation_quality, :translation_status
                 )
                 """,
                 {
@@ -205,6 +206,7 @@ def main():
                     "tags_zh": json.dumps(list_value(item, "tags_zh", "tags"), ensure_ascii=False),
                     "description_en": item.get("description_en", item.get("description", item["summary"])),
                     "description_zh": item.get("description_zh", item.get("description", item["summary"])),
+                    "translation_quality": item.get("translation_quality", item.get("translation_status", "partial")),
                     "translation_status": item.get("translation_status", "partial"),
                 },
             )

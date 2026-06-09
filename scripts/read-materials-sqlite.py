@@ -105,6 +105,7 @@ def main():
                     "description": row["summary"],
                     "description_en": get(row, columns, "description_en") or row["summary"],
                     "description_zh": get(row, columns, "description_zh") or row["summary"],
+                    "translation_quality": get(row, columns, "translation_quality") or get(row, columns, "translation_status") or "partial",
                     "translation_status": get(row, columns, "translation_status") or "partial",
                     "notes": row["notes"],
                 }

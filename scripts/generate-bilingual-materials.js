@@ -19,9 +19,12 @@ const bilingualMaterials = generateBilingualMaterials(materials);
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, `${JSON.stringify(bilingualMaterials, null, 2)}\n`, "utf8");
 
-const complete = bilingualMaterials.filter((item) => item.translation_status === "complete").length;
-const partial = bilingualMaterials.length - complete;
+const qualityCounts = bilingualMaterials.reduce((counts, item) => {
+  const quality = item.translation_quality || item.translation_status || "partial";
+  counts[quality] = (counts[quality] || 0) + 1;
+  return counts;
+}, {});
 
 console.log(`Generated bilingual material snapshot: ${outputPath}`);
 console.log(`Materials: ${bilingualMaterials.length}`);
-console.log(`Translation status: ${complete} complete, ${partial} partial`);
+console.log(`Translation quality: ${JSON.stringify(qualityCounts)}`);

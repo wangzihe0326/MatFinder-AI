@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "database": "C:\\Users\\35766\\Documents\\New project\\matfinder.db",
+  "total_materials": 7531,
+  "translation_quality": {
+    "exact": 52,
+    "generated": 7367,
+    "fallback": 112
+  },
+  "chinese_first_name": {
+    "count": 7531,
+    "percentage": 100
+  },
+  "chinese_first_description": {
+    "count": 7531,
+    "percentage": 100
+  },
+  "long_english_residue": {
+    "records_with_long_english_names": 0,
+    "records_with_long_english_descriptions": 0,
+    "records_with_long_english_display_fields": 0,
+    "untranslated_display_percentage": 0
+  },
+  "top_untranslated_phrases": [],
+  "sample_problem_records": []
+}
