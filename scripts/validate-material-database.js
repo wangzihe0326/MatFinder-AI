@@ -4,6 +4,7 @@ const { readMaterials } = require("./read-materials-sqlite");
 
 const rootDir = path.join(__dirname, "..");
 const databasePath = path.resolve(rootDir, process.argv[2] || "matfinder.db");
+const minimumMaterialCount = Number(process.env.MATFINDER_MIN_MATERIALS || 5000);
 
 const requiredFields = [
   "material_family",
@@ -36,6 +37,7 @@ const normalizedCategories = new Set([
   "Coatings",
   "Composites",
   "Elastomers",
+  "Fibers",
   "Foams",
   "General materials",
   "Metals",
@@ -54,6 +56,7 @@ function main() {
   const report = {
     ok: true,
     database: databasePath,
+    target_material_count: minimumMaterialCount,
     material_count_summary: countSummary(materials),
     duplicate_detection: duplicateReport(materials),
     missing_field_report: missingFieldReport(materials),
@@ -64,8 +67,10 @@ function main() {
   const hardFailures = [
     report.duplicate_detection.duplicates_by_id.length,
     report.duplicate_detection.duplicates_by_name.length,
+    report.duplicate_detection.duplicates_by_commercial_identity.length,
     report.missing_field_report.materials_with_absent_fields,
-    report.category_normalization.non_normalized_records
+    report.category_normalization.non_normalized_records,
+    materials.length < minimumMaterialCount
   ].some(Boolean);
 
   report.ok = !hardFailures;
@@ -79,7 +84,9 @@ function countSummary(materials) {
     by_category: countBy(materials, "category"),
     by_state: countBy(materials, "state"),
     with_supplier_or_brand: materials.filter((material) => hasValue(material.supplier_or_brand)).length,
+    with_non_generic_supplier_or_brand: materials.filter((material) => hasValue(material.supplier_or_brand) && !/generic|multiple suppliers/i.test(material.supplier_or_brand)).length,
     with_grade_name: materials.filter((material) => hasValue(material.grade_name)).length,
+    with_non_generic_grade_name: materials.filter((material) => hasValue(material.grade_name) && !/generic/i.test(material.grade_name)).length,
     with_source_note: materials.filter((material) => hasValue(material.source_note)).length
   };
 }
@@ -88,6 +95,7 @@ function duplicateReport(materials) {
   return {
     duplicates_by_id: duplicateValues(materials, (material) => material.id),
     duplicates_by_name: duplicateValues(materials, (material) => normalize(material.name)),
+    duplicates_by_commercial_identity: duplicateValues(materials, commercialIdentity),
     duplicates_by_commercial_key: duplicateValues(materials, (material) =>
       normalize([material.supplier_or_brand, material.grade_name, material.name].join(" "))
     )
@@ -156,7 +164,8 @@ function encodingReport() {
     path.join(rootDir, "data", "materials.js"),
     path.join(rootDir, "scripts", "additional-materials.js"),
     path.join(rootDir, "scripts", "matweb-style-expansion.js"),
-    path.join(rootDir, "scripts", "generated-material-expansion.js")
+    path.join(rootDir, "scripts", "generated-material-expansion.js"),
+    path.join(rootDir, "scripts", "commercial-grade-expansion.js")
   ];
 
   return {
@@ -208,6 +217,14 @@ function normalize(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function commercialIdentity(material) {
+  const supplier = material.supplier_or_brand || "";
+  const grade = material.grade_name || "";
+  const generic = /generic|multiple suppliers/i.test(`${supplier} ${grade}`);
+  const family = generic ? material.name : material.material_family;
+  return normalize([supplier, grade, family, material.subcategory].join(" "));
 }
 
 function countMatches(text, pattern) {

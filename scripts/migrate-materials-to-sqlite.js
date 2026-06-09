@@ -7,6 +7,7 @@ const rootDir = path.join(__dirname, "..");
 const databasePath = path.join(rootDir, "matfinder.db");
 const sourcePath = path.join(rootDir, "data", "materials.js");
 const writerPath = path.join(__dirname, "write-materials-sqlite.py");
+const summaryPath = path.join(__dirname, "generate-database-summary.js");
 
 const sandbox = { window: {} };
 vm.createContext(sandbox);
@@ -15,11 +16,13 @@ vm.runInContext(fs.readFileSync(sourcePath, "utf8"), sandbox, { filename: source
 const additionalMaterials = require("./additional-materials");
 const matwebStyleExpansion = require("./matweb-style-expansion");
 const generatedMaterialExpansion = require("./generated-material-expansion");
+const commercialGradeExpansion = require("./commercial-grade-expansion");
 const materials = enrichMaterials(dedupeMaterials([
   ...sandbox.window.MatFinderData.materials,
   ...additionalMaterials,
   ...matwebStyleExpansion,
-  ...generatedMaterialExpansion
+  ...generatedMaterialExpansion,
+  ...commercialGradeExpansion
 ]));
 const result = spawnSync(findPython(), [writerPath, databasePath], {
   cwd: rootDir,
@@ -33,6 +36,18 @@ if (result.status !== 0) {
 }
 
 process.stdout.write(result.stdout);
+
+const summaryResult = spawnSync(process.execPath, [summaryPath, databasePath], {
+  cwd: rootDir,
+  encoding: "utf8"
+});
+
+if (summaryResult.status !== 0) {
+  process.stderr.write(summaryResult.stderr || summaryResult.stdout);
+  process.exit(summaryResult.status || 1);
+}
+
+process.stdout.write(summaryResult.stdout);
 
 function findPython() {
   const candidates = [
@@ -172,6 +187,10 @@ function estimateProfile(item) {
       values: profile("solid", 1.65, 350, 520, 2, 120, null, 150, 0.45, 4.5, 0.3, "matrix dependent", "grade dependent", "specialty stream", false, "medium", ["lamination", "compression molding"], ["lightweight structures", "panels"], ["lightweight", "high strength", "轻量"], "D80")
     },
     {
+      match: /fiber|fibre|yarn|tow|roving|filament|aramid|uhmwpe fiber|glass fiber|carbon fiber/,
+      values: profile("solid fiber", 1.45, 1200, 1600, 3, null, null, 180, 1.1, 4.0, 0.1, "grade dependent", "grade dependent", "specialty stream", false, "medium", ["spinning", "weaving", "braiding", "pultrusion"], ["reinforcement", "technical textiles"], ["fiber", "high strength", "lightweight"], "fiber grade dependent")
+    },
+    {
       match: /foam|cellular|sponge/,
       values: profile("cellular solid", 0.08, 1.2, 2, 20, null, null, 90, 0.04, 2.5, 1.2, "grade dependent", "grade dependent", "not typically recyclable", false, "low", ["foaming", "molding", "cutting"], ["thermal insulation", "cushioning"], ["lightweight", "thermal management", "泡沫"], "Shore OO")
     },
@@ -280,6 +299,15 @@ function normalizeCategory(item, tags = [], uses = []) {
     .join(" ")
     .toLowerCase();
 
+  const compositeText = /composite|laminate|prepreg|frp|cfrp|gfrp|matrix/.test(text);
+  const fiberText = /fiber|fibre|yarn|tow|roving|filament|staple|aramid|uhmwpe/.test(text);
+  if (/\bfibers?\b/i.test(original) || (fiberText && !compositeText)) {
+    return {
+      category: "Fibers",
+      subcategory: normalizeSubcategory(original, "Fibers")
+    };
+  }
+
   const rules = [
     ["Adhesives", /adhesive|glue|bonding|hot-melt|pressure-sensitive/],
     ["Sealants", /sealant|caulk|gasket seal|waterproofing/],
@@ -289,8 +317,8 @@ function normalizeCategory(item, tags = [], uses = []) {
     ["Thermosets", /thermoset|epoxy|phenolic|bismaleimide|cyanate ester|benzoxazine|polyurethane resin/],
     ["Composites", /composite|fiber|fibre|laminate|frp|cfrp|gfrp|prepreg|carbon\/|glass\//],
     ["Metals", /metal|steel|aluminum|aluminium|titanium|copper|bronze|brass|nickel|magnesium|zinc|tungsten|molybdenum|tantalum|cobalt/],
-    ["Ceramics", /ceramic|alumina|zirconia|silicon carbide|nitride|porcelain|glass|sialon|carbide/],
-    ["Plastics", /plastic|polymer|thermoplastic|resin|polyolefin|polyamide|polyester|fluoropolymer|nylon|abs|pc|pet|pbt|pp|pe|pvc|bio-based/]
+    ["Plastics", /plastic|polymer|thermoplastic|resin|polyolefin|polyamide|polyester|fluoropolymer|nylon|abs|pc|pet|pbt|pp|pe|pvc|bio-based/],
+    ["Ceramics", /ceramic|alumina|zirconia|silicon carbide|nitride|porcelain|glass|sialon|carbide/]
   ];
   const category = rules.find(([, pattern]) => pattern.test(text))?.[0] || "General materials";
   return {

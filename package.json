@@ -5,6 +5,7 @@
     "build:frontend-config": "node scripts/build-frontend-config.js",
     "migrate:materials": "node scripts/migrate-materials-to-sqlite.js",
     "validate:materials": "node scripts/validate-material-database.js",
+    "summary:materials": "node scripts/generate-database-summary.js",
     "smoke:openai": "node scripts/smoke-openai-analysis.js"
   },
   "dependencies": {}
