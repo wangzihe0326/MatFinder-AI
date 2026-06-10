@@ -237,6 +237,9 @@ const i18n = {
     emptyUseCaseTwo: "Transparent impact-resistant cover",
     emptyUseCaseThree: "Chemical corrosion-resistant seal",
     matchScore: "Match score",
+    matchStatusTitle: "Match status",
+    matchStatusPendingValue: "Waiting for requirement",
+    matchStatusPendingHelper: "Enter selection needs to generate a match score",
     detailsAi: "View explanation",
     askCopilot: "Ask Copilot",
     exportReport: "Export PDF report",
@@ -279,7 +282,11 @@ const i18n = {
     aboutRoadmapTwo: "More domain presets for automotive, electronics, medical, packaging, and sustainability use cases.",
     aboutRoadmapThree: "Richer export templates for engineering reviews and sourcing conversations.",
     recommendationExplanation: "Recommendation explanation",
+    materialSummaryHeading: "Material summary",
+    recommendationSummary: "Recommendation summary",
     aiRecommendationSummary: "AI recommendation summary",
+    matchReasons: "Match reasons",
+    riskLimitations: "Limitations / risk notes",
     scoringReasons: "Scoring engine reasons",
     unmatchedWarnings: "Unmatched warnings / limitations",
     keyProperties: "Key properties",
@@ -459,6 +466,9 @@ const zhDetailLabels = {
   emptyUseCaseTwo: "\u900f\u660e\u6297\u51b2\u51fb\u9632\u62a4\u7f69",
   emptyUseCaseThree: "\u8010\u5316\u5b66\u8150\u8680\u5bc6\u5c01\u6750\u6599",
   matchScore: "\u5339\u914d\u5206",
+  matchStatusTitle: "\u5339\u914d\u72b6\u6001",
+  matchStatusPendingValue: "\u5f85\u8f93\u5165\u9700\u6c42",
+  matchStatusPendingHelper: "\u8f93\u5165\u9009\u578b\u9700\u6c42\u540e\u751f\u6210\u5339\u914d\u8bc4\u5206",
   detailsAi: "\u67e5\u770b\u89e3\u91ca",
   aiScore: "AI \u5206\u6570",
   added: "\u5df2\u52a0\u5165",
@@ -544,7 +554,11 @@ const zhDetailLabels = {
     name: "\u540d\u79f0"
   },
   recommendationExplanation: "\u63a8\u8350\u89e3\u91ca",
+  materialSummaryHeading: "\u6750\u6599\u6458\u8981",
+  recommendationSummary: "\u63a8\u8350\u6458\u8981",
   aiRecommendationSummary: "AI \u63a8\u8350\u6458\u8981",
+  matchReasons: "\u5339\u914d\u539f\u56e0",
+  riskLimitations: "\u9650\u5236 / \u98ce\u9669\u63d0\u793a",
   scoringReasons: "\u8bc4\u5206\u5f15\u64ce\u5339\u914d\u539f\u56e0",
   unmatchedWarnings: "\u672a\u5339\u914d\u8b66\u544a / \u9650\u5236",
   keyProperties: "\u5173\u952e\u5c5e\u6027",
@@ -2122,7 +2136,57 @@ function meaningfulWarnings(candidate) {
   return (candidate?.warnings || []).filter(Boolean);
 }
 
+function getActiveRecommendationRequirement() {
+  if (elements.requirementInput) {
+    return elements.requirementInput.value.trim();
+  }
+  return String(state.recommendationQuery || "").trim();
+}
+
+function getScoredRecommendationForMaterial(item) {
+  return getActiveRecommendationRequirement() ? getRecommendationForMaterial(item) : null;
+}
+
+function buildMaterialSummary(item, language) {
+  const name = materialNameFor(item, language);
+  const category = materialCategoryFor(item, language);
+  const propertyLabels = language === "zh"
+    ? {
+        maxTemp: "\u8fde\u7eed\u4f7f\u7528",
+        tensile: "\u62c9\u4f38\u5f3a\u5ea6",
+        density: "\u5bc6\u5ea6",
+        chemical: "\u8010\u5316\u5b66\u6027"
+      }
+    : {
+        maxTemp: "continuous use",
+        tensile: "tensile strength",
+        density: "density",
+        chemical: "chemical resistance"
+      };
+  const properties = [
+    [propertyLabels.maxTemp, item.maxTemp, " deg C"],
+    [propertyLabels.tensile, item.tensile, " MPa"],
+    [propertyLabels.density, item.density, " g/cm3"],
+    [propertyLabels.chemical, item.chemical_resistance, ""]
+  ]
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .slice(0, 3)
+    .map(([label, value, suffix]) => `${label} ${formatValueFor(value, suffix, language)}`)
+    .join(language === "zh" ? "\u3001" : "; ");
+  const uses = materialUsesFor(item, language).slice(0, 3).join(language === "zh" ? "\u3001" : ", ");
+
+  if (language === "zh") {
+    return `${name}\u5c5e\u4e8e${category}\u3002\u6750\u6599\u6863\u6848\u663e\u793a${properties || "\u5176\u5177\u5907\u5e38\u89c4\u5de5\u7a0b\u6750\u6599\u5c5e\u6027"}\u3002\u5178\u578b\u5e94\u7528\u5305\u62ec${uses || "\u6682\u672a\u8bf4\u660e"}\u3002\u53ef\u7ed3\u5408\u5177\u4f53\u724c\u53f7\u3001\u5de5\u827a\u548c\u4f9b\u5e94\u5546\u6570\u636e\u8fdb\u4e00\u6b65\u786e\u8ba4\u3002`;
+  }
+
+  return `${name} is a ${category}. The material profile lists ${properties || "standard engineering-material properties"}. Typical applications include ${uses || "not specified"}. Confirm against the specific grade, process, and supplier data before selection.`;
+}
+
 function buildRecommendationSummary(item, candidate, language) {
+  if (!candidate) {
+    return buildMaterialSummary(item, language);
+  }
+
   const name = materialNameFor(item, language);
   const category = materialCategoryFor(item, language);
   const score = candidate ? `${candidate.score}/100` : formatValueFor(null, "", language);
@@ -2333,31 +2397,70 @@ function renderScoringList(items) {
 }
 
 function renderRecommendationDetail(item) {
-  const candidate = getRecommendationForMaterial(item);
-  const scoreText = candidate ? candidate.score : formatValueFor(null);
+  const candidate = getScoredRecommendationForMaterial(item);
+  const hasRecommendationContext = Boolean(candidate);
   const scoringReasons = (candidate?.reasons || []).map(localizeRecommendationReason);
   const warningsAndLimitations = [
     ...meaningfulWarnings(candidate).map(localizeRecommendationReason),
     ...materialDisadvantageList(item)
   ].filter(Boolean);
+  const summaryFor = (language) => hasRecommendationContext
+    ? buildRecommendationSummary(item, candidate, language)
+    : buildMaterialSummary(item, language);
+  const scoreCard = hasRecommendationContext
+    ? `
+      <div class="detail-score-card">
+        <span>${t("matchScore")}</span>
+        <strong>${escapeHtml(candidate.score)}</strong>
+      </div>
+    `
+    : `
+      <div class="detail-score-card is-pending">
+        <span>${t("matchStatusTitle")}</span>
+        <strong class="detail-status-value">${t("matchStatusPendingValue")}</strong>
+        <small>${t("matchStatusPendingHelper")}</small>
+      </div>
+    `;
+  const contextSections = hasRecommendationContext
+    ? `
+      <div class="profile-grid">
+        <section class="profile-section">
+          <h3>${t("matchReasons")}</h3>
+          ${renderScoringList(scoringReasons)}
+        </section>
+        <section class="profile-section">
+          <h3>${t("riskLimitations")}</h3>
+          ${renderScoringList([...new Set(warningsAndLimitations)])}
+        </section>
+      </div>
+    `
+    : `
+      <div class="profile-grid">
+        <section class="profile-section">
+          <h3>${t("advantages")}</h3>
+          ${renderProfileList(materialAdvantageList(item))}
+        </section>
+        <section class="profile-section">
+          <h3>${t("processingMethods")}</h3>
+          ${renderProfileList(item.processing_methods?.length ? item.processing_methods : [t("notSpecified")])}
+        </section>
+      </div>
+    `;
 
   elements.detailContent.innerHTML = `
     <div class="profile-hero recommendation-detail-hero">
       <div>
         <span class="category">${escapeHtml(materialCategory(item))}</span>
-        <p class="result-label">${t("recommendationExplanation")}</p>
+        <p class="result-label">${hasRecommendationContext ? t("recommendationExplanation") : t("materialProfile")}</p>
         <h2>${escapeHtml(materialName(item))} (${escapeHtml(item.abbr)})</h2>
         <p class="summary">${escapeHtml(materialSummary(item))}</p>
       </div>
-      <div class="detail-score-card">
-        <span>${t("matchScore")}</span>
-        <strong>${escapeHtml(scoreText)}</strong>
-      </div>
+      ${scoreCard}
     </div>
 
     <section class="profile-section detail-summary-section">
-      <h3>${t("aiRecommendationSummary")}</h3>
-      <p>${escapeHtml(buildRecommendationSummary(item, candidate, state.language))}</p>
+      <h3>${hasRecommendationContext ? t("recommendationSummary") : t("materialSummaryHeading")}</h3>
+      <p>${escapeHtml(summaryFor(state.language))}</p>
       <div class="profile-actions">
         <button class="secondary-context-button" type="button" data-ask-copilot>${t("askCopilot")}</button>
       </div>
@@ -2366,24 +2469,15 @@ function renderRecommendationDetail(item) {
     <div class="explanation-grid">
       <section class="profile-section">
         <h3>${t("chineseExplanation")}</h3>
-        <p lang="zh-CN">${escapeHtml(buildRecommendationSummary(item, candidate, "zh"))}</p>
+        <p lang="zh-CN">${escapeHtml(summaryFor("zh"))}</p>
       </section>
       <section class="profile-section">
         <h3>${t("englishExplanation")}</h3>
-        <p lang="en">${escapeHtml(buildRecommendationSummary(item, candidate, "en"))}</p>
+        <p lang="en">${escapeHtml(summaryFor("en"))}</p>
       </section>
     </div>
 
-    <div class="profile-grid">
-      <section class="profile-section">
-        <h3>${t("scoringReasons")}</h3>
-        ${renderScoringList(scoringReasons)}
-      </section>
-      <section class="profile-section">
-        <h3>${t("unmatchedWarnings")}</h3>
-        ${renderScoringList([...new Set(warningsAndLimitations)])}
-      </section>
-    </div>
+    ${contextSections}
 
     <section class="profile-section">
       <h3>${t("typicalUses")}</h3>
@@ -2396,7 +2490,7 @@ function renderRecommendationDetail(item) {
     </section>
 
     <section class="profile-section">
-      <h3>${t("alternativeMaterials")}</h3>
+      <h3>${hasRecommendationContext ? t("alternativeMaterials") : t("similarMaterials")}</h3>
       ${renderRankedAlternatives(item)}
     </section>
   `;

@@ -1519,6 +1519,19 @@ dialog::backdrop {
   line-height: 1;
 }
 
+.detail-score-card small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.detail-score-card .detail-status-value {
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
 .detail-summary-section {
   background: #f8fbfb;
 }
