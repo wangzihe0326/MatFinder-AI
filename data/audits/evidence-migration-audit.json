@@ -1,0 +1,79 @@
+{
+  "database": "C:\\Users\\35766\\Documents\\New project\\matfinder.db",
+  "definitions": {
+    "valid_http_url": "Non-empty HTTP(S) URL with a network host.",
+    "qualified_source_url": "Valid HTTP(S) URL plus source title and a manufacturer, official_datasheet, academic, or distributor source type. This is a structural audit and does not claim the linked page was independently authenticated.",
+    "material_quality_rollup": "Conservative rules-based recomputation; migration table membership is ignored as a trust signal."
+  },
+  "materials": 7531,
+  "table_profiles": {
+    "material_evidence": {
+      "row_count": 7818,
+      "valid_http_url_count": 596,
+      "qualified_source_url_count": 11,
+      "missing_or_invalid_url_count": 7222,
+      "missing_or_unqualified_source_count": 7807,
+      "generated_source_count": 7222,
+      "verification_status": {
+        "quarantined": 7818
+      },
+      "confidence_level": {
+        "quarantined": 7818
+      }
+    },
+    "material_property_evidence": {
+      "row_count": 120496,
+      "valid_http_url_count": 0,
+      "qualified_source_url_count": 0,
+      "missing_or_invalid_url_count": 120496,
+      "missing_or_unqualified_source_count": 120496,
+      "generated_source_count": 0,
+      "verification_status": {
+        "quarantined": 120496
+      },
+      "confidence_level": {
+        "quarantined": 120496
+      }
+    },
+    "material_certifications": {
+      "row_count": 0,
+      "valid_http_url_count": 0,
+      "qualified_source_url_count": 0,
+      "missing_or_invalid_url_count": 0,
+      "missing_or_unqualified_source_count": 0,
+      "generated_source_count": 0,
+      "verification_status": {},
+      "confidence_level": {}
+    }
+  },
+  "all_evidence": {
+    "row_count": 128314,
+    "valid_http_url_count": 596,
+    "qualified_source_url_count": 11,
+    "missing_or_invalid_url_count": 127718,
+    "missing_or_unqualified_source_count": 128303,
+    "generated_source_count": 7222,
+    "verification_status": {
+      "quarantined": 128314
+    },
+    "confidence_level": {
+      "quarantined": 128314
+    }
+  },
+  "material_quality_rollup": {
+    "low": 0,
+    "medium": 0,
+    "high": 0,
+    "quarantined": 7531
+  },
+  "legacy_copy_indicators": {
+    "identity_rows_matching_legacy_material_sources": 596,
+    "identity_row_count": 7818,
+    "property_row_count": 120496,
+    "property_rows_without_source_title": 120496,
+    "property_rows_without_source_url": 120496,
+    "property_rows_without_test_standard": 120496,
+    "property_rows_without_test_condition": 120496,
+    "property_rows_marked_unknown_or_estimated": 120496
+  }
+}

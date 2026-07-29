@@ -1208,10 +1208,10 @@ function materialNotes(item) {
 }
 
 function materialSummary(item) {
-  if (item.data_quality?.level === "rejected") {
+  if (item.data_quality?.level === "quarantined") {
     return state.language === "zh"
-      ? "该记录包含不合理或相互矛盾的数值，已停止作为材料性能依据。"
-      : "This record contains implausible or contradictory values and is blocked as material evidence.";
+      ? "该记录的材料身份、来源或物性证据未通过验证，已隔离，不能作为推荐、比较或 AI 分析依据。"
+      : "This record has unverified identity, source, or property evidence and is quarantined from recommendation, comparison, and AI analysis.";
   }
   if (state.language !== "zh") return item.description_en || item.summary;
   if (item.description_zh) return item.description_zh;
@@ -2077,11 +2077,12 @@ function renderSources(item) {
 function dataQualityMeta(item) {
   const level = item.data_quality?.level || "low";
   const labels = {
-    high: { zh: "供应商级证据", en: "Supplier-backed evidence", tone: "high" },
-    medium: { zh: "仅限初步筛选", en: "Screening evidence only", tone: "medium" },
-    synthetic: { zh: "程序生成记录", en: "Generated record", tone: "synthetic" },
-    rejected: { zh: "数据异常，已阻断", en: "Rejected data", tone: "rejected" },
-    low: { zh: "来源不足", en: "Insufficient evidence", tone: "low" }
+    high: { zh: "高可信度", en: "High confidence", tone: "high" },
+    medium: { zh: "中等可信度", en: "Medium confidence", tone: "medium" },
+    low: { zh: "低可信度", en: "Low confidence", tone: "low" },
+    quarantined: { zh: "已隔离", en: "Quarantined", tone: "quarantined" },
+    synthetic: { zh: "已隔离", en: "Quarantined", tone: "quarantined" },
+    rejected: { zh: "已隔离", en: "Quarantined", tone: "quarantined" }
   };
   const meta = labels[level] || labels.low;
   return { ...meta, label: state.language === "zh" ? meta.zh : meta.en };
@@ -2246,7 +2247,7 @@ function formatQualityCheckedValue(item, field, value, suffix = "") {
     flammability: ["flammability_inconsistency"]
   };
   if (
-    (item.data_quality?.level === "rejected" && !issues.length) ||
+    item.data_quality?.level === "quarantined" ||
     (fieldIssues[field] || []).some((code) => issueCodes.has(code))
   ) {
     return state.language === "zh" ? "异常值已阻断" : "Invalid value blocked";
@@ -2274,10 +2275,10 @@ function getScoredRecommendationForMaterial(item) {
 }
 
 function buildMaterialSummary(item, language) {
-  if (item.data_quality?.level === "rejected") {
+  if (item.data_quality?.level === "quarantined") {
     return language === "zh"
-      ? `${materialNameFor(item, language)} 的材料记录存在不合理或相互矛盾的数值，已停止作为选材、比较或投产依据。请先修复数据并核对具体牌号原始资料。`
-      : `${materialNameFor(item, language)} contains implausible or contradictory values and is blocked for selection, comparison, and factory release. Correct the data against an original grade-level source first.`;
+      ? `${materialNameFor(item, language)} 的材料身份、来源或物性证据尚未通过验证，已停止作为推荐、比较或 AI 分析依据。请先核对真实制造商、商业牌号和物性级原始资料。`
+      : `${materialNameFor(item, language)} has unverified identity, source, or property evidence and is blocked from recommendation, comparison, and AI analysis. Confirm the real manufacturer, commercial grade, and property-level source first.`;
   }
   const name = materialNameFor(item, language);
   const category = materialCategoryFor(item, language);
@@ -2367,6 +2368,135 @@ function renderKeyProperties(item) {
           `
         )
         .join("")}
+    </div>
+  `;
+}
+
+const propertyEvidenceDefinitions = [
+  ["density", "Density", "密度"],
+  ["tensile_strength", "Tensile strength", "拉伸强度"],
+  ["flexural_strength", "Flexural strength", "弯曲强度"],
+  ["impact_strength", "Impact strength", "冲击强度"],
+  ["elongation", "Elongation at break", "断裂伸长率"],
+  ["glass_transition_temperature", "Glass transition temperature", "玻璃化转变温度"],
+  ["melting_temperature", "Melting temperature", "熔融温度"],
+  ["hdt", "Heat deflection temperature", "热变形温度"],
+  ["continuous_use_temperature", "Continuous use temperature", "连续使用温度"],
+  ["thermal_conductivity", "Thermal conductivity", "导热系数"],
+  ["dielectric_constant", "Dielectric constant", "介电常数"],
+  ["water_absorption", "Water absorption", "吸水率"],
+  ["flame_rating", "Flame rating", "阻燃等级"],
+  ["chemical_resistance", "Chemical resistance", "耐化学性"],
+  ["transparency", "Transparency", "透明性"],
+  ["flexibility", "Flexibility", "柔韧性"]
+];
+
+function renderPropertyEvidence(item) {
+  const properties = item.evidence?.properties || {};
+  const languageIsZh = state.language === "zh";
+  const rows = propertyEvidenceDefinitions.flatMap(([propertyKey, en, zh]) => {
+    const claims = Array.isArray(properties[propertyKey]) ? properties[propertyKey] : [];
+    const visibleClaims = claims.length ? claims : [null];
+    return visibleClaims.map((claim) => {
+      const source = claim?.source || claim || {};
+      const sourceTitle = source.sourceTitle || null;
+      const sourceUrl = source.sourceUrl || null;
+      const isVerifiedLink = sourceTitle && /^https?:\/\//i.test(sourceUrl || "");
+      const value = claim?.value === null || claim?.value === undefined || claim?.value === ""
+        ? "Property data unavailable"
+        : `${claim.value}${claim.unit ? ` ${claim.unit}` : " (Unit unavailable)"}`;
+      const sourceMarkup = isVerifiedLink
+        ? `<a href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sourceTitle)}</a>`
+        : `<span class="property-missing">Source not verified</span>`;
+
+      return `
+        <article class="property-evidence-row" data-property-key="${escapeAttribute(propertyKey)}">
+          <div class="property-evidence-value">
+            <strong>${escapeHtml(languageIsZh ? zh : en)}</strong>
+            <span>${escapeHtml(value)}</span>
+          </div>
+          <dl>
+            <div><dt>${languageIsZh ? "测试标准" : "Test standard"}</dt><dd>${escapeHtml(claim?.testStandard || "Test standard unavailable")}</dd></div>
+            <div><dt>${languageIsZh ? "测试条件" : "Test condition"}</dt><dd>${escapeHtml(claim?.testCondition || "Test condition unavailable")}</dd></div>
+            <div><dt>${languageIsZh ? "数值类型" : "Value type"}</dt><dd>${escapeHtml(claim?.valueType || "unknown")}</dd></div>
+            <div><dt>${languageIsZh ? "验证状态" : "Verification status"}</dt><dd>${escapeHtml(claim?.verificationStatus || "unverified")}</dd></div>
+            <div><dt>${languageIsZh ? "可信度" : "Confidence"}</dt><dd>${escapeHtml(claim?.confidenceLevel || "low")}</dd></div>
+            <div><dt>${languageIsZh ? "证据版本" : "Evidence version"}</dt><dd>${escapeHtml(claim?.evidenceVersion || 1)}</dd></div>
+            <div><dt>${languageIsZh ? "冲突状态" : "Conflict status"}</dt><dd>${escapeHtml(claim?.conflictStatus || "none")}</dd></div>
+            <div><dt>${languageIsZh ? "来源" : "Source"}</dt><dd>${sourceMarkup}</dd></div>
+          </dl>
+        </article>
+      `;
+    });
+  });
+
+  return `<div class="property-evidence-table">${rows.join("")}</div>`;
+}
+
+function renderIdentityEvidence(item) {
+  const identity = item.evidence?.identity || {};
+  const languageIsZh = state.language === "zh";
+  const valueOrUnknown = (value) => escapeHtml(value || "unknown");
+  const sources = Array.isArray(identity.sources) ? identity.sources : [];
+  const sourceCards = sources.length
+    ? sources.map((source) => {
+        const verifiedLink = source.sourceTitle && /^https?:\/\//i.test(source.sourceUrl || "");
+        return `
+          <article class="source-item">
+            <h4>${verifiedLink ? escapeHtml(source.sourceTitle) : "Source not verified"}</h4>
+            <p><strong>${languageIsZh ? "来源类型" : "Source type"}:</strong> ${escapeHtml(source.sourceType || "unknown")}</p>
+            <p><strong>${languageIsZh ? "验证状态" : "Verification status"}:</strong> ${escapeHtml(source.verificationStatus || "unverified")}</p>
+            <p><strong>${languageIsZh ? "可信度" : "Confidence"}:</strong> ${escapeHtml(source.confidenceLevel || "low")}</p>
+            ${verifiedLink ? `<a href="${escapeAttribute(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">${languageIsZh ? "查看来源" : "View source"}</a>` : `<p class="property-missing">Source not verified</p>`}
+          </article>
+        `;
+      }).join("")
+    : `<p class="property-missing">Source not verified</p>`;
+
+  return `
+    <div class="quality-facts identity-evidence-facts">
+      <span>${languageIsZh ? "制造商" : "Manufacturer"}: <strong>${valueOrUnknown(identity.manufacturer)}</strong></span>
+      <span>${languageIsZh ? "品牌" : "Brand"}: <strong>${valueOrUnknown(identity.brand)}</strong></span>
+      <span>${languageIsZh ? "商业牌号" : "Commercial grade"}: <strong>${valueOrUnknown(identity.commercialGrade)}</strong></span>
+      <span>${languageIsZh ? "材料家族" : "Material family"}: <strong>${valueOrUnknown(identity.materialFamily)}</strong></span>
+      <span>${languageIsZh ? "验证状态" : "Verification status"}: <strong>${valueOrUnknown(identity.verificationStatus)}</strong></span>
+      <span>${languageIsZh ? "最后验证" : "Last verified"}: <strong>${valueOrUnknown(identity.lastVerifiedAt)}</strong></span>
+    </div>
+    <div class="source-list">${sourceCards}</div>
+  `;
+}
+
+function renderCertificationEvidence(item) {
+  const certifications = Array.isArray(item.evidence?.certifications)
+    ? item.evidence.certifications
+    : [];
+  const languageIsZh = state.language === "zh";
+  if (!certifications.length) {
+    return `<p class="property-missing">${languageIsZh ? "认证证据不可用" : "Certification evidence unavailable"}</p>`;
+  }
+  return `
+    <div class="property-evidence-table certification-evidence-table">
+      ${certifications.map((certification) => {
+        const source = certification.source || certification;
+        const verifiedLink = source.sourceTitle && /^https?:\/\//i.test(source.sourceUrl || "");
+        const sourceMarkup = verifiedLink
+          ? `<a href="${escapeAttribute(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceTitle)}</a>`
+          : `<span class="property-missing">Source not verified</span>`;
+        return `
+          <article class="property-evidence-row certification-evidence-row">
+            <div class="property-evidence-value">
+              <strong>${escapeHtml(certification.certificationName || "unknown")}</strong>
+              <span>${escapeHtml(certification.certificationStatus || "unknown")}</span>
+            </div>
+            <dl>
+              <div><dt>${languageIsZh ? "范围" : "Scope"}</dt><dd>${escapeHtml(certification.scope || "unknown")}</dd></div>
+              <div><dt>${languageIsZh ? "验证状态" : "Verification status"}</dt><dd>${escapeHtml(certification.verificationStatus || "unverified")}</dd></div>
+              <div><dt>${languageIsZh ? "可信度" : "Confidence"}</dt><dd>${escapeHtml(certification.confidenceLevel || "low")}</dd></div>
+              <div><dt>${languageIsZh ? "来源" : "Source"}</dt><dd>${sourceMarkup}</dd></div>
+            </dl>
+          </article>
+        `;
+      }).join("")}
     </div>
   `;
 }
@@ -2655,7 +2785,7 @@ function renderRecommendationDetail(item) {
   const scoreCard = hasRecommendationContext
     ? `
       <div class="detail-score-card">
-        <span>${t("matchScore")}</span>
+        <span>${state.language === "zh" ? "证据评分" : "Evidence score"}</span>
         <strong>${escapeHtml(candidate.score)}</strong>
       </div>
     `
@@ -2707,9 +2837,11 @@ function renderRecommendationDetail(item) {
     <section class="profile-section detail-summary-section">
       <h3>${hasRecommendationContext ? t("recommendationSummary") : t("materialSummaryHeading")}</h3>
       <p>${escapeHtml(summaryFor(state.language))}</p>
-      <div class="profile-actions">
-        <button class="secondary-context-button" type="button" data-ask-copilot>${t("askCopilot")}</button>
-      </div>
+      ${item.data_quality?.level === "quarantined"
+        ? `<p class="recommendation-action-blocked">${state.language === "zh" ? "该记录已隔离，禁止 AI 分析。" : "This record is quarantined; AI analysis is blocked."}</p>`
+        : `<div class="profile-actions">
+            <button class="secondary-context-button" type="button" data-ask-copilot>${t("askCopilot")}</button>
+          </div>`}
     </section>
 
     <div class="explanation-grid">
@@ -2725,6 +2857,13 @@ function renderRecommendationDetail(item) {
 
     ${contextSections}
 
+    ${hasRecommendationContext ? `
+      <section class="profile-section">
+        <h3>${state.language === "zh" ? "逐项要求验证" : "Requirement-by-requirement verification"}</h3>
+        ${renderRequirementEvidenceTable(candidate.requirementResults || [])}
+      </section>
+    ` : ""}
+
     ${renderDataQuality(item)}
 
     <section class="profile-section">
@@ -2734,7 +2873,7 @@ function renderRecommendationDetail(item) {
 
     <section class="profile-section">
       <h3>${t("keyProperties")}</h3>
-      ${renderKeyProperties(item)}
+      ${renderPropertyEvidence(item)}
     </section>
 
     <section class="profile-section">
@@ -2743,8 +2882,13 @@ function renderRecommendationDetail(item) {
     </section>
 
     <section class="profile-section">
-      <h3>${t("materialSources")}</h3>
-      ${renderSources(item)}
+      <h3>${state.language === "zh" ? "材料身份来源" : "Material identity sources"}</h3>
+      ${renderIdentityEvidence(item)}
+    </section>
+
+    <section class="profile-section">
+      <h3>${state.language === "zh" ? "独立认证证据" : "Independent certification evidence"}</h3>
+      ${renderCertificationEvidence(item)}
     </section>
   `;
 
@@ -2882,7 +3026,13 @@ function render() {
 }
 
 function renderRecommendations(result = state.recommendationResult) {
-  if (!state.recommendations.length) {
+  const groups = result?.groups || {
+    verifiedMatches: state.recommendations,
+    potentialMatches: [],
+    rejectedMaterials: []
+  };
+  const groupedCount = Object.values(groups).reduce((total, entries) => total + (entries?.length || 0), 0);
+  if (!groupedCount) {
     renderRecommendationEmptyState(result);
     return;
   }
@@ -2898,9 +3048,23 @@ function renderRecommendations(result = state.recommendationResult) {
         <p class="result-label">${t("recommendedMaterials")}</p>
         <h2>${criteriaText}</h2>
       </div>
-      <button class="report-export-button" type="button" data-export-report>${t("exportReport")}</button>
+      ${groups.verifiedMatches?.length ? `<button class="report-export-button" type="button" data-export-report>${t("exportReport")}</button>` : ""}
     </div>
-    ${state.recommendations.map(renderRecommendationCard).join("")}
+    ${renderRecommendationGroup(
+      state.language === "zh" ? "已验证匹配" : "Verified Matches",
+      groups.verifiedMatches || [],
+      "verified"
+    )}
+    ${renderRecommendationGroup(
+      state.language === "zh" ? "证据缺失的潜在匹配" : "Potential Matches with Missing Evidence",
+      groups.potentialMatches || [],
+      "potential"
+    )}
+    ${renderRecommendationGroup(
+      state.language === "zh" ? "已拒绝材料" : "Rejected Materials",
+      groups.rejectedMaterials || [],
+      "rejected"
+    )}
   `;
 
   elements.recommendationResults.querySelectorAll("[data-detail-id]").forEach((button) => {
@@ -2913,6 +3077,26 @@ function renderRecommendations(result = state.recommendationResult) {
     });
   });
   elements.recommendationResults.querySelector("[data-export-report]")?.addEventListener("click", exportMaterialSelectionReport);
+}
+
+function renderRecommendationGroup(title, candidates, bucket) {
+  const languageIsZh = state.language === "zh";
+  const emptyText = {
+    verified: languageIsZh ? "没有材料满足全部硬条件及证据要求。" : "No material satisfies every hard constraint and evidence requirement.",
+    potential: languageIsZh ? "没有仅因证据缺失而保留的候选。" : "No candidate is retained solely because of missing evidence.",
+    rejected: languageIsZh ? "当前结果中没有被拒绝的材料。" : "No material is rejected in this result."
+  };
+  return `
+    <section class="recommendation-group is-${bucket}">
+      <div class="recommendation-group-heading">
+        <h3>${escapeHtml(title)}</h3>
+        <span>${candidates.length}</span>
+      </div>
+      ${candidates.length
+        ? candidates.map((candidate, index) => renderRecommendationCard(candidate, index, bucket)).join("")
+        : `<p class="profile-muted">${escapeHtml(emptyText[bucket])}</p>`}
+    </section>
+  `;
 }
 
 function getOnboardingUseCases() {
@@ -3008,6 +3192,9 @@ function renderRecommendationEmptyState(result = null) {
         : null,
       hard.minimumTensileMpa !== null && hard.minimumTensileMpa !== undefined
         ? (languageIsZh ? `\u62c9\u4f38\u5f3a\u5ea6 \u2265 ${hard.minimumTensileMpa} MPa` : `Tensile strength \u2265 ${hard.minimumTensileMpa} MPa`)
+        : null,
+      hard.minimumHdtC !== null && hard.minimumHdtC !== undefined
+        ? (languageIsZh ? `热变形温度 \u2265 ${hard.minimumHdtC}°C` : `Heat deflection temperature \u2265 ${hard.minimumHdtC}°C`)
         : null
     ].filter(Boolean);
     const unsupportedItems = unsupported.map((entry) => languageIsZh ? entry.zh : entry.label);
@@ -3063,24 +3250,30 @@ function renderRecommendationEmptyState(result = null) {
 }
 
 function renderRecommendationSafetyBanner(result) {
-  if (!result || result.status !== "needs_verification") return "";
+  if (!result || !["needs_verification", "potential_matches"].includes(result.status)) return "";
   const unsupported = result.parsedRequirement?.unsupportedConstraints || [];
   const languageIsZh = state.language === "zh";
   const items = unsupported.map((entry) => languageIsZh ? entry.zh : entry.label);
   return `
     <section class="recommendation-safety-banner" role="status">
-      <strong>${languageIsZh ? "\u4ec5\u4e3a\u65e9\u671f\u7b5b\u9009\uff0c\u4e0d\u5f97\u7528\u4e8e\u91c7\u8d2d\u6216\u5de5\u7a0b\u653e\u884c" : "Early screening only — not valid for procurement or engineering release"}</strong>
-      <p>${languageIsZh ? "\u4ee5\u4e0b\u6761\u4ef6\u672a\u88ab\u672c\u5730\u6570\u636e\u8bc1\u660e" : "The local data does not prove"}: ${escapeHtml(items.join(languageIsZh ? "\u3001" : ", "))}</p>
+      <strong>${languageIsZh ? "当前只有证据不完整的潜在匹配" : "Only potential matches with missing evidence are available"}</strong>
+      <p>${languageIsZh ? "缺失证据的候选不得作为已验证匹配使用。" : "Candidates with missing evidence must not be treated as verified matches."}${items.length ? ` ${languageIsZh ? "仍需外部验证" : "External verification is still required for"}: ${escapeHtml(items.join(languageIsZh ? "、" : ", "))}` : ""}</p>
     </section>
   `;
 }
 
-function renderRecommendationCard(candidate, index) {
+function renderRecommendationCard(candidate, index, bucket = candidate.bucket || "potential") {
   const item = candidate.material;
   const quality = dataQualityMeta(item);
+  const comparisonAllowed = bucket !== "rejected" && item.data_quality?.level !== "quarantined";
+  const bucketLabel = {
+    verified: state.language === "zh" ? "已验证" : "Verified",
+    potential: state.language === "zh" ? "潜在匹配" : "Potential",
+    rejected: state.language === "zh" ? "已拒绝" : "Rejected"
+  }[bucket];
   return `
-    <article class="recommendation-card">
-      <span class="rank">${index + 1}</span>
+    <article class="recommendation-card is-${bucket}">
+      <span class="rank">${escapeHtml(bucketLabel)} ${index + 1}</span>
       <div>
         <div class="recommendation-card-labels">
           <span class="category">${materialCategory(item)}</span>
@@ -3088,25 +3281,60 @@ function renderRecommendationCard(candidate, index) {
         </div>
         <h3>${materialName(item)} (${item.abbr})</h3>
         <p class="summary">${materialSummary(item)}</p>
-        <div class="recommendation-reasons">
-          ${candidate.reasons.map((reason) => `<span class="reason">${localizeRecommendationReason(reason)}</span>`).join("")}
-          ${(candidate.warnings || []).map((warning) => `<span class="reason${warning === "no major unmatched requirement warnings" ? "" : " warning"}">${localizeRecommendationReason(warning)}</span>`).join("")}
-        </div>
+        ${renderRequirementEvidenceTable(candidate.requirementResults || [])}
       </div>
       <div class="score-box">
-        <div class="score-label"><span>${t("matchScore")}</span><strong>${candidate.score}</strong></div>
+        <div class="score-label"><span>${state.language === "zh" ? "证据评分" : "Evidence score"}</span><strong>${candidate.score}</strong></div>
         <div class="score-track"><div class="score-fill" style="width: ${candidate.score}%"></div></div>
-        <button type="button" data-detail-id="${item.id}">${t("detailsAi")}</button>
-        <button class="compare-button" type="button" data-compare-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
-          ${state.selected.has(item.id) ? t("added") : t("compare")}
-        </button>
+        <button type="button" data-detail-id="${item.id}">${state.language === "zh" ? "查看证据详情" : "View evidence details"}</button>
+        ${comparisonAllowed
+          ? `<button class="compare-button" type="button" data-compare-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
+              ${state.selected.has(item.id) ? t("added") : t("compare")}
+            </button>`
+          : `<span class="recommendation-action-blocked">${state.language === "zh" ? "已禁止比较和 AI 分析" : "Comparison and AI analysis blocked"}</span>`}
       </div>
     </article>
   `;
 }
 
+function renderRequirementEvidenceTable(requirementResults) {
+  const languageIsZh = state.language === "zh";
+  if (!requirementResults.length) {
+    return `<p class="property-missing">Property data unavailable</p>`;
+  }
+  const statusLabels = {
+    satisfied: languageIsZh ? "满足" : "satisfied",
+    not_satisfied: languageIsZh ? "不满足" : "not_satisfied",
+    unknown: languageIsZh ? "未知" : "unknown",
+    unverifiable: languageIsZh ? "无法验证" : "unverifiable"
+  };
+  return `
+    <div class="requirement-evidence-table">
+      ${requirementResults.map((result) => {
+        const source = result.evidenceSource;
+        const verifiedLink = source?.sourceTitle && /^https?:\/\//i.test(source?.sourceUrl || "");
+        const sourceMarkup = verifiedLink
+          ? `<a href="${escapeAttribute(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceTitle)}</a>`
+          : `<span class="property-missing">Source not verified</span>`;
+        return `
+          <article class="requirement-evidence-row is-${escapeAttribute(result.status)}">
+            <div>
+              <strong>${escapeHtml(result.requirement || "unknown")}</strong>
+              <small>${escapeHtml(result.detectedConstraint || "unknown")}</small>
+            </div>
+            <div><span>${languageIsZh ? "材料值" : "Material value"}</span><strong>${escapeHtml(result.materialValue || "Property data unavailable")}</strong></div>
+            <div><span>${languageIsZh ? "状态" : "Status"}</span><strong>${escapeHtml(statusLabels[result.status] || result.status || "unknown")}</strong></div>
+            <div><span>${languageIsZh ? "证据来源" : "Evidence source"}</span>${sourceMarkup}</div>
+            <p>${escapeHtml(result.explanation || "Property data unavailable")}</p>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function exportMaterialSelectionReport(event) {
-  if (!state.recommendations.length) return;
+  if (!(state.recommendationResult?.groups?.verifiedMatches || []).length) return;
   const button = event?.currentTarget;
   if (button) {
     button.disabled = true;
@@ -3206,7 +3434,7 @@ function buildMaterialSelectionReportHtml() {
 
         <section>
           <h2>${escapeHtml(t("reportTopMaterials"))}</h2>
-          ${state.recommendations.slice(0, 5).map((candidate, index) => renderReportMaterial(candidate, index)).join("")}
+          ${(state.recommendationResult?.groups?.verifiedMatches || []).slice(0, 5).map((candidate, index) => renderReportMaterial(candidate, index)).join("")}
         </section>
       </body>
     </html>`;
@@ -3280,6 +3508,7 @@ function renderCards(items) {
 
   items.forEach((item) => {
     const recommendation = state.recommendations.find((candidate) => candidate.material.id === item.id);
+    const isQuarantined = item.data_quality?.level === "quarantined";
     const card = document.createElement("article");
     card.className = `material-card${recommendedIds.has(item.id) ? " is-recommended" : ""}`;
     card.innerHTML = `
@@ -3288,10 +3517,13 @@ function renderCards(items) {
           <span class="category">${materialCategory(item)}</span>
           <h3>${materialName(item)}</h3>
         </div>
-        <span class="abbr">${item.abbr}</span>
+        <div class="recommendation-card-labels">
+          <span class="quality-badge is-${dataQualityMeta(item).tone}">${escapeHtml(dataQualityMeta(item).label)}</span>
+          <span class="abbr">${item.abbr}</span>
+        </div>
       </div>
       <div>
-        ${recommendation ? `<span class="chip">${t("aiScore")} ${recommendation.score}</span>` : ""}
+        ${recommendation ? `<span class="chip">${state.language === "zh" ? "证据评分" : "Evidence score"} ${recommendation.score}</span>` : ""}
         <p class="summary">${materialSummary(item)}</p>
         <div class="metrics">
           <div class="metric"><span>${t("continuousUse")}</span><strong>${formatQualityCheckedValue(item, "maxTemp", item.maxTemp, " deg C")}</strong></div>
@@ -3303,14 +3535,16 @@ function renderCards(items) {
       </div>
       <div class="card-actions">
         <button class="primary-button detail-button" type="button" data-id="${item.id}">${t("detailsAi")}</button>
-        <button class="compare-button" type="button" data-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
-          ${state.selected.has(item.id) ? t("added") : t("compare")}
-        </button>
+        ${isQuarantined
+          ? `<span class="recommendation-action-blocked">${state.language === "zh" ? "已禁止比较" : "Comparison blocked"}</span>`
+          : `<button class="compare-button" type="button" data-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
+              ${state.selected.has(item.id) ? t("added") : t("compare")}
+            </button>`}
       </div>
     `;
 
     card.querySelector(".detail-button").addEventListener("click", () => showDetail(item.id));
-    card.querySelector(".compare-button").addEventListener("click", () => toggleCompare(item.id));
+    card.querySelector(".compare-button")?.addEventListener("click", () => toggleCompare(item.id));
     fragment.append(card);
   });
 
@@ -3370,6 +3604,8 @@ function renderMaterialsPagination(totalItems, totalPages) {
 }
 
 function toggleCompare(id) {
+  const item = materials.find((material) => material.id === id);
+  if (!item || item.data_quality?.level === "quarantined") return;
   if (state.selected.has(id)) {
     state.selected.delete(id);
   } else {

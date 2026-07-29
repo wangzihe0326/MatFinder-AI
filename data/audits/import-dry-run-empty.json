@@ -1,0 +1,19 @@
+{
+  "mode": "dry-run",
+  "database": "C:\\Users\\35766\\Documents\\New project\\matfinder.db",
+  "inputFile": "C:\\Users\\35766\\Documents\\New project\\data\\templates\\real-material-core-template.json",
+  "inputFileHash": "e0ec8b7d8929f336dc3f408ec000c51090abe16b8eaa33227abcb6d335b2d7d6",
+  "recordCount": 0,
+  "priorBatchId": null,
+  "counts": {
+    "add": 0,
+    "update": 0,
+    "skip": 0,
+    "reject": 0
+  },
+  "entityCounts": {},
+  "actions": [],
+  "errors": [],
+  "warnings": [],
+  "status": "ready"
+}

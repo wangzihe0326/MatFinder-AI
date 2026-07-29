@@ -1,189 +1,370 @@
-const GENERATED_SOURCE_TYPES = new Set([
-  "generated_reference_catalog",
-  "generated_commercial_catalog"
-]);
+const {
+  PROPERTY_DEFINITIONS,
+  buildLegacyEvidence,
+  finiteNumber
+} = require("./evidence-model");
 
 const CATEGORY_LIMITS = {
-  Plastics: { density: [0.4, 3], tensile: [0, 600], maxTemperature: [-100, 400], meltingTemperature: [-100, 500] },
-  Elastomers: { density: [0.5, 3], tensile: [0, 120], maxTemperature: [-100, 350], meltingTemperature: [-150, 450] },
-  Thermosets: { density: [0.5, 4], tensile: [0, 500], maxTemperature: [-100, 500], meltingTemperature: null },
-  Adhesives: { density: [0.3, 4], tensile: [0, 300], maxTemperature: [-100, 400], meltingTemperature: null },
-  Sealants: { density: [0.3, 4], tensile: [0, 120], maxTemperature: [-100, 400], meltingTemperature: null },
-  Foams: { density: [0.005, 2], tensile: [0, 150], maxTemperature: [-200, 500], meltingTemperature: [-200, 500] },
-  Fibers: { density: [0.5, 25], tensile: [0, 8000], maxTemperature: [-200, 2500], meltingTemperature: [-200, 4000] },
-  Composites: { density: [0.05, 25], tensile: [0, 5000], maxTemperature: [-200, 2500], meltingTemperature: [-200, 4000] },
-  Coatings: { density: [0.1, 10], tensile: [0, 1000], maxTemperature: [-200, 1500], meltingTemperature: [-200, 4000] },
-  Ceramics: { density: [0.1, 25], tensile: [0, 5000], maxTemperature: [-200, 3500], meltingTemperature: [-200, 5000] },
-  Metals: { density: [0.1, 25], tensile: [0, 5000], maxTemperature: [-200, 2500], meltingTemperature: [-200, 4000] }
+  Plastics: { density: [0.4, 3], tensile_strength: [0, 600], continuous_use_temperature: [-100, 400], melting_temperature: [-100, 500], hdt: [-100, 400] },
+  Elastomers: { density: [0.5, 3], tensile_strength: [0, 120], continuous_use_temperature: [-100, 350], melting_temperature: [-150, 450], hdt: null },
+  Thermosets: { density: [0.5, 4], tensile_strength: [0, 500], continuous_use_temperature: [-100, 500], melting_temperature: null, hdt: [-100, 500] },
+  Adhesives: { density: [0.3, 4], tensile_strength: [0, 300], continuous_use_temperature: [-100, 400], melting_temperature: null, hdt: null },
+  Sealants: { density: [0.3, 4], tensile_strength: [0, 120], continuous_use_temperature: [-100, 400], melting_temperature: null, hdt: null },
+  Foams: { density: [0.005, 2], tensile_strength: [0, 150], continuous_use_temperature: [-200, 500], melting_temperature: [-200, 500], hdt: [-200, 500] },
+  Fibers: { density: [0.5, 25], tensile_strength: [0, 8000], continuous_use_temperature: [-200, 2500], melting_temperature: [-200, 4000], hdt: null },
+  Composites: { density: [0.05, 25], tensile_strength: [0, 5000], continuous_use_temperature: [-200, 2500], melting_temperature: [-200, 4000], hdt: [-200, 2500] },
+  Coatings: { density: [0.1, 10], tensile_strength: [0, 1000], continuous_use_temperature: [-200, 1500], melting_temperature: [-200, 4000], hdt: null },
+  Ceramics: { density: [0.1, 25], tensile_strength: [0, 5000], continuous_use_temperature: [-200, 3500], melting_temperature: [-200, 5000], hdt: null },
+  Metals: { density: [0.1, 25], tensile_strength: [0, 5000], continuous_use_temperature: [-200, 2500], melting_temperature: [-200, 4000], hdt: null }
 };
 
+const KEY_PROPERTIES = [
+  "density",
+  "tensile_strength",
+  "hdt",
+  "continuous_use_temperature"
+];
+
 function assessMaterialQuality(material) {
-  const sources = Array.isArray(material.sources) ? material.sources : [];
-  const sourceTypes = sources.map((source) => String(source.source_type || "").toLowerCase());
-  const externalSources = sources.filter((source) => /^https?:\/\//i.test(String(source.source_url || "")));
-  const generated = sourceTypes.some((sourceType) => GENERATED_SOURCE_TYPES.has(sourceType));
-  const manufacturerBacked = sourceTypes.includes("manufacturer_manual");
-  const evidenceText = [
-    material.test_method,
-    material.test_standard,
-    material.specimen_condition,
-    material.conditioning,
-    ...sources.flatMap((source) => [
-      source.test_method,
-      source.test_standard,
-      source.specimen_condition,
-      source.notes
-    ])
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const hasTestConditions =
-    /\b(?:ASTM|ISO|IEC|DIN|GB\/?T|UL)\s*[-A-Z0-9]*/i.test(evidenceText) &&
-    /(?:test|method|specimen|condition|temperature|试验|测试|试样|条件|温度)/i.test(evidenceText);
+  const evidence = material.evidence || buildLegacyEvidence(material);
+  const identity = evidence.identity || {};
+  const materialSources = identity.sources || [];
+  const propertyClaims = Object.values(evidence.properties || {}).flat();
+  const allSources = [
+    ...materialSources,
+    ...propertyClaims.map((claim) => claim.source || {})
+  ];
+  const sourceTypes = allSources.map((source) => source.sourceType || "unknown");
+  const generated = sourceTypes.includes("generated") ||
+    propertyClaims.some((claim) => claim.valueType === "estimated" && claim.verificationStatus === "quarantined");
+  const hasConfirmedIdentity = Boolean(identity.manufacturer && identity.commercialGrade);
+  const officialSources = allSources.filter((source) =>
+    ["manufacturer", "official_datasheet"].includes(source.sourceType) &&
+    hasValue(source.sourceTitle) &&
+    validHttpUrl(source.sourceUrl)
+  );
+  const officialIdentitySources = materialSources.filter((source) =>
+    ["manufacturer", "official_datasheet"].includes(source.sourceType) &&
+    source.verificationStatus === "verified" &&
+    hasValue(source.sourceTitle) &&
+    validHttpUrl(source.sourceUrl)
+  );
+  const reliableSources = allSources.filter((source) =>
+    ["manufacturer", "official_datasheet", "academic", "distributor"].includes(source.sourceType) &&
+    hasValue(source.sourceTitle) &&
+    validHttpUrl(source.sourceUrl)
+  );
+  const externalSources = allSources.filter((source) => validHttpUrl(source.sourceUrl));
   const issues = [];
 
-  if (!sources.length) issues.push(issue("missing_source", "No source record is attached.", "缺少来源记录。"));
-  if (!externalSources.length) issues.push(issue("no_external_source", "No external source can be opened.", "没有可打开的外部来源。"));
   if (generated) {
-    issues.push(
-      issue(
-        "generated_record",
-        "This is a generated screening record, not a verified supplier grade.",
-        "这是程序生成的筛选记录，不是已核实的供应商牌号。"
-      )
-    );
+    issues.push(issue(
+      "generated_record",
+      "Generated or estimated catalog data cannot establish a real commercial grade.",
+      "程序生成或估算的目录数据不能证明真实商业牌号。"
+    ));
   }
-  if (!hasTestConditions) {
-    issues.push(
-      issue(
-        "missing_test_conditions",
-        "No test standard, specimen condition, and test temperature are attached to the numeric values.",
-        "数值没有附带测试标准、试样状态和测试温度，不能直接用于设计放行。"
-      )
-    );
+  if (!identity.manufacturer) {
+    issues.push(issue(
+      "manufacturer_unconfirmed",
+      "Manufacturer identity is not confirmed.",
+      "制造商身份尚未确认。"
+    ));
+  }
+  if (!identity.commercialGrade) {
+    issues.push(issue(
+      "commercial_grade_unconfirmed",
+      "Commercial grade is not confirmed.",
+      "商业牌号尚未确认。"
+    ));
+  }
+  if (!externalSources.length) {
+    issues.push(issue(
+      "source_not_verified",
+      "No verifiable external evidence URL is attached.",
+      "没有附带可核验的外部证据链接。"
+    ));
   }
 
-  const limits = CATEGORY_LIMITS[material.category];
-  if (limits) {
-    checkRange(issues, "density", material.density, limits.density, "density");
-    checkRange(issues, "tensile", material.tensile ?? material.tensile_strength, limits.tensile, "tensile strength");
-    checkRange(
-      issues,
-      "max_temperature",
-      material.maxTemp ?? material.max_temperature ?? material.continuous_use_temperature,
-      limits.maxTemperature,
-      "continuous use temperature"
-    );
-    if (limits.meltingTemperature) {
-      checkRange(
-        issues,
-        "melting_temperature",
-        material.tm ?? material.melting_temperature,
-        limits.meltingTemperature,
-        "melting temperature"
-      );
+  const physicalIssues = physicalConflictIssues(material, evidence);
+  issues.push(...physicalIssues);
+  const conflictIssues = evidenceConflictIssues(evidence);
+  issues.push(...conflictIssues);
+
+  const keyClaims = KEY_PROPERTIES.map((propertyKey) => ({
+    propertyKey,
+    claims: evidence.properties?.[propertyKey] || []
+  }));
+  const completeKeyClaims = keyClaims.filter(({ claims }) =>
+    claims.some(isCompleteOfficialPropertyClaim)
+  );
+  const sourcedKeyClaims = keyClaims.filter(({ claims }) =>
+    claims.some(isReliablySourcedPropertyClaim)
+  );
+  const claimsWithTestConditions = propertyClaims.filter((claim) =>
+    hasValue(claim.testStandard) && hasValue(claim.testCondition)
+  );
+
+  propertyClaims.forEach((claim) => {
+    if (!hasValue(claim.value)) return;
+    if (!hasValue(claim.testStandard)) {
+      issues.push(issue(
+        `missing_test_standard:${claim.propertyKey}`,
+        `${propertyLabel(claim.propertyKey)} has no test standard.`,
+        `${propertyLabel(claim.propertyKey)} 缺少测试标准。`
+      ));
     }
-  }
+    if (!hasValue(claim.testCondition)) {
+      issues.push(issue(
+        `missing_test_condition:${claim.propertyKey}`,
+        `${propertyLabel(claim.propertyKey)} has no test condition.`,
+        `${propertyLabel(claim.propertyKey)} 缺少测试条件。`
+      ));
+    }
+    if (!validHttpUrl(claim.source?.sourceUrl)) {
+      issues.push(issue(
+        `missing_property_source:${claim.propertyKey}`,
+        `${propertyLabel(claim.propertyKey)} has no verified property-level source URL.`,
+        `${propertyLabel(claim.propertyKey)} 缺少已验证的物性级来源链接。`
+      ));
+    }
+  });
 
-  const maxTemperature = finiteNumber(
-    material.maxTemp ?? material.max_temperature ?? material.continuous_use_temperature
-  );
-  const meltingTemperature = finiteNumber(material.tm ?? material.melting_temperature);
-  if (
-    ["Plastics", "Elastomers", "Foams"].includes(material.category) &&
-    maxTemperature !== null &&
-    meltingTemperature !== null &&
-    maxTemperature > meltingTemperature + 25
-  ) {
-    issues.push(
-      issue(
-        "temperature_inconsistency",
-        "Continuous use temperature is implausibly above the listed melting temperature.",
-        "连续使用温度明显高于所列熔点，数据相互矛盾。"
-      )
-    );
-  }
-
-  if (
-    ["Plastics", "Elastomers"].includes(material.category) &&
-    /noncombustible/i.test(String(material.flammability || material.flame_rating || ""))
-  ) {
-    issues.push(
-      issue(
-        "flammability_inconsistency",
-        "A polymer record is marked noncombustible and requires correction.",
-        "高分子材料被标记为不可燃，需要校正。"
-      )
-    );
-  }
-
-  const blockingIssues = issues.filter((entry) =>
-    ["density_out_of_range", "tensile_out_of_range", "max_temperature_out_of_range", "melting_temperature_out_of_range", "temperature_inconsistency", "flammability_inconsistency"].includes(entry.code)
-  );
-  const recommendationEligible = !generated && externalSources.length > 0 && blockingIssues.length === 0;
-  const supplier = String(material.supplier_or_brand || material.manufacturer || "").toLowerCase();
-  const grade = String(material.grade_name || material.trade_name || "").toLowerCase();
-  const hasSpecificCommercialIdentity =
-    supplier &&
-    grade &&
-    !supplier.includes("generic") &&
-    !grade.includes("generic") &&
-    !grade.includes("screening");
-  const factoryReady = recommendationEligible && manufacturerBacked && hasSpecificCommercialIdentity;
-
+  const seriousConflict = physicalIssues.length > 0 || conflictIssues.length > 0;
   let level = "low";
-  if (blockingIssues.length) level = "rejected";
-  else if (generated) level = "synthetic";
-  else if (factoryReady) level = "high";
-  else if (recommendationEligible) level = "medium";
+  let verificationStatus = "unverified";
+
+  if (generated || !hasConfirmedIdentity || seriousConflict) {
+    level = "quarantined";
+    verificationStatus = "quarantined";
+  } else if (
+    officialIdentitySources.length > 0 &&
+    completeKeyClaims.length === KEY_PROPERTIES.length
+  ) {
+    level = "high";
+    verificationStatus = "verified";
+  } else if (
+    reliableSources.length > 0 &&
+    sourcedKeyClaims.length >= 2
+  ) {
+    level = "medium";
+    verificationStatus = "partially_verified";
+  }
 
   return {
     level,
-    recommendation_eligible: recommendationEligible,
-    factory_ready: factoryReady,
+    confidence_level: level,
+    verification_status: verificationStatus,
+    recommendation_eligible: level === "high" || level === "medium",
+    reference_only: level === "low",
+    factory_ready: level === "high",
     generated,
-    source_count: sources.length,
+    identity_confirmed: hasConfirmedIdentity,
+    source_count: allSources.length,
     external_source_count: externalSources.length,
-    primary_source_type: sourceTypes[0] || "unknown",
-    manufacturer_backed: manufacturerBacked,
-    has_test_conditions: hasTestConditions,
-    issues
+    official_source_count: officialSources.length,
+    official_identity_source_count: officialIdentitySources.length,
+    reliable_source_count: reliableSources.length,
+    primary_source_type: sourceTypes.find((type) => type !== "unknown") || "unknown",
+    manufacturer_backed: officialSources.some((source) => source.sourceType === "manufacturer" || source.sourceType === "official_datasheet"),
+    has_test_conditions: claimsWithTestConditions.length > 0,
+    complete_key_property_count: completeKeyClaims.length,
+    sourced_key_property_count: sourcedKeyClaims.length,
+    last_verified_at: identity.lastVerifiedAt || null,
+    issues: dedupeIssues(issues)
   };
 }
 
 function annotateMaterialQuality(material) {
+  const withEvidence = material.evidence ? material : { ...material, evidence: buildLegacyEvidence(material) };
   return {
-    ...material,
-    data_quality: assessMaterialQuality(material)
+    ...withEvidence,
+    data_quality: assessMaterialQuality(withEvidence)
   };
 }
 
-function checkRange(issues, field, value, range, label) {
-  const number = finiteNumber(value);
-  if (number === null || !range) return;
-  if (number < range[0] || number > range[1]) {
-    issues.push(
-      issue(
-        `${field}_out_of_range`,
-        `${label} (${number}) is outside the plausible range for this material category.`,
-        `${label}（${number}）超出该材料类别的合理范围。`
-      )
-    );
+function physicalConflictIssues(material, evidence) {
+  const issues = [];
+  const limits = CATEGORY_LIMITS[material.category];
+  if (limits) {
+    Object.entries(limits).forEach(([propertyKey, range]) => {
+      if (!range) return;
+      const value = numericProperty(evidence, propertyKey);
+      if (value !== null && (value < range[0] || value > range[1])) {
+        issues.push(issue(
+          `${propertyKey}_out_of_range`,
+          `${propertyLabel(propertyKey)} (${value}) is outside the plausible range for ${material.category}.`,
+          `${propertyLabel(propertyKey)}（${value}）超出 ${material.category} 的合理范围。`
+        ));
+      }
+    });
   }
+
+  const continuous = numericProperty(evidence, "continuous_use_temperature");
+  const melting = numericProperty(evidence, "melting_temperature");
+  if (
+    ["Plastics", "Elastomers", "Foams"].includes(material.category) &&
+    continuous !== null &&
+    melting !== null &&
+    continuous > melting + 25
+  ) {
+    issues.push(issue(
+      "temperature_inconsistency",
+      "Continuous use temperature is implausibly above the listed melting temperature.",
+      "连续使用温度明显高于所列熔融温度，数据相互矛盾。"
+    ));
+  }
+
+  const flameClaim = firstClaim(evidence, "flame_rating");
+  if (
+    ["Plastics", "Elastomers"].includes(material.category) &&
+    /noncombustible/i.test(String(flameClaim?.value || ""))
+  ) {
+    issues.push(issue(
+      "flammability_inconsistency",
+      "A polymer record is marked noncombustible and requires correction.",
+      "高分子材料被标记为不可燃，需要校正。"
+    ));
+  }
+
+  return issues;
 }
 
-function finiteNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
+function evidenceConflictIssues(evidence) {
+  const issues = [];
+  const identity = evidence.identity || {};
+  const identitySources = identity.sources || [];
+  const manufacturers = distinct([
+    identity.manufacturer,
+    ...identitySources.map((source) => source.manufacturer)
+  ]);
+  const grades = distinct([
+    identity.commercialGrade,
+    ...identitySources.map((source) => source.commercialGrade)
+  ]);
+
+  if (manufacturers.length > 1) {
+    issues.push(issue(
+      "manufacturer_source_conflict",
+      "Material evidence contains conflicting manufacturer identities.",
+      "材料证据中存在相互冲突的制造商身份。"
+    ));
+  }
+  if (grades.length > 1) {
+    issues.push(issue(
+      "commercial_grade_source_conflict",
+      "Material evidence contains conflicting commercial grades.",
+      "材料证据中存在相互冲突的商业牌号。"
+    ));
+  }
+
+  Object.entries(evidence.properties || {}).forEach(([propertyKey, claims]) => {
+    if (claims.some((claim) => claim.conflictStatus === "conflicting")) {
+      issues.push(issue(
+        `property_source_conflict:${propertyKey}`,
+        `${propertyLabel(propertyKey)} has explicitly flagged conflicting evidence under the same stated conditions.`,
+        `${propertyLabel(propertyKey)} 在相同标注条件下存在已标记的冲突证据。`
+      ));
+      return;
+    }
+    const grouped = new Map();
+    claims.forEach((claim) => {
+      const number = finiteNumber(claim.value);
+      if (number === null) return;
+      const key = [
+        claim.unit || "unknown",
+        normalizeText(claim.testStandard),
+        normalizeText(claim.testCondition)
+      ].join("|");
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(number);
+    });
+    for (const values of grouped.values()) {
+      if (values.length < 2) continue;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const denominator = Math.max(Math.abs(min), 1);
+      if ((max - min) / denominator > 0.3) {
+        issues.push(issue(
+          `property_source_conflict:${propertyKey}`,
+          `${propertyLabel(propertyKey)} has materially conflicting values under the same stated conditions.`,
+          `${propertyLabel(propertyKey)} 在相同标注条件下存在显著冲突的数值。`
+        ));
+        break;
+      }
+    }
+  });
+
+  return issues;
+}
+
+function isCompleteOfficialPropertyClaim(claim) {
+  return hasValue(claim.value) &&
+    hasValue(claim.testStandard) &&
+    hasValue(claim.testCondition) &&
+    ["manufacturer", "official_datasheet"].includes(claim.source?.sourceType) &&
+    hasValue(claim.source?.sourceTitle) &&
+    validHttpUrl(claim.source?.sourceUrl) &&
+    claim.verificationStatus === "verified";
+}
+
+function isReliablySourcedPropertyClaim(claim) {
+  return hasValue(claim.value) &&
+    ["manufacturer", "official_datasheet", "academic", "distributor"].includes(claim.source?.sourceType) &&
+    hasValue(claim.source?.sourceTitle) &&
+    validHttpUrl(claim.source?.sourceUrl) &&
+    ["verified", "partially_verified"].includes(claim.verificationStatus);
+}
+
+function numericProperty(evidence, propertyKey) {
+  const claims = evidence.properties?.[propertyKey] || [];
+  for (const claim of claims) {
+    const number = finiteNumber(claim.value);
+    if (number !== null) return number;
+  }
+  return null;
+}
+
+function firstClaim(evidence, propertyKey) {
+  return evidence.properties?.[propertyKey]?.[0] || null;
+}
+
+function propertyLabel(propertyKey) {
+  return PROPERTY_DEFINITIONS.find((item) => item.key === propertyKey)?.label || propertyKey;
+}
+
+function validHttpUrl(value) {
+  return /^https?:\/\/\S+$/i.test(String(value || ""));
+}
+
+function hasValue(value) {
+  return value !== null && value !== undefined && value !== "";
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function distinct(values) {
+  return [...new Set(values.filter(Boolean).map(normalizeText))];
 }
 
 function issue(code, en, zh) {
   return { code, en, zh };
 }
 
+function dedupeIssues(issues) {
+  const seen = new Set();
+  return issues.filter((entry) => {
+    if (seen.has(entry.code)) return false;
+    seen.add(entry.code);
+    return true;
+  });
+}
+
 module.exports = {
-  GENERATED_SOURCE_TYPES,
+  CATEGORY_LIMITS,
+  KEY_PROPERTIES,
   assessMaterialQuality,
   annotateMaterialQuality
 };

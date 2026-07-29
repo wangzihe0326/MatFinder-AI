@@ -1,0 +1,116 @@
+{
+  "mode": "dry-run",
+  "database": "C:\\Users\\35766\\Documents\\New project\\matfinder.db",
+  "inputFile": "C:\\Users\\35766\\Documents\\New project\\data\\pilot\\pilot-materials.PLACEHOLDER.json",
+  "inputFileHash": "50b2321e72c39742354bbefd0869451ca3ddacc946fd9b07990c4c3c5bbbdc24",
+  "recordCount": 1,
+  "priorBatchId": null,
+  "counts": {
+    "add": 0,
+    "update": 0,
+    "skip": 0,
+    "reject": 1
+  },
+  "entityCounts": {},
+  "actions": [
+    {
+      "identity": {
+        "manufacturer": "PLACEHOLDER_MANUFACTURER_DO_NOT_IMPORT",
+        "commercialGrade": "PLACEHOLDER_COMMERCIAL_GRADE_DO_NOT_IMPORT",
+        "materialFamily": "PLACEHOLDER_FAMILY_DO_NOT_IMPORT"
+      },
+      "materialId": "REAL-34D1E0954EA4BE55AB95AB6F",
+      "action": "reject",
+      "newEvidenceCount": 0
+    }
+  ],
+  "errors": [
+    {
+      "code": "placeholder_record_forbidden",
+      "message": "This record is explicitly marked as a non-importable placeholder.",
+      "path": "materials[0]",
+      "severity": "error"
+    },
+    {
+      "code": "manufacturer_placeholder",
+      "message": "manufacturer contains a placeholder marker.",
+      "path": "materials[0].manufacturer",
+      "severity": "error"
+    },
+    {
+      "code": "commercialGrade_placeholder",
+      "message": "commercialGrade contains a placeholder marker.",
+      "path": "materials[0].commercialGrade",
+      "severity": "error"
+    },
+    {
+      "code": "materialFamily_placeholder",
+      "message": "materialFamily contains a placeholder marker.",
+      "path": "materials[0].materialFamily",
+      "severity": "error"
+    },
+    {
+      "code": "source_type_not_importable",
+      "message": "Generated or unknown sources cannot enter the real-material library.",
+      "path": "materials[0].identitySources[0].sourceType",
+      "severity": "error"
+    },
+    {
+      "code": "source_url_invalid",
+      "message": "A non-empty HTTP(S) evidence URL is required.",
+      "path": "materials[0].identitySources[0].sourceUrl",
+      "severity": "error"
+    },
+    {
+      "code": "placeholder_source_forbidden",
+      "message": "PLACEHOLDER or test-only sources cannot be imported.",
+      "path": "materials[0].identitySources[0]",
+      "severity": "error"
+    },
+    {
+      "code": "property_value_missing",
+      "message": "Property evidence must contain a value.",
+      "path": "materials[0].properties[0].measurements[0].value",
+      "severity": "error"
+    },
+    {
+      "code": "unit_invalid",
+      "message": "Unsupported or missing unit: None.",
+      "path": "materials[0].properties[0].measurements[0].unit",
+      "severity": "error"
+    },
+    {
+      "code": "source_type_not_importable",
+      "message": "Generated or unknown sources cannot enter the real-material library.",
+      "path": "materials[0].properties[0].measurements[0].source.sourceType",
+      "severity": "error"
+    },
+    {
+      "code": "source_url_invalid",
+      "message": "A non-empty HTTP(S) evidence URL is required.",
+      "path": "materials[0].properties[0].measurements[0].source.sourceUrl",
+      "severity": "error"
+    },
+    {
+      "code": "placeholder_source_forbidden",
+      "message": "PLACEHOLDER or test-only sources cannot be imported.",
+      "path": "materials[0].properties[0].measurements[0].source",
+      "severity": "error"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "test_standard_missing",
+      "message": "Test standard is unavailable; this claim cannot be High confidence.",
+      "path": "materials[0].properties[0].measurements[0].testStandard",
+      "severity": "warning"
+    },
+    {
+      "code": "test_condition_missing",
+      "message": "Test condition is unavailable; this claim cannot be High confidence.",
+      "path": "materials[0].properties[0].measurements[0].testCondition",
+      "severity": "warning"
+    }
+  ],
+  "status": "rejected"
+}

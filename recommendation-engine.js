@@ -6,10 +6,16 @@
   };
   const requirementParseCache = new Map();
   const scoreCache = new Map();
+  const certificationRequirementDefinitions = [
+    { code: "FDA", label: "FDA", pattern: /\bfda\b/i },
+    { code: "UL 94", label: "UL 94", pattern: /\bul\s*94\b/i },
+    { code: "RoHS", label: "RoHS", pattern: /\brohs\b/i },
+    { code: "REACH", label: "REACH", pattern: /\breach\b/i }
+  ];
   const unsupportedConstraintDefinitions = [
     {
       code: "certification",
-      patterns: [/\bfda\b/i, /\bul\s*94\b/i, /\brohs\b/i, /\breach\b/i, /\biso\s*\d*/i, /\bastm\b/i, /\bgb(?:\/t)?\s*\d*/i, /食品接触|认证|合规/],
+      patterns: [/\bcertification\b/i, /\bregulatory compliance\b/i, /食品接触|认证|合规/],
       label: "certification or regulatory compliance",
       zh: "认证或法规合规"
     },
@@ -48,6 +54,7 @@
   const zh = {
     lightweight: ["\u8f7b\u91cf", "\u4f4e\u5bc6\u5ea6", "\u8f7b\u8d28", "\u51cf\u91cd"],
     heat: ["\u8010\u70ed", "\u9ad8\u6e29", "\u6e29\u5ea6", "\u70ed"],
+    hdt: ["\u70ed\u53d8\u5f62\u6e29\u5ea6"],
     electrical: ["\u7535\u7edd\u7f18", "\u7edd\u7f18", "\u4ecb\u7535", "\u7535\u6c14", "\u7535\u5b50", "\u8fde\u63a5\u5668"],
     strength: ["\u5f3a\u5ea6", "\u9ad8\u5f3a", "\u627f\u8f7d", "\u7ed3\u6784", "\u521a\u6027", "\u673a\u68b0"],
     chemical: ["\u5316\u5b66", "\u8010\u8150\u8680", "\u6eb6\u5242", "\u9178", "\u78b1", "\u71c3\u6cb9"],
@@ -97,6 +104,14 @@
       },
       reason: (item) =>
         item.maxTemp === null || item.maxTemp === undefined ? "heat resistance is indicated by tags or applications" : `continuous use up to ${item.maxTemp} deg C`
+    },
+    {
+      id: "hdt",
+      label: "heat deflection temperature",
+      weight: 1.25,
+      keywords: ["hdt", "heat deflection temperature", "heat distortion temperature", ...zh.hdt],
+      evaluate: () => 0,
+      reason: () => "heat deflection temperature evidence is required"
     },
     {
       id: "electrical",
@@ -466,6 +481,7 @@
     const matches = new Map();
     const priority = [
       "heat",
+      "hdt",
       "electrical",
       "chemical",
       "sealing",
@@ -493,7 +509,10 @@
 
     applyRequirementInference(text, matches);
     const hardConstraints = extractHardConstraints(query);
+    const certificationRequirements = extractCertificationRequirements(query);
+    const evidenceContext = extractRequestedEvidenceContext(query);
     if (hardConstraints.minimumTemperatureC !== null) addCriterion(matches, "heat", "numeric temperature");
+    if (hardConstraints.minimumHdtC !== null) addCriterion(matches, "hdt", "numeric hdt");
     if (hardConstraints.minimumTensileMpa !== null) addCriterion(matches, "strength", "numeric tensile strength");
 
     const parsed = [...matches.values()].sort((a, b) => {
@@ -504,10 +523,15 @@
     const criteria = parsed.map((entry) => entry.criterion);
     const parsedRequirement = {
       query,
-      requirements: criteria.map((criterion) => criterion.label),
+      requirements: [
+        ...criteria.map((criterion) => criterion.label),
+        ...certificationRequirements.map((requirement) => requirement.label)
+      ],
       criteria,
       sources: parsed.map((entry) => ({ id: entry.criterion.id, label: entry.criterion.label, source: entry.source })),
       hardConstraints,
+      certificationRequirements,
+      evidenceContext,
       unsupportedConstraints: extractUnsupportedConstraints(query)
     };
     requirementParseCache.set(query, parsedRequirement);
@@ -530,88 +554,372 @@
     const cacheKey = `${description}::${item.id}`;
     if (scoreCache.has(cacheKey)) return scoreCache.get(cacheKey);
     const parsedRequirement = parseRequirement(description);
-    const criteria = parsedRequirement.criteria;
-    const similarity = textSimilarity(`${description} ${parsedRequirement.requirements.join(" ")}`, item);
-
-    if (!criteria.length) {
+    if (
+      !parsedRequirement.criteria.length &&
+      !parsedRequirement.certificationRequirements?.length
+    ) {
       const fallbackResult = {
         material: item,
         score: 0,
         reasons: [],
         warnings: ["no recognized engineering requirement; recommendation withheld"],
-        matchedCriteria: []
+        matchedCriteria: [],
+        requirementResults: [],
+        bucket: "rejected"
       };
       scoreCache.set(cacheKey, fallbackResult);
       return fallbackResult;
     }
-
-    let weightedTotal = 0;
-    let maxTotal = 0;
-    const reasonCandidates = [];
-    const warningCandidates = [];
-    let matchedCount = 0;
-
-    criteria.forEach((criterion) => {
-      const fit = clamp(criterion.evaluate(item));
-      const contribution = fit * criterion.weight;
-      weightedTotal += contribution;
-      maxTotal += criterion.weight;
-      if (fit >= 0.58) {
-        matchedCount += 1;
-        reasonCandidates.push({
-          fit,
-          text: criterion.reason(item),
-          label: criterion.label
-        });
-      }
-      if (fit < 0.5) {
-        warningCandidates.push({
-          fit,
-          text: typeof criterion.warning === "function" ? criterion.warning(item) : criterionWarning(criterion),
-          label: criterion.label
-        });
-      }
-    });
-
-    const criteriaScore = weightedTotal / maxTotal;
-    const coverageBonus = (matchedCount / criteria.length) * 0.08;
-    const warningPenalty = (warningCandidates.length / criteria.length) * 0.12;
-    const calculatedScore = Math.round(clamp(criteriaScore * 0.82 + similarity * 0.1 + coverageBonus - warningPenalty) * 100);
-    const qualityCap = item.data_quality?.factory_ready ? 90 : 79;
-    const unresolvedCap = parsedRequirement.unsupportedConstraints.length ? 59 : qualityCap;
-    const finalScore = Math.min(calculatedScore, qualityCap, unresolvedCap);
-    const reasons = reasonCandidates
-      .sort((a, b) => b.fit - a.fit)
-      .slice(0, 3)
-      .map((reason) => reason.text);
-    const warnings = warningCandidates
-      .sort((a, b) => a.fit - b.fit)
-      .slice(0, 3)
-      .map((warning) => warning.text);
-
-    if (!reasons.length) reasons.push("partial match against stated requirements");
-    parsedRequirement.unsupportedConstraints.slice(0, 3).forEach((constraint) => {
-      warnings.push(`requires external verification: ${constraint.label}`);
-    });
-    if (!warnings.length) warnings.push("no major unmatched requirement warnings within the supported screening fields");
-
-    const result = {
-      material: item,
-      score: finalScore,
-      reasons,
-      warnings,
-      matchedCriteria: parsedRequirement.requirements
-    };
+    const result = evaluateEvidenceRecommendation(item, parsedRequirement);
     scoreCache.set(cacheKey, result);
     return result;
   }
 
+  const criterionPropertyMap = {
+    heat: "continuous_use_temperature",
+    hdt: "hdt",
+    strength: "tensile_strength",
+    impact: "impact_strength",
+    lightweight: "density",
+    transparent: "transparency",
+    chemical: "chemical_resistance",
+    flexible: "flexibility",
+    sealing: "flexibility",
+    flame: "flame_rating",
+    electrical: "dielectric_constant",
+    waterproof: "water_absorption"
+  };
+
+  function evaluateEvidenceRecommendation(item, parsedRequirement) {
+    const requirementResults = parsedRequirement.criteria.map((criterion) =>
+      evaluateRequirementEvidence(item, criterion, parsedRequirement)
+    );
+    (parsedRequirement.certificationRequirements || []).forEach((requirement) => {
+      requirementResults.push(evaluateCertificationEvidence(item, requirement));
+    });
+    parsedRequirement.unsupportedConstraints.forEach((constraint) => {
+      requirementResults.push({
+        requirement: constraint.label,
+        detectedConstraint: constraint.label,
+        materialValue: null,
+        status: "unverifiable",
+        evidenceSource: null,
+        explanation: "The local evidence model does not contain verified data for this constraint.",
+        critical: true,
+        propertyKey: null
+      });
+    });
+
+    const hardFailure = requirementResults.some((result) =>
+      result.critical && result.status === "not_satisfied"
+    );
+    const hardEvidenceGap = requirementResults.some((result) =>
+      result.critical && ["unknown", "unverifiable"].includes(result.status)
+    );
+    const confidence = item.data_quality?.confidence_level || item.data_quality?.level || "quarantined";
+    const quarantined = confidence === "quarantined" || item.data_quality?.verification_status === "quarantined";
+    const score = calculateEvidenceScore(requirementResults, confidence);
+    const reasons = requirementResults
+      .filter((result) => result.status === "satisfied")
+      .map((result) => `${result.requirement}: ${result.explanation}`)
+      .slice(0, 3);
+    const warnings = requirementResults
+      .filter((result) => result.status !== "satisfied")
+      .map((result) => `${result.requirement}: ${result.status} - ${result.explanation}`)
+      .slice(0, 5);
+
+    let bucket = "potential";
+    if (quarantined || hardFailure) {
+      bucket = "rejected";
+    } else if (
+      ["high", "medium"].includes(confidence) &&
+      !hardEvidenceGap &&
+      requirementResults.every((result) => result.status === "satisfied")
+    ) {
+      bucket = "verified";
+    }
+
+    return {
+      material: item,
+      score,
+      evidenceScore: score,
+      confidenceLevel: confidence,
+      verificationStatus: item.data_quality?.verification_status || "unverified",
+      referenceOnly: confidence === "low",
+      bucket,
+      reasons,
+      warnings,
+      requirementResults,
+      matchedCriteria: parsedRequirement.requirements
+    };
+  }
+
+  function evaluateRequirementEvidence(item, criterion, parsedRequirement) {
+    const propertyKey = criterionPropertyMap[criterion.id] || null;
+    const selection = bestEvidenceClaim(
+      item,
+      propertyKey,
+      parsedRequirement.evidenceContext?.propertyKey === propertyKey
+        ? parsedRequirement.evidenceContext
+        : {}
+    );
+    const claim = selection.claim;
+    const critical = isCriticalCriterion(criterion.id, parsedRequirement);
+    const numericConstraint = numericConstraintFor(criterion.id, parsedRequirement.hardConstraints);
+    const base = {
+      requirement: criterion.label,
+      detectedConstraint: numericConstraint !== null
+        ? `${criterion.label} >= ${numericConstraint}${["heat", "hdt"].includes(criterion.id) ? " degC" : " MPa"}`
+        : criterion.label,
+      materialValue: formatClaimValue(claim),
+      evidenceSource: evidenceSourceFor(claim),
+      critical,
+      propertyKey
+    };
+
+    if (selection.status === "unverifiable") {
+      return {
+        ...base,
+        status: "unverifiable",
+        explanation: selection.explanation
+      };
+    }
+
+    if (!propertyKey || !claim || claim.value === null || claim.value === undefined || claim.value === "") {
+      return {
+        ...base,
+        status: "unknown",
+        explanation: "Property data unavailable."
+      };
+    }
+
+    if (!claimIsVerifiable(claim, propertyKey)) {
+      return {
+        ...base,
+        status: "unverifiable",
+        explanation: evidenceGapExplanation(claim, propertyKey)
+      };
+    }
+
+    if (numericConstraint !== null) {
+      const value = finiteNumber(claim.value);
+      if (value === null) {
+        return {
+          ...base,
+          status: "unknown",
+          explanation: "The material value is not numeric."
+        };
+      }
+      return value >= numericConstraint
+        ? {
+            ...base,
+            status: "satisfied",
+            explanation: `${value} ${claim.unit || ""} meets the required minimum of ${numericConstraint}.`.trim()
+          }
+        : {
+            ...base,
+            status: "not_satisfied",
+            explanation: `${value} ${claim.unit || ""} is below the required minimum of ${numericConstraint}.`.trim()
+          };
+    }
+
+    const qualitative = evaluateQualitativeClaim(criterion.id, claim);
+    return { ...base, ...qualitative };
+  }
+
+  function evaluateQualitativeClaim(criterionId, claim) {
+    const text = String(claim.value || "").toLowerCase();
+    if (criterionId === "transparent") {
+      if (/transparent|clear|optical/.test(text)) return { status: "satisfied", explanation: "Verified property evidence indicates transparency." };
+      if (/opaque|not transparent/.test(text)) return { status: "not_satisfied", explanation: "Verified property evidence indicates an opaque material." };
+    }
+    if (criterionId === "chemical") {
+      if (/excellent|good|resistant/.test(text)) return { status: "satisfied", explanation: "Verified evidence indicates chemical resistance." };
+      if (/poor|limited|not resistant/.test(text)) return { status: "not_satisfied", explanation: "Verified evidence indicates limited chemical resistance." };
+    }
+    if (criterionId === "flexible" || criterionId === "sealing") {
+      if (/flexible|elastomer|rubber/.test(text)) return { status: "satisfied", explanation: "Verified evidence indicates flexible behavior." };
+      if (/rigid|brittle/.test(text)) return { status: "not_satisfied", explanation: "Verified evidence indicates rigid behavior." };
+    }
+    if (criterionId === "flame") {
+      if (/v-0|v0|v-1|v1|flame retardant|self extinguish/.test(text)) return { status: "satisfied", explanation: "Verified evidence indicates a flame-rated grade." };
+      if (/not rated|combustible/.test(text)) return { status: "not_satisfied", explanation: "Verified evidence does not support the requested flame performance." };
+    }
+    if (criterionId === "electrical" && finiteNumber(claim.value) !== null) {
+      return { status: "satisfied", explanation: "Verified dielectric property evidence is available." };
+    }
+    return {
+      status: "unverifiable",
+      explanation: "The requirement has no explicit threshold or decisive verified property value."
+    };
+  }
+
+  function bestEvidenceClaim(item, propertyKey, evidenceContext = {}) {
+    if (!propertyKey) return { claim: null, status: "unknown" };
+    const claims = item.evidence?.properties?.[propertyKey] || [];
+    if (!claims.length) return { claim: null, status: "unknown" };
+    const requestedStandard = normalizeContext(evidenceContext?.testStandard);
+    const requestedCondition = normalizeContext(evidenceContext?.testCondition);
+    let applicable = [...claims];
+    if (requestedStandard) {
+      applicable = applicable.filter((claim) =>
+        normalizeContext(claim.testStandard) === requestedStandard
+      );
+    }
+    if (requestedCondition) {
+      applicable = applicable.filter((claim) => {
+        const claimCondition = normalizeContext(claim.testCondition);
+        return claimCondition &&
+          (claimCondition.includes(requestedCondition) ||
+            requestedCondition.includes(claimCondition));
+      });
+    }
+    if (!applicable.length && (requestedStandard || requestedCondition)) {
+      return {
+        claim: null,
+        status: "unverifiable",
+        explanation: "No property evidence matches the requested test standard and condition."
+      };
+    }
+
+    const completeContexts = new Set(
+      applicable
+        .filter((claim) => claim.testStandard && claim.testCondition)
+        .map((claim) => [
+          normalizeContext(claim.testStandard),
+          normalizeContext(claim.testCondition),
+          normalizeContext(claim.unit),
+          normalizeContext(claim.valueType)
+        ].join("|"))
+    );
+    if (!requestedStandard && !requestedCondition && completeContexts.size > 1) {
+      return {
+        claim: null,
+        status: "unverifiable",
+        explanation: "Multiple test conditions are available and the requested condition is not specific enough."
+      };
+    }
+    if (applicable.some((claim) => claim.conflictStatus === "conflicting")) {
+      return {
+        claim: null,
+        status: "unverifiable",
+        explanation: "Conflicting property evidence exists under the same stated test context."
+      };
+    }
+    const claim = applicable.sort((left, right) =>
+      claimRank(right) - claimRank(left)
+    )[0] || null;
+    return { claim, status: claim ? "selected" : "unknown" };
+  }
+
+  function normalizeContext(value) {
+    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function claimRank(claim) {
+    const confidenceRank = { high: 4, medium: 3, low: 2, quarantined: 0 };
+    const verificationRank = { verified: 4, partially_verified: 3, unverified: 1, quarantined: 0 };
+    return (confidenceRank[claim.confidenceLevel] || 0) * 10 +
+      (verificationRank[claim.verificationStatus] || 0) +
+      (claim.source?.sourceUrl ? 1 : 0);
+  }
+
+  function claimIsVerifiable(claim, propertyKey) {
+    const numericEngineeringProperties = new Set([
+      "density",
+      "tensile_strength",
+      "hdt",
+      "continuous_use_temperature",
+      "glass_transition_temperature",
+      "melting_temperature",
+      "flexural_strength",
+      "impact_strength",
+      "elongation",
+      "thermal_conductivity",
+      "dielectric_constant",
+      "water_absorption"
+    ]);
+    const source = claim.source || {};
+    const sourceVerified =
+      ["verified", "partially_verified"].includes(claim.verificationStatus) &&
+      ["manufacturer", "official_datasheet", "academic", "distributor"].includes(source.sourceType) &&
+      /^https?:\/\/\S+$/i.test(String(source.sourceUrl || "")) &&
+      Boolean(source.sourceTitle);
+    if (!sourceVerified) return false;
+    if (numericEngineeringProperties.has(propertyKey)) {
+      return Boolean(claim.testStandard && claim.testCondition);
+    }
+    return true;
+  }
+
+  function evidenceGapExplanation(claim, propertyKey) {
+    if (!claim.source?.sourceUrl || !claim.source?.sourceTitle) return "Source not verified.";
+    if (!["verified", "partially_verified"].includes(claim.verificationStatus)) return "Property evidence is not verified.";
+    if (!claim.testStandard) return "Test standard unavailable.";
+    if (!claim.testCondition && propertyKey) return "Test condition unavailable.";
+    return "Property evidence is unverifiable.";
+  }
+
+  function evidenceSourceFor(claim) {
+    if (!claim?.source?.sourceTitle && !claim?.source?.sourceUrl) return null;
+    return {
+      sourceType: claim.source.sourceType || "unknown",
+      sourceTitle: claim.source.sourceTitle || null,
+      sourceUrl: claim.source.sourceUrl || null,
+      sourceDate: claim.source.sourceDate || null
+    };
+  }
+
+  function formatClaimValue(claim) {
+    if (!claim || claim.value === null || claim.value === undefined || claim.value === "") return null;
+    return `${claim.value}${claim.unit ? ` ${claim.unit}` : ""}`;
+  }
+
+  function isCriticalCriterion(criterionId, parsedRequirement) {
+    if (["heat", "strength"].includes(criterionId) && numericConstraintFor(criterionId, parsedRequirement.hardConstraints) !== null) return true;
+    return (parsedRequirement.sources || []).some((source) =>
+      source.id === criterionId &&
+      (source.source === "keyword" || String(source.source || "").startsWith("numeric"))
+    );
+  }
+
+  function numericConstraintFor(criterionId, hardConstraints) {
+    if (criterionId === "heat") return hardConstraints.minimumTemperatureC;
+    if (criterionId === "hdt") return hardConstraints.minimumHdtC;
+    if (criterionId === "strength") return hardConstraints.minimumTensileMpa;
+    return null;
+  }
+
+  function calculateEvidenceScore(results, confidence) {
+    if (!results.length || confidence === "quarantined") return 0;
+    const statusWeights = {
+      satisfied: 1,
+      unknown: 0,
+      unverifiable: 0,
+      not_satisfied: 0
+    };
+    const qualityWeights = { high: 1, medium: 0.72, low: 0.3, quarantined: 0 };
+    const conditionScore = results.reduce((sum, result) => sum + statusWeights[result.status], 0) / results.length;
+    const sourceCoverage = results.filter((result) => result.evidenceSource?.sourceUrl).length / results.length;
+    const knownCoverage = results.filter((result) => !["unknown", "unverifiable"].includes(result.status)).length / results.length;
+    return Math.round((conditionScore * 0.55 + sourceCoverage * 0.2 + knownCoverage * 0.1 + (qualityWeights[confidence] || 0) * 0.15) * 100);
+  }
+
+  function createEmptyGroups() {
+    return {
+      verifiedMatches: [],
+      potentialMatches: [],
+      rejectedMaterials: []
+    };
+  }
+
   function createLocalRecommendationProvider() {
     return {
-      id: "local-rules-v2",
+      id: "evidence-rules-v3",
       async recommend({ description, materials, limit = 5 }) {
         const trimmed = description.trim();
         const parsedRequirement = parseRequirement(trimmed);
+        const emptyGroups = createEmptyGroups();
         if (!trimmed) {
           return {
             provider: this.id,
@@ -619,33 +927,37 @@
             criteria: [],
             parsedRequirement,
             recommendations: [],
+            groups: emptyGroups,
             status: "empty",
             eligibleMaterialCount: 0
           };
         }
 
-        const eligibleMaterials = materials.filter((item) => item.data_quality?.recommendation_eligible !== false);
-        if (!parsedRequirement.criteria.length) {
+        if (
+          !parsedRequirement.criteria.length &&
+          !parsedRequirement.certificationRequirements?.length
+        ) {
           return {
             provider: this.id,
             query: trimmed,
             criteria: [],
             parsedRequirement,
             recommendations: [],
+            groups: emptyGroups,
             status: "needs_clarification",
-            eligibleMaterialCount: eligibleMaterials.length
+            eligibleMaterialCount: materials.filter((item) => item.data_quality?.recommendation_eligible).length
           };
         }
 
-        const hardConstraintResults = eligibleMaterials.map((item) => ({
-          item,
-          failures: evaluateHardConstraints(item, parsedRequirement)
-        }));
-        const hardConstraintMatches = hardConstraintResults.filter((entry) => !entry.failures.length);
-        const recommendations = hardConstraintMatches
-          .map(({ item }) => scoreMaterial(trimmed, item))
-          .sort((a, b) => b.score - a.score || a.material.name.localeCompare(b.material.name))
-          .slice(0, limit);
+        const evaluated = materials
+          .map((item) => evaluateEvidenceRecommendation(item, parsedRequirement))
+          .sort((left, right) => right.score - left.score || left.material.name.localeCompare(right.material.name));
+        const groups = {
+          verifiedMatches: evaluated.filter((entry) => entry.bucket === "verified").slice(0, limit),
+          potentialMatches: evaluated.filter((entry) => entry.bucket === "potential").slice(0, limit),
+          rejectedMaterials: evaluated.filter((entry) => entry.bucket === "rejected").slice(0, limit)
+        };
+        const recommendations = [...groups.verifiedMatches, ...groups.potentialMatches];
 
         return {
           provider: this.id,
@@ -653,13 +965,15 @@
           criteria: parsedRequirement.requirements,
           parsedRequirement,
           recommendations,
-          status: recommendations.length
-            ? parsedRequirement.unsupportedConstraints.length
-              ? "needs_verification"
-              : "screening_ready"
-            : "no_safe_match",
-          eligibleMaterialCount: eligibleMaterials.length,
-          hardConstraintMatchCount: hardConstraintMatches.length
+          groups,
+          status: groups.verifiedMatches.length
+            ? "verified_matches"
+            : groups.potentialMatches.length
+              ? "potential_matches"
+              : "no_safe_match",
+          eligibleMaterialCount: materials.filter((item) => item.data_quality?.recommendation_eligible).length,
+          referenceMaterialCount: materials.filter((item) => item.data_quality?.reference_only).length,
+          quarantinedMaterialCount: materials.filter((item) => item.data_quality?.level === "quarantined").length
         };
       }
     };
@@ -693,22 +1007,137 @@
     createRecommendationService,
     parseRequirement,
     scoreMaterial,
-    extractCriteria
+    extractCriteria,
+    evaluateEvidenceRecommendation
   };
+
+  function extractCertificationRequirements(query) {
+    const text = String(query || "");
+    return certificationRequirementDefinitions
+      .filter((definition) => definition.pattern.test(text))
+      .map(({ code, label }) => ({ code, label }));
+  }
+
+  function extractRequestedEvidenceContext(query) {
+    const text = String(query || "");
+    const standard = text.match(
+      /\b(?:ASTM|ISO|IEC|DIN|GB\/T|UL|SAE|JIS|EN)\s+[A-Z0-9][A-Z0-9./:+-]*/i
+    );
+    const condition = text.match(
+      /(?:test condition|测试条件)\s*[:：]\s*([^,;，。]+)/i
+    );
+    const propertyKey = /tensile strength|拉伸强度|抗拉强度/i.test(text)
+      ? "tensile_strength"
+      : /\bhdt\b|heat (?:deflection|distortion) temperature|热变形温度/i.test(text)
+        ? "hdt"
+        : /\bdensity\b|密度/i.test(text)
+          ? "density"
+          : /continuous (?:use|service) temperature|连续使用温度|长期使用温度/i.test(text)
+            ? "continuous_use_temperature"
+            : null;
+    return {
+      testStandard: standard ? standard[0].trim() : null,
+      testCondition: condition ? condition[1].trim() : null,
+      propertyKey
+    };
+  }
+
+  function evaluateCertificationEvidence(item, requirement) {
+    const expected = normalizeCertificationName(requirement.code);
+    const certifications = (item.evidence?.certifications || [])
+      .filter((certification) => {
+        const actual = normalizeCertificationName(certification.certificationName);
+        return Boolean(actual) &&
+          (actual === expected || actual.includes(expected) || expected.includes(actual));
+      })
+      .sort((left, right) => claimRank(right) - claimRank(left));
+    const certification = certifications[0] || null;
+    const source = certification?.source || certification || {};
+    const base = {
+      requirement: requirement.label,
+      detectedConstraint: `${requirement.label} certification`,
+      materialValue: certification
+        ? [
+            certification.certificationName,
+            certification.certificationStatus,
+            certification.scope
+          ].filter(Boolean).join(" — ")
+        : null,
+      evidenceSource: certification ? evidenceSourceFor({ source }) : null,
+      critical: true,
+      propertyKey: null
+    };
+    if (!certification) {
+      return {
+        ...base,
+        status: "unknown",
+        explanation: "Independent certification evidence is unavailable."
+      };
+    }
+
+    const status = String(certification.certificationStatus || "").toLowerCase();
+    if (/not compliant|not certified|expired|withdrawn|failed|rejected/.test(status)) {
+      return {
+        ...base,
+        status: "not_satisfied",
+        explanation: "Independent certification evidence explicitly indicates the requirement is not met."
+      };
+    }
+    const positiveStatus = /certified|compliant|approved|listed|meets|passed/.test(status);
+    const independentlyVerified =
+      certification.verificationStatus === "verified" &&
+      ["high", "medium"].includes(certification.confidenceLevel) &&
+      ["manufacturer", "official_datasheet"].includes(source.sourceType) &&
+      Boolean(source.sourceTitle) &&
+      /^https?:\/\/\S+$/i.test(String(source.sourceUrl || ""));
+    if (!positiveStatus || !independentlyVerified) {
+      return {
+        ...base,
+        status: "unverifiable",
+        explanation: "A certification claim exists, but independent verified certification evidence is incomplete."
+      };
+    }
+    return {
+      ...base,
+      status: "satisfied",
+      explanation: "Independent verified certification evidence supports this requirement."
+    };
+  }
+
+  function normalizeCertificationName(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
 
   function extractHardConstraints(query) {
     const text = String(query || "");
-    const celsiusMatch =
-      text.match(/(-?\d+(?:\.\d+)?)\s*(?:°\s*c|℃|deg(?:rees?)?\s*c)\b/i) ||
-      text.match(/(-?\d+(?:\.\d+)?)\s*度(?:\s*(?:高温|温度|长期|连续))?/);
-    const tensileMatch = text.match(/(?:拉伸强度|抗拉强度|tensile strength)[^\d]{0,12}(\d+(?:\.\d+)?)\s*mpa/i)
-      || text.match(/(\d+(?:\.\d+)?)\s*mpa/i);
-    const temperature = celsiusMatch ? Number(celsiusMatch[1]) : null;
+    const constraintText = text.replace(
+      /(?:test condition|测试条件)\s*[:：]\s*[^,;，。]+/gi,
+      ""
+    );
+    const hdtMatch =
+      constraintText.match(/(?:\bhdt\b|heat (?:deflection|distortion) temperature|热变形温度)[^\d-]{0,16}(-?\d+(?:\.\d+)?)\s*(?:°\s*c|℃|deg(?:rees?)?\s*c|度)?/i);
+    const continuousMatch =
+      constraintText.match(/(?:continuous use temperature|continuous service temperature|长期使用温度|连续使用温度)[^\d-]{0,16}(-?\d+(?:\.\d+)?)\s*(?:°\s*c|℃|deg(?:rees?)?\s*c|度)?/i);
+    const genericCelsiusMatch =
+      constraintText.match(/(-?\d+(?:\.\d+)?)\s*(?:°\s*c|℃|deg(?:rees?)?\s*c)\b/i) ||
+      constraintText.match(/(-?\d+(?:\.\d+)?)\s*度(?:\s*(?:高温|温度|长期|连续))?/);
+    const tensileMatch = constraintText.match(/(?:拉伸强度|抗拉强度|tensile strength)[^\d]{0,12}(\d+(?:\.\d+)?)\s*mpa/i)
+      || constraintText.match(/(\d+(?:\.\d+)?)\s*mpa/i);
+    const temperature = continuousMatch
+      ? Number(continuousMatch[1])
+      : hdtMatch
+        ? null
+        : genericCelsiusMatch
+          ? Number(genericCelsiusMatch[1])
+          : null;
+    const hdt = hdtMatch ? Number(hdtMatch[1]) : null;
     const minimumTemperatureC = temperature !== null && temperature >= 0 ? temperature : null;
+    const minimumHdtC = hdt !== null && hdt >= 0 ? hdt : null;
     const unsupportedLowTemperatureC = temperature !== null && temperature < 0 ? temperature : null;
 
     return {
       minimumTemperatureC,
+      minimumHdtC,
       minimumTensileMpa: tensileMatch ? Number(tensileMatch[1]) : null,
       unsupportedLowTemperatureC
     };

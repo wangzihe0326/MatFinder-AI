@@ -1,4 +1,13 @@
 const fs = require("node:fs");
+const {
+  buildLegacyEvidence,
+  normalizeMaterialEvidenceRow,
+  normalizePropertyEvidence,
+  normalizeSourceType,
+  normalizeVerificationStatus,
+  normalizeConfidenceLevel,
+  nullableText
+} = require("../evidence-model");
 
 function readMaterials(databasePath) {
   const database = new SQLiteDatabase(fs.readFileSync(databasePath));
@@ -16,8 +25,8 @@ function readMaterials(databasePath) {
       abbr: row.abbreviation ?? row.abbr,
       abbreviation: row.abbreviation ?? row.abbr,
       material_family: row.material_family ?? row.family,
-      grade_name: row.grade_name ?? row.trade_name ?? "Generic",
-      supplier_or_brand: row.supplier_or_brand ?? row.manufacturer ?? "Generic / multiple suppliers",
+      grade_name: row.grade_name ?? row.trade_name ?? null,
+      supplier_or_brand: row.supplier_or_brand ?? row.manufacturer ?? null,
       category: row.category,
       category_en: row.category_en ?? row.category,
       category_zh: row.category_zh ?? row.category,
@@ -110,7 +119,142 @@ function readMaterials(databasePath) {
     });
   });
 
+  attachEvidenceModel(database, tables, materials, byId);
+
   return materials;
+}
+
+function attachEvidenceModel(database, tables, materials, byId) {
+  const sourceById = new Map(
+    database.readTable(tables.evidence_sources)
+      .map((row) => [Number(row.source_id), row])
+  );
+  const identityRows = database.readTable(tables.material_evidence)
+    .map((row) => hydrateNormalizedSource(row, sourceById));
+  const propertyRows = database.readTable(tables.material_property_evidence)
+    .map((row) => hydrateNormalizedSource(row, sourceById));
+  const certificationRows = database.readTable(tables.material_certifications)
+    .map((row) => hydrateNormalizedSource(row, sourceById));
+
+  if (!identityRows.length && !propertyRows.length && !certificationRows.length) {
+    materials.forEach((material) => {
+      material.evidence = buildLegacyEvidence(material);
+    });
+    return;
+  }
+
+  materials.forEach((material) => {
+    material.evidence = {
+      identity: {
+        manufacturer: null,
+        brand: null,
+        commercialGrade: null,
+        materialFamily: material.material_family || material.family || null,
+        verificationStatus: "unverified",
+        confidenceLevel: "low",
+        lastVerifiedAt: null,
+        sources: []
+      },
+      properties: {},
+      certifications: []
+    };
+  });
+
+  identityRows.forEach((row) => {
+    const material = byId.get(row.material_id);
+    if (!material) return;
+    const normalized = normalizeMaterialEvidenceRow(row);
+    const identity = material.evidence.identity;
+    identity.manufacturer ??= normalized.manufacturer;
+    identity.brand ??= normalized.brand;
+    identity.commercialGrade ??= normalized.commercialGrade;
+    identity.materialFamily ??= normalized.materialFamily;
+    identity.verificationStatus = strongestVerificationStatus(identity.verificationStatus, normalized.verificationStatus);
+    identity.confidenceLevel = strongestConfidenceLevel(identity.confidenceLevel, normalized.confidenceLevel);
+    identity.lastVerifiedAt = latestIsoDate(identity.lastVerifiedAt, normalized.lastVerifiedAt);
+    identity.sources.push(normalized);
+  });
+
+  propertyRows
+    .sort((left, right) => Number(left.position || 0) - Number(right.position || 0))
+    .forEach((row) => {
+      const material = byId.get(row.material_id);
+      if (!material) return;
+      const claim = normalizePropertyEvidence(row, material.evidence.identity);
+      if (!material.evidence.properties[claim.propertyKey]) {
+        material.evidence.properties[claim.propertyKey] = [];
+      }
+      material.evidence.properties[claim.propertyKey].push(claim);
+    });
+
+  certificationRows.forEach((row) => {
+    const material = byId.get(row.material_id);
+    if (!material) return;
+    material.evidence.certifications.push({
+      certificationName: nullableText(row.certification_name),
+      certificationStatus: nullableText(row.certification_status) || "unknown",
+      scope: nullableText(row.scope),
+      sourceType: normalizeSourceType(row.source_type),
+      sourceTitle: nullableText(row.source_title),
+      sourceUrl: nullableText(row.source_url),
+      sourceDate: nullableText(row.source_date),
+      verificationStatus: normalizeVerificationStatus(row.verification_status),
+      confidenceLevel: normalizeConfidenceLevel(row.confidence_level),
+      lastVerifiedAt: nullableText(row.last_verified_at),
+      evidenceVersion: Number(row.evidence_version || 1),
+      importBatchId: nullableText(row.import_batch_id),
+      importedAt: nullableText(row.imported_at),
+      source: {
+        sourceType: normalizeSourceType(row.source_type),
+        sourceTitle: nullableText(row.source_title),
+        sourceUrl: nullableText(row.source_url),
+        sourceDate: nullableText(row.source_date)
+      }
+    });
+  });
+
+  materials.forEach((material) => {
+    const legacy = buildLegacyEvidence(material);
+    for (const [propertyKey, claims] of Object.entries(legacy.properties)) {
+      if (!material.evidence.properties[propertyKey]?.length) {
+        material.evidence.properties[propertyKey] = claims;
+      }
+    }
+  });
+}
+
+function hydrateNormalizedSource(row, sourceById) {
+  const source = sourceById.get(Number(row.source_id));
+  if (!source) return row;
+  return {
+    ...row,
+    source_type: row.source_type ?? source.source_type,
+    source_title: row.source_title ?? source.source_title,
+    source_url: row.source_url ?? source.source_url,
+    source_date: row.source_date ?? source.source_date,
+    manufacturer: row.manufacturer ?? source.manufacturer,
+    brand: row.brand ?? source.brand,
+    commercial_grade: row.commercial_grade ?? source.commercial_grade,
+    material_family: row.material_family ?? source.material_family
+  };
+}
+
+function strongestVerificationStatus(left, right) {
+  if (left === "quarantined" || right === "quarantined") return "quarantined";
+  const order = ["quarantined", "unverified", "partially_verified", "verified"];
+  return order.indexOf(right) > order.indexOf(left) ? right : left;
+}
+
+function strongestConfidenceLevel(left, right) {
+  if (left === "quarantined" || right === "quarantined") return "quarantined";
+  const order = ["quarantined", "low", "medium", "high"];
+  return order.indexOf(right) > order.indexOf(left) ? right : left;
+}
+
+function latestIsoDate(left, right) {
+  if (!left) return right || null;
+  if (!right) return left;
+  return String(left) > String(right) ? left : right;
 }
 
 function parseJsonList(value) {
@@ -157,7 +301,8 @@ class SQLiteDatabase {
         tables[row.name] = {
           name: row.name,
           rootPage: row.rootpage,
-          columns: parseColumns(row.sql)
+          columns: parseColumns(row.sql),
+          rowidAlias: parseIntegerPrimaryKeyColumn(row.sql)
         };
       });
 
@@ -166,15 +311,19 @@ class SQLiteDatabase {
 
   readTable(table) {
     if (!table) return [];
-    return this.readRows(table.rootPage, table.columns);
+    return this.readRows(table.rootPage, table.columns, table.rowidAlias);
   }
 
-  readRows(rootPage, columns) {
-    return this.readPageRows(rootPage).map((values) => {
+  readRows(rootPage, columns, rowidAlias = null) {
+    return this.readPageRows(rootPage).map((record) => {
+      const values = record.values;
       const row = {};
       columns.forEach((column, index) => {
         row[column] = values[index] ?? null;
       });
+      if (rowidAlias && row[rowidAlias] === null) {
+        row[rowidAlias] = record.rowid;
+      }
       return row;
     });
   }
@@ -226,7 +375,10 @@ class SQLiteDatabase {
     const rowid = readVarint(this.buffer, payloadSize.nextOffset);
     const payloadOffset = rowid.nextOffset;
     const payload = this.buffer.subarray(payloadOffset, payloadOffset + Number(payloadSize.value));
-    return parseRecord(payload);
+    return {
+      rowid: Number(rowid.value),
+      values: parseRecord(payload)
+    };
   }
 
   pageStart(pageNumber) {
@@ -244,6 +396,19 @@ function parseColumns(sql) {
     .map((definition) => definition.match(/^"([^"]+)"|^`([^`]+)`|^\[([^\]]+)\]|^(\S+)/))
     .filter(Boolean)
     .map((match) => match[1] || match[2] || match[3] || match[4]);
+}
+
+function parseIntegerPrimaryKeyColumn(sql) {
+  const body = sql.slice(sql.indexOf("(") + 1, sql.lastIndexOf(")"));
+  const definition = splitSqlList(body)
+    .map((item) => item.trim())
+    .find((item) =>
+      !/^(PRIMARY|FOREIGN|UNIQUE|CHECK|CONSTRAINT)\b/i.test(item) &&
+      /\bINTEGER\s+PRIMARY\s+KEY\b/i.test(item)
+    );
+  if (!definition) return null;
+  const match = definition.match(/^"([^"]+)"|^`([^`]+)`|^\[([^\]]+)\]|^(\S+)/);
+  return match ? match[1] || match[2] || match[3] || match[4] : null;
 }
 
 function splitSqlList(value) {

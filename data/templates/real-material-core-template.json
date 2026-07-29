@@ -1,0 +1,104 @@
+{
+  "templateVersion": "1.0.0",
+  "purpose": "Manual entry or controlled import of 50 to 100 real commercial material grades",
+  "targetMaterialFamilies": [
+    "ABS",
+    "PC",
+    "PC/ABS",
+    "PA6",
+    "PA66",
+    "POM",
+    "PP",
+    "HDPE",
+    "PET",
+    "PBT",
+    "TPU",
+    "PMMA",
+    "PPS",
+    "PEEK"
+  ],
+  "allowedValues": {
+    "sourceType": [
+      "manufacturer",
+      "official_datasheet",
+      "academic",
+      "distributor",
+      "generated",
+      "unknown"
+    ],
+    "verificationStatus": [
+      "verified",
+      "partially_verified",
+      "unverified",
+      "quarantined"
+    ],
+    "confidenceLevel": [
+      "high",
+      "medium",
+      "low",
+      "quarantined"
+    ],
+    "valueType": [
+      "typical",
+      "minimum",
+      "maximum",
+      "estimated",
+      "unknown"
+    ]
+  },
+  "recordShape": {
+    "materialId": null,
+    "manufacturer": null,
+    "brand": null,
+    "commercialGrade": null,
+    "materialFamily": null,
+    "officialTdsLinks": [],
+    "identitySources": [
+      {
+        "sourceType": "unknown",
+        "sourceTitle": null,
+        "sourceUrl": null,
+        "sourceDate": null,
+        "verificationStatus": "unverified",
+        "confidenceLevel": "low",
+        "lastVerifiedAt": null
+      }
+    ],
+    "properties": [
+      {
+        "propertyKey": null,
+        "measurements": [
+          {
+            "value": null,
+            "unit": null,
+            "testStandard": null,
+            "testCondition": null,
+            "valueType": "unknown",
+            "sourceType": "unknown",
+            "sourceTitle": null,
+            "sourceUrl": null,
+            "sourceDate": null,
+            "verificationStatus": "unverified",
+            "confidenceLevel": "low",
+            "lastVerifiedAt": null
+          }
+        ]
+      }
+    ],
+    "certifications": [
+      {
+        "certificationName": null,
+        "certificationStatus": "unknown",
+        "scope": null,
+        "sourceType": "unknown",
+        "sourceTitle": null,
+        "sourceUrl": null,
+        "sourceDate": null,
+        "verificationStatus": "unverified",
+        "confidenceLevel": "low",
+        "lastVerifiedAt": null
+      }
+    ]
+  },
+  "materials": []
+}

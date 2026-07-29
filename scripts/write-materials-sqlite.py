@@ -3,6 +3,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from material_import_schema import ensure_import_schema
+
+from material_import_schema import ensure_import_schema
+
 
 def main():
     if len(sys.argv) != 2:
@@ -22,6 +26,9 @@ def main():
             """
             DROP TABLE IF EXISTS material_tags;
             DROP TABLE IF EXISTS material_uses;
+            DROP TABLE IF EXISTS material_certifications;
+            DROP TABLE IF EXISTS material_property_evidence;
+            DROP TABLE IF EXISTS material_evidence;
             DROP TABLE IF EXISTS material_sources;
             DROP TABLE IF EXISTS materials;
 
@@ -70,7 +77,7 @@ def main():
               applications_zh TEXT NOT NULL,
               limitations TEXT NOT NULL,
               alternatives TEXT NOT NULL,
-              source_note TEXT NOT NULL,
+              source_note TEXT,
               typical_applications TEXT NOT NULL,
               advantages TEXT NOT NULL,
               disadvantages TEXT NOT NULL,
@@ -109,8 +116,82 @@ def main():
               notes TEXT NOT NULL,
               FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE
             );
+
+            CREATE TABLE material_evidence (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              material_id TEXT NOT NULL,
+              manufacturer TEXT,
+              brand TEXT,
+              commercial_grade TEXT,
+              material_family TEXT,
+              source_type TEXT NOT NULL,
+              source_title TEXT,
+              source_url TEXT,
+              source_date TEXT,
+              verification_status TEXT NOT NULL,
+              confidence_level TEXT NOT NULL,
+              last_verified_at TEXT,
+              notes TEXT,
+              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
+              CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
+              CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
+              CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
+            );
+
+            CREATE TABLE material_property_evidence (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              material_id TEXT NOT NULL,
+              property_key TEXT NOT NULL,
+              position INTEGER NOT NULL,
+              value_numeric REAL,
+              value_text TEXT,
+              unit TEXT,
+              test_standard TEXT,
+              test_condition TEXT,
+              value_type TEXT NOT NULL,
+              manufacturer TEXT,
+              brand TEXT,
+              commercial_grade TEXT,
+              material_family TEXT,
+              source_type TEXT NOT NULL,
+              source_title TEXT,
+              source_url TEXT,
+              source_date TEXT,
+              verification_status TEXT NOT NULL,
+              confidence_level TEXT NOT NULL,
+              last_verified_at TEXT,
+              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
+              UNIQUE (material_id, property_key, position),
+              CHECK (value_type IN ('typical', 'minimum', 'maximum', 'estimated', 'unknown')),
+              CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
+              CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
+              CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
+            );
+
+            CREATE TABLE material_certifications (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              material_id TEXT NOT NULL,
+              certification_name TEXT,
+              certification_status TEXT NOT NULL,
+              scope TEXT,
+              source_type TEXT NOT NULL,
+              source_title TEXT,
+              source_url TEXT,
+              source_date TEXT,
+              verification_status TEXT NOT NULL,
+              confidence_level TEXT NOT NULL,
+              last_verified_at TEXT,
+              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
+              CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
+              CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
+              CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
+            );
+
+            CREATE INDEX idx_material_evidence_material ON material_evidence(material_id);
             """
         )
+        ensure_import_schema(connection)
+        ensure_import_schema(connection)
 
         for item in materials:
             connection.execute(
@@ -158,8 +239,8 @@ def main():
                     "name_zh": item.get("name_zh", item["name"]),
                     "abbreviation": item.get("abbreviation", item.get("abbr")),
                     "material_family": item.get("material_family", item.get("family")),
-                    "grade_name": item.get("grade_name", item.get("trade_name", "Generic")),
-                    "supplier_or_brand": item.get("supplier_or_brand", item.get("manufacturer", "Generic / multiple suppliers")),
+                    "grade_name": item.get("grade_name", item.get("trade_name")),
+                    "supplier_or_brand": item.get("supplier_or_brand", item.get("manufacturer")),
                     "category": item["category"],
                     "category_en": item.get("category_en", item["category"]),
                     "category_zh": item.get("category_zh", item["category"]),
@@ -196,7 +277,7 @@ def main():
                     "applications_zh": json.dumps(list_value(item, "applications_zh", "applications"), ensure_ascii=False),
                     "limitations": json.dumps(list_value(item, "limitations", "disadvantages"), ensure_ascii=False),
                     "alternatives": json.dumps(list_value(item, "alternatives"), ensure_ascii=False),
-                    "source_note": item.get("source_note", source_note(item)),
+                    "source_note": item.get("source_note"),
                     "typical_applications": json.dumps(list_value(item, "typical_applications", "uses"), ensure_ascii=False),
                     "advantages": json.dumps(list_value(item, "advantages"), ensure_ascii=False),
                     "disadvantages": json.dumps(list_value(item, "disadvantages"), ensure_ascii=False),
@@ -234,24 +315,116 @@ def main():
                         source["source_type"],
                         source["notes"],
                     )
-                    for source in item.get("sources", default_sources(material_id(item)))
+                    for source in item.get("sources", [])
+                    if source.get("source_title") and source.get("source_url")
                 ],
             )
+
+            insert_evidence(connection, item)
 
         connection.commit()
 
     print(json.dumps({"database": str(db_path), "materials": len(materials)}))
 
 
-def default_sources(material_id):
-    return [
-        {
-            "source_title": "MatFinder seed dataset",
-            "source_url": "local:data/materials.js",
-            "source_type": "internal_seed",
-            "notes": f"Original MatFinder seed record for {material_id}; grade-specific values should be verified before engineering use.",
-        }
-    ]
+def insert_evidence(connection, item):
+    evidence = item.get("evidence") or {}
+    identity = evidence.get("identity") or {}
+    identity_sources = identity.get("sources") or [{}]
+    material_identifier = material_id(item)
+
+    for source in identity_sources:
+        connection.execute(
+            """
+            INSERT INTO material_evidence (
+              material_id, manufacturer, brand, commercial_grade, material_family,
+              source_type, source_title, source_url, source_date,
+              verification_status, confidence_level, last_verified_at, notes
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                material_identifier,
+                identity.get("manufacturer"),
+                identity.get("brand"),
+                identity.get("commercialGrade"),
+                identity.get("materialFamily", item.get("material_family")),
+                source.get("sourceType", "unknown"),
+                source.get("sourceTitle"),
+                source.get("sourceUrl"),
+                source.get("sourceDate"),
+                identity.get("verificationStatus", source.get("verificationStatus", "unverified")),
+                identity.get("confidenceLevel", source.get("confidenceLevel", "low")),
+                identity.get("lastVerifiedAt", source.get("lastVerifiedAt")),
+                source.get("notes"),
+            ),
+        )
+
+    for property_key, claims in (evidence.get("properties") or {}).items():
+        for position, claim in enumerate(claims or []):
+            source = claim.get("source") or {}
+            value = claim.get("value")
+            numeric_value = value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+            text_value = None if numeric_value is not None or value is None else str(value)
+            connection.execute(
+                """
+                INSERT INTO material_property_evidence (
+                  material_id, property_key, position, value_numeric, value_text, unit,
+                  test_standard, test_condition, value_type, manufacturer, brand,
+                  commercial_grade, material_family, source_type, source_title,
+                  source_url, source_date, verification_status, confidence_level,
+                  last_verified_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    material_identifier,
+                    property_key,
+                    position,
+                    numeric_value,
+                    text_value,
+                    claim.get("unit"),
+                    claim.get("testStandard"),
+                    claim.get("testCondition"),
+                    claim.get("valueType", "unknown"),
+                    source.get("manufacturer", identity.get("manufacturer")),
+                    source.get("brand", identity.get("brand")),
+                    source.get("commercialGrade", identity.get("commercialGrade")),
+                    source.get("materialFamily", identity.get("materialFamily")),
+                    source.get("sourceType", "unknown"),
+                    source.get("sourceTitle"),
+                    source.get("sourceUrl"),
+                    source.get("sourceDate"),
+                    claim.get("verificationStatus", "unverified"),
+                    claim.get("confidenceLevel", "low"),
+                    claim.get("lastVerifiedAt"),
+                ),
+            )
+
+    for certification in evidence.get("certifications") or []:
+        connection.execute(
+            """
+            INSERT INTO material_certifications (
+              material_id, certification_name, certification_status, scope,
+              source_type, source_title, source_url, source_date,
+              verification_status, confidence_level, last_verified_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                material_identifier,
+                certification.get("certificationName"),
+                certification.get("certificationStatus", "unknown"),
+                certification.get("scope"),
+                certification.get("sourceType", "unknown"),
+                certification.get("sourceTitle"),
+                certification.get("sourceUrl"),
+                certification.get("sourceDate"),
+                certification.get("verificationStatus", "unverified"),
+                certification.get("confidenceLevel", "low"),
+                certification.get("lastVerifiedAt"),
+            ),
+        )
 
 
 def clean_value(value):
@@ -283,16 +456,6 @@ def legacy_recyclability(item):
     if "recyclable" not in item:
         return None
     return "recyclable" if item["recyclable"] else "not typically recyclable"
-
-
-def source_note(item):
-    if item.get("source_note"):
-        return item["source_note"]
-    sources = item.get("sources") or default_sources(material_id(item))
-    titles = [source.get("source_title") for source in sources if source.get("source_title")]
-    if not titles:
-        return "MatFinder local material database; verify grade-specific datasheets before engineering use."
-    return "Representative MatFinder record based on: " + "; ".join(titles[:3]) + "."
 
 
 if __name__ == "__main__":

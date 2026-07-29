@@ -175,7 +175,68 @@ function toCompactMaterial(material) {
   compact.data_quality = Object.fromEntries(
     Object.entries(material.data_quality || {}).filter(([key]) => key !== "issues")
   );
+  compact.evidence = toCompactEvidence(material);
   return compact;
+}
+
+function toCompactEvidence(material) {
+  const identity = material.evidence?.identity || {};
+  const compact = {
+    identity: {
+      manufacturer: identity.manufacturer ?? null,
+      brand: identity.brand ?? null,
+      commercialGrade: identity.commercialGrade ?? null,
+      materialFamily: identity.materialFamily ?? null,
+      verificationStatus: identity.verificationStatus || "unverified",
+      confidenceLevel: identity.confidenceLevel || "low",
+      lastVerifiedAt: identity.lastVerifiedAt ?? null,
+      sources: (identity.sources || []).map(compactSource)
+    },
+    properties: {},
+    certifications: []
+  };
+
+  // Quarantined records are never recommendable or comparable. Keeping only
+  // their identity evidence prevents the compact catalog from carrying a large
+  // block of unusable legacy property claims.
+  if (material.data_quality?.level === "quarantined") return compact;
+
+  for (const [propertyKey, claims] of Object.entries(material.evidence?.properties || {})) {
+    compact.properties[propertyKey] = claims.map((claim) => ({
+      value: claim.value ?? null,
+      unit: claim.unit ?? null,
+      testStandard: claim.testStandard ?? null,
+      testCondition: claim.testCondition ?? null,
+      valueType: claim.valueType || "unknown",
+      verificationStatus: claim.verificationStatus || "unverified",
+      confidenceLevel: claim.confidenceLevel || "low",
+      lastVerifiedAt: claim.lastVerifiedAt ?? null,
+      evidenceVersion: claim.evidenceVersion || 1,
+      conflictGroupId: claim.conflictGroupId ?? null,
+      conflictStatus: claim.conflictStatus || "none",
+      source: compactSource(claim.source || claim)
+    }));
+  }
+  compact.certifications = (material.evidence?.certifications || []).map((certification) => ({
+    certificationName: certification.certificationName ?? null,
+    certificationStatus: certification.certificationStatus || "unknown",
+    scope: certification.scope ?? null,
+    verificationStatus: certification.verificationStatus || "unverified",
+    confidenceLevel: certification.confidenceLevel || "low",
+    lastVerifiedAt: certification.lastVerifiedAt ?? null,
+    evidenceVersion: certification.evidenceVersion || 1,
+    source: compactSource(certification.source || certification)
+  }));
+  return compact;
+}
+
+function compactSource(source) {
+  return {
+    sourceType: source.sourceType || "unknown",
+    sourceTitle: source.sourceTitle ?? null,
+    sourceUrl: source.sourceUrl ?? null,
+    sourceDate: source.sourceDate ?? null
+  };
 }
 
 async function handleMaterialAnalysis(request, response) {
@@ -218,11 +279,11 @@ async function handleMaterialComparison(request, response) {
     sendJson(response, 400, { error: "Choose two different materials" });
     return;
   }
-  if (pair.some((item) => item.data_quality?.recommendation_eligible === false)) {
+  if (pair.some((item) => item.data_quality?.level === "quarantined")) {
     sendJson(response, 422, {
       error: "One or more material records failed quality checks",
       materialIds: pair
-        .filter((item) => item.data_quality?.recommendation_eligible === false)
+        .filter((item) => item.data_quality?.level === "quarantined")
         .map((item) => item.id)
     });
     return;

@@ -1,0 +1,47 @@
+{
+  "templateVersion": "1.0.0-pilot",
+  "purpose": "STRUCTURE ONLY - DO NOT IMPORT",
+  "materials": [
+    {
+      "placeholder": true,
+      "manufacturer": "PLACEHOLDER_MANUFACTURER_DO_NOT_IMPORT",
+      "brand": null,
+      "commercialGrade": "PLACEHOLDER_COMMERCIAL_GRADE_DO_NOT_IMPORT",
+      "materialFamily": "PLACEHOLDER_FAMILY_DO_NOT_IMPORT",
+      "officialTdsLinks": [],
+      "identitySources": [
+        {
+          "sourceType": "unknown",
+          "sourceTitle": "PLACEHOLDER_IDENTITY_SOURCE_TITLE_DO_NOT_IMPORT",
+          "sourceUrl": "PLACEHOLDER_IDENTITY_SOURCE_URL_DO_NOT_IMPORT",
+          "sourceDate": null,
+          "verificationStatus": "unverified",
+          "confidenceLevel": "low",
+          "lastVerifiedAt": null
+        }
+      ],
+      "properties": [
+        {
+          "propertyKey": "density",
+          "measurements": [
+            {
+              "value": null,
+              "unit": null,
+              "testStandard": null,
+              "testCondition": null,
+              "valueType": "unknown",
+              "sourceType": "unknown",
+              "sourceTitle": "PLACEHOLDER_PROPERTY_SOURCE_TITLE_DO_NOT_IMPORT",
+              "sourceUrl": "PLACEHOLDER_PROPERTY_SOURCE_URL_DO_NOT_IMPORT",
+              "sourceDate": null,
+              "verificationStatus": "unverified",
+              "confidenceLevel": "low",
+              "lastVerifiedAt": null
+            }
+          ]
+        }
+      ],
+      "certifications": []
+    }
+  ]
+}

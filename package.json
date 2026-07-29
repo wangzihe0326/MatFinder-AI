@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "test": "npm run test:acceptance",
     "start": "node server.js",
     "start:prod": "node scripts/start-production.js",
     "build:frontend-config": "node scripts/build-frontend-config.js",
@@ -9,6 +10,19 @@
     "validate:materials": "node scripts/validate-material-database.js",
     "test:catalog-search": "node scripts/test-catalog-search.js",
     "test:recommendation-safety": "node scripts/test-recommendation-safety.js",
+    "test:evidence-quality": "node scripts/test-evidence-quality.js",
+    "test:evidence-ui": "node scripts/test-evidence-ui-contract.js",
+    "test:evidence-migration": "python -B scripts/test-evidence-migration-safety.py",
+    "test:evidence": "npm run test:evidence-quality && npm run test:recommendation-safety && npm run test:evidence-ui && python -B scripts/test-evidence-schema.py && npm run test:evidence-migration",
+    "audit:evidence": "python -B scripts/audit-evidence-migration.py",
+    "migrate:import-schema": "python -B scripts/migrate-import-schema.py",
+    "import:real-materials": "python -B scripts/import-real-materials.py",
+    "rollback:real-materials": "python -B scripts/import-real-materials.py --rollback",
+    "test:real-material-importer": "python -B scripts/test-real-material-importer.py",
+    "test:acceptance": "npm run test:evidence && npm run test:real-material-importer && npm run test:catalog-search",
+    "audit:database": "python -B scripts/analyze-database-storage.py",
+    "optimize:database-indexes": "python -B scripts/optimize-database-indexes.py",
+    "validate:real-material-import": "node scripts/validate-real-material-import.js",
     "summary:materials": "node scripts/generate-database-summary.js",
     "smoke:openai": "node scripts/smoke-openai-analysis.js"
   },

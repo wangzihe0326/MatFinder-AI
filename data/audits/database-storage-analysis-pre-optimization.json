@@ -1,0 +1,354 @@
+{
+  "database": "C:\\Users\\35766\\Documents\\New project\\matfinder.db",
+  "file_size_bytes": 102973440,
+  "page_size_bytes": 4096,
+  "page_count": 25140,
+  "freelist_pages": 0,
+  "freelist_bytes": 0,
+  "dbstat_available": false,
+  "largest_objects": [],
+  "table_counts": {
+    "evidence_sources": 0,
+    "import_batches": 0,
+    "import_entity_links": 0,
+    "material_certifications": 0,
+    "material_evidence": 7818,
+    "material_property_evidence": 120496,
+    "material_sources": 7818,
+    "material_tags": 59836,
+    "material_uses": 43483,
+    "materials": 7531,
+    "real_material_identities": 0
+  },
+  "exact_duplicate_profiles": {
+    "material_evidence": {
+      "duplicate_groups": 0,
+      "excess_rows": 0
+    },
+    "material_property_evidence": {
+      "duplicate_groups": 0,
+      "excess_rows": 0
+    },
+    "material_certifications": {
+      "duplicate_groups": 0,
+      "excess_rows": 0
+    }
+  },
+  "source_text_profile": {
+    "inline_source_text_bytes": 1382561,
+    "rows_with_inline_title_or_url": 7818,
+    "distinct_inline_source_tuples": 508,
+    "repeated_inline_source_rows": 7310,
+    "estimated_repeated_title_url_bytes": 1323396,
+    "normalized_source_rows": 0
+  },
+  "indexes": [
+    {
+      "table": "evidence_sources",
+      "name": "idx_evidence_sources_url",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "source_url",
+        "source_type"
+      ]
+    },
+    {
+      "table": "evidence_sources",
+      "name": "sqlite_autoindex_evidence_sources_1",
+      "unique": true,
+      "origin": "u",
+      "partial": false,
+      "columns": [
+        "source_fingerprint"
+      ]
+    },
+    {
+      "table": "import_batches",
+      "name": "idx_import_batches_active_hash",
+      "unique": true,
+      "origin": "c",
+      "partial": true,
+      "columns": [
+        "input_file_hash"
+      ]
+    },
+    {
+      "table": "import_batches",
+      "name": "sqlite_autoindex_import_batches_1",
+      "unique": true,
+      "origin": "pk",
+      "partial": false,
+      "columns": [
+        "import_batch_id"
+      ]
+    },
+    {
+      "table": "import_entity_links",
+      "name": "idx_import_links_entity",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "entity_type",
+        "entity_id"
+      ]
+    },
+    {
+      "table": "import_entity_links",
+      "name": "sqlite_autoindex_import_entity_links_1",
+      "unique": true,
+      "origin": "pk",
+      "partial": false,
+      "columns": [
+        "import_batch_id",
+        "entity_type",
+        "entity_id"
+      ]
+    },
+    {
+      "table": "material_certifications",
+      "name": "idx_material_certifications_name",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "material_id",
+        "certification_name"
+      ]
+    },
+    {
+      "table": "material_certifications",
+      "name": "idx_certification_fingerprint",
+      "unique": true,
+      "origin": "c",
+      "partial": true,
+      "columns": [
+        "evidence_fingerprint"
+      ]
+    },
+    {
+      "table": "material_certifications",
+      "name": "idx_material_certifications_material",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "material_id"
+      ]
+    },
+    {
+      "table": "material_evidence",
+      "name": "idx_material_evidence_source",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "source_id"
+      ]
+    },
+    {
+      "table": "material_evidence",
+      "name": "idx_material_evidence_fingerprint",
+      "unique": true,
+      "origin": "c",
+      "partial": true,
+      "columns": [
+        "evidence_fingerprint"
+      ]
+    },
+    {
+      "table": "material_evidence",
+      "name": "idx_material_evidence_material",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "material_id"
+      ]
+    },
+    {
+      "table": "material_property_evidence",
+      "name": "idx_property_evidence_conflict",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "material_id",
+        "conflict_status"
+      ]
+    },
+    {
+      "table": "material_property_evidence",
+      "name": "idx_property_evidence_context",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "material_id",
+        "property_key",
+        "test_standard",
+        "test_condition",
+        "unit",
+        "value_type"
+      ]
+    },
+    {
+      "table": "material_property_evidence",
+      "name": "idx_property_evidence_source",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "source_id"
+      ]
+    },
+    {
+      "table": "material_property_evidence",
+      "name": "idx_property_evidence_fingerprint",
+      "unique": true,
+      "origin": "c",
+      "partial": true,
+      "columns": [
+        "evidence_fingerprint"
+      ]
+    },
+    {
+      "table": "material_property_evidence",
+      "name": "idx_property_evidence_material_property",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "material_id",
+        "property_key"
+      ]
+    },
+    {
+      "table": "material_property_evidence",
+      "name": "sqlite_autoindex_material_property_evidence_1",
+      "unique": true,
+      "origin": "u",
+      "partial": false,
+      "columns": [
+        "material_id",
+        "property_key",
+        "position"
+      ]
+    },
+    {
+      "table": "material_tags",
+      "name": "sqlite_autoindex_material_tags_1",
+      "unique": true,
+      "origin": "pk",
+      "partial": false,
+      "columns": [
+        "material_id",
+        "position"
+      ]
+    },
+    {
+      "table": "material_uses",
+      "name": "sqlite_autoindex_material_uses_1",
+      "unique": true,
+      "origin": "pk",
+      "partial": false,
+      "columns": [
+        "material_id",
+        "position"
+      ]
+    },
+    {
+      "table": "materials",
+      "name": "idx_materials_identity_lookup",
+      "unique": false,
+      "origin": "c",
+      "partial": false,
+      "columns": [
+        "manufacturer",
+        "grade_name",
+        "material_family"
+      ]
+    },
+    {
+      "table": "materials",
+      "name": "sqlite_autoindex_materials_1",
+      "unique": true,
+      "origin": "pk",
+      "partial": false,
+      "columns": [
+        "material_id"
+      ]
+    },
+    {
+      "table": "real_material_identities",
+      "name": "idx_real_material_identity_key",
+      "unique": true,
+      "origin": "c",
+      "partial": true,
+      "columns": [
+        "manufacturer_key",
+        "commercial_grade_key",
+        "material_family_key"
+      ]
+    },
+    {
+      "table": "real_material_identities",
+      "name": "sqlite_autoindex_real_material_identities_1",
+      "unique": true,
+      "origin": "pk",
+      "partial": false,
+      "columns": [
+        "material_id"
+      ]
+    }
+  ],
+  "potentially_redundant_indexes": [
+    {
+      "index": "idx_material_certifications_material",
+      "covered_by": "idx_material_certifications_name",
+      "reason": "The candidate columns are a left prefix of another non-partial index."
+    },
+    {
+      "index": "idx_property_evidence_material_property",
+      "covered_by": "idx_property_evidence_context",
+      "reason": "The candidate columns are a left prefix of another non-partial index."
+    }
+  ],
+  "query_plans": [
+    {
+      "label": "property detail lookup",
+      "sql": "\n                SELECT * FROM material_property_evidence\n                 WHERE material_id = ? AND property_key = ?\n                ",
+      "plan": [
+        "SEARCH material_property_evidence USING INDEX idx_property_evidence_context (material_id=? AND property_key=?)"
+      ]
+    },
+    {
+      "label": "certification lookup",
+      "sql": "\n                SELECT * FROM material_certifications\n                 WHERE material_id = ? AND certification_name = ?\n                ",
+      "plan": [
+        "SEARCH material_certifications USING INDEX idx_material_certifications_name (material_id=? AND certification_name=?)"
+      ]
+    },
+    {
+      "label": "exact imported identity lookup",
+      "sql": "\n                SELECT material_id FROM real_material_identities\n                 WHERE manufacturer_key = ?\n                   AND commercial_grade_key = ?\n                   AND material_family_key = ?\n                   AND active = 1\n                ",
+      "plan": [
+        "SEARCH real_material_identities USING INDEX idx_real_material_identity_key (manufacturer_key=? AND commercial_grade_key=? AND material_family_key=?)"
+      ]
+    },
+    {
+      "label": "legacy exact identity lookup",
+      "sql": "\n                SELECT material_id FROM materials\n                 WHERE manufacturer = ? AND grade_name = ?\n                   AND material_family = ?\n                ",
+      "plan": [
+        "SEARCH materials USING INDEX idx_materials_identity_lookup (manufacturer=? AND grade_name=? AND material_family=?)"
+      ]
+    }
+  ],
+  "safe_findings": [
+    "Do not delete legacy evidence solely because it is duplicated; first determine whether IDs are externally referenced.",
+    "New imports normalize title, URL, date, and source identity into evidence_sources while legacy inline columns remain readable.",
+    "Search is currently performed against an in-memory catalog loaded at server startup; SQL indexes protect import and detail lookups but do not replace that application-level search path."
+  ]
+}
