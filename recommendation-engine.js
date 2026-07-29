@@ -6,6 +6,44 @@
   };
   const requirementParseCache = new Map();
   const scoreCache = new Map();
+  const unsupportedConstraintDefinitions = [
+    {
+      code: "certification",
+      patterns: [/\bfda\b/i, /\bul\s*94\b/i, /\brohs\b/i, /\breach\b/i, /\biso\s*\d*/i, /\bastm\b/i, /\bgb(?:\/t)?\s*\d*/i, /食品接触|认证|合规/],
+      label: "certification or regulatory compliance",
+      zh: "认证或法规合规"
+    },
+    {
+      code: "specific_chemical",
+      patterns: [/浓硫酸|硫酸|盐酸|硝酸|氢氟酸|烧碱|氢氧化钠|溶剂浓度|sulfuric acid|hydrochloric acid|nitric acid|hydrofluoric acid|chemical concentration/i],
+      label: "chemical identity and concentration compatibility",
+      zh: "具体化学介质及浓度相容性"
+    },
+    {
+      code: "compression_set",
+      patterns: [/压缩永久变形|压缩形变|compression set|permanent compression/i],
+      label: "compression-set performance",
+      zh: "压缩永久变形性能"
+    },
+    {
+      code: "commercial",
+      patterns: [/价格|报价|成本|供应商|采购|库存|交期|起订量|牌号|price|quote|supplier|availability|lead time|moq|purchas/i],
+      label: "supplier, grade, price, availability, or lead time",
+      zh: "供应商、牌号、价格、库存或交期"
+    },
+    {
+      code: "bom",
+      patterns: [/\bbom\b/i, /物料清单|完整材料清单|每个部件|用量|生产\s*\d+|制造\s*\d+|需要哪些材料/i],
+      label: "product BOM and quantity planning",
+      zh: "产品 BOM 与用量计划"
+    },
+    {
+      code: "test_method",
+      patterns: [/测试方法|试验方法|检测标准|test method|test standard/i],
+      label: "test method and specimen conditions",
+      zh: "测试方法与试样条件"
+    }
+  ];
 
   const zh = {
     lightweight: ["\u8f7b\u91cf", "\u4f4e\u5bc6\u5ea6", "\u8f7b\u8d28", "\u51cf\u91cd"],
@@ -454,6 +492,9 @@
     });
 
     applyRequirementInference(text, matches);
+    const hardConstraints = extractHardConstraints(query);
+    if (hardConstraints.minimumTemperatureC !== null) addCriterion(matches, "heat", "numeric temperature");
+    if (hardConstraints.minimumTensileMpa !== null) addCriterion(matches, "strength", "numeric tensile strength");
 
     const parsed = [...matches.values()].sort((a, b) => {
       const aIndex = priority.indexOf(a.criterion.id);
@@ -465,7 +506,9 @@
       query,
       requirements: criteria.map((criterion) => criterion.label),
       criteria,
-      sources: parsed.map((entry) => ({ id: entry.criterion.id, label: entry.criterion.label, source: entry.source }))
+      sources: parsed.map((entry) => ({ id: entry.criterion.id, label: entry.criterion.label, source: entry.source })),
+      hardConstraints,
+      unsupportedConstraints: extractUnsupportedConstraints(query)
     };
     requirementParseCache.set(query, parsedRequirement);
     return parsedRequirement;
@@ -491,12 +534,11 @@
     const similarity = textSimilarity(`${description} ${parsedRequirement.requirements.join(" ")}`, item);
 
     if (!criteria.length) {
-      const fallbackScore = Math.round(clamp(0.35 + similarity * 0.65) * 100);
       const fallbackResult = {
         material: item,
-        score: fallbackScore,
-        reasons: similarity > 0 ? ["closest local text match"] : ["balanced fallback from local dataset"],
-        warnings: ["no recognized requirement terms; ranked by local text similarity"],
+        score: 0,
+        reasons: [],
+        warnings: ["no recognized engineering requirement; recommendation withheld"],
         matchedCriteria: []
       };
       scoreCache.set(cacheKey, fallbackResult);
@@ -534,7 +576,10 @@
     const criteriaScore = weightedTotal / maxTotal;
     const coverageBonus = (matchedCount / criteria.length) * 0.08;
     const warningPenalty = (warningCandidates.length / criteria.length) * 0.12;
-    const finalScore = Math.round(clamp(criteriaScore * 0.82 + similarity * 0.1 + coverageBonus - warningPenalty) * 100);
+    const calculatedScore = Math.round(clamp(criteriaScore * 0.82 + similarity * 0.1 + coverageBonus - warningPenalty) * 100);
+    const qualityCap = item.data_quality?.factory_ready ? 90 : 79;
+    const unresolvedCap = parsedRequirement.unsupportedConstraints.length ? 59 : qualityCap;
+    const finalScore = Math.min(calculatedScore, qualityCap, unresolvedCap);
     const reasons = reasonCandidates
       .sort((a, b) => b.fit - a.fit)
       .slice(0, 3)
@@ -545,7 +590,10 @@
       .map((warning) => warning.text);
 
     if (!reasons.length) reasons.push("partial match against stated requirements");
-    if (!warnings.length) warnings.push("no major unmatched requirement warnings");
+    parsedRequirement.unsupportedConstraints.slice(0, 3).forEach((constraint) => {
+      warnings.push(`requires external verification: ${constraint.label}`);
+    });
+    if (!warnings.length) warnings.push("no major unmatched requirement warnings within the supported screening fields");
 
     const result = {
       material: item,
@@ -556,15 +604,6 @@
     };
     scoreCache.set(cacheKey, result);
     return result;
-  }
-
-  function enforceUniqueDescendingScores(recommendations) {
-    let previousScore = 101;
-    return recommendations.map((entry) => {
-      const score = Math.max(0, Math.min(entry.score, previousScore - 1));
-      previousScore = score;
-      return { ...entry, score };
-    });
   }
 
   function createLocalRecommendationProvider() {
@@ -579,23 +618,48 @@
             query: "",
             criteria: [],
             parsedRequirement,
-            recommendations: []
+            recommendations: [],
+            status: "empty",
+            eligibleMaterialCount: 0
           };
         }
 
-        const recommendations = enforceUniqueDescendingScores(
-          materials
-          .map((item) => scoreMaterial(trimmed, item))
+        const eligibleMaterials = materials.filter((item) => item.data_quality?.recommendation_eligible !== false);
+        if (!parsedRequirement.criteria.length) {
+          return {
+            provider: this.id,
+            query: trimmed,
+            criteria: [],
+            parsedRequirement,
+            recommendations: [],
+            status: "needs_clarification",
+            eligibleMaterialCount: eligibleMaterials.length
+          };
+        }
+
+        const hardConstraintResults = eligibleMaterials.map((item) => ({
+          item,
+          failures: evaluateHardConstraints(item, parsedRequirement)
+        }));
+        const hardConstraintMatches = hardConstraintResults.filter((entry) => !entry.failures.length);
+        const recommendations = hardConstraintMatches
+          .map(({ item }) => scoreMaterial(trimmed, item))
           .sort((a, b) => b.score - a.score || a.material.name.localeCompare(b.material.name))
-          .slice(0, limit)
-        );
+          .slice(0, limit);
 
         return {
           provider: this.id,
           query: trimmed,
           criteria: parsedRequirement.requirements,
           parsedRequirement,
-          recommendations
+          recommendations,
+          status: recommendations.length
+            ? parsedRequirement.unsupportedConstraints.length
+              ? "needs_verification"
+              : "screening_ready"
+            : "no_safe_match",
+          eligibleMaterialCount: eligibleMaterials.length,
+          hardConstraintMatchCount: hardConstraintMatches.length
         };
       }
     };
@@ -631,4 +695,97 @@
     scoreMaterial,
     extractCriteria
   };
+
+  function extractHardConstraints(query) {
+    const text = String(query || "");
+    const celsiusMatch =
+      text.match(/(-?\d+(?:\.\d+)?)\s*(?:°\s*c|℃|deg(?:rees?)?\s*c)\b/i) ||
+      text.match(/(-?\d+(?:\.\d+)?)\s*度(?:\s*(?:高温|温度|长期|连续))?/);
+    const tensileMatch = text.match(/(?:拉伸强度|抗拉强度|tensile strength)[^\d]{0,12}(\d+(?:\.\d+)?)\s*mpa/i)
+      || text.match(/(\d+(?:\.\d+)?)\s*mpa/i);
+    const temperature = celsiusMatch ? Number(celsiusMatch[1]) : null;
+    const minimumTemperatureC = temperature !== null && temperature >= 0 ? temperature : null;
+    const unsupportedLowTemperatureC = temperature !== null && temperature < 0 ? temperature : null;
+
+    return {
+      minimumTemperatureC,
+      minimumTensileMpa: tensileMatch ? Number(tensileMatch[1]) : null,
+      unsupportedLowTemperatureC
+    };
+  }
+
+  function extractUnsupportedConstraints(query) {
+    const text = String(query || "");
+    const constraints = unsupportedConstraintDefinitions
+      .filter((definition) => definition.patterns.some((pattern) => pattern.test(text)))
+      .map(({ code, label, zh }) => ({ code, label, zh }));
+    const hardConstraints = extractHardConstraints(text);
+    if (hardConstraints.unsupportedLowTemperatureC !== null) {
+      constraints.push({
+        code: "low_temperature",
+        label: `minimum low-temperature service (${hardConstraints.unsupportedLowTemperatureC} deg C)`,
+        zh: `最低低温使用要求（${hardConstraints.unsupportedLowTemperatureC}°C）`
+      });
+    }
+    return constraints;
+  }
+
+  function evaluateHardConstraints(item, parsedRequirement) {
+    const failures = [];
+    const constraints = parsedRequirement.hardConstraints || {};
+    const maxTemperature = finiteNumber(item.maxTemp ?? item.max_temperature ?? item.continuous_use_temperature);
+    const tensile = finiteNumber(item.tensile ?? item.tensile_strength);
+
+    if (constraints.minimumTemperatureC !== null) {
+      if (maxTemperature === null) {
+        failures.push("continuous use temperature is missing");
+      } else if (maxTemperature < constraints.minimumTemperatureC) {
+        failures.push(`continuous use temperature ${maxTemperature} deg C is below required ${constraints.minimumTemperatureC} deg C`);
+      }
+    }
+    if (constraints.minimumTensileMpa !== null) {
+      if (tensile === null) {
+        failures.push("tensile strength is missing");
+      } else if (tensile < constraints.minimumTensileMpa) {
+        failures.push(`tensile strength ${tensile} MPa is below required ${constraints.minimumTensileMpa} MPa`);
+      }
+    }
+
+    const criterionIds = new Set(parsedRequirement.criteria.map((criterion) => criterion.id));
+    const directlyRequestedCriteria = new Set(
+      (parsedRequirement.sources || [])
+        .filter((source) => source.source === "keyword" || String(source.source || "").startsWith("numeric"))
+        .map((source) => source.id)
+    );
+    parsedRequirement.criteria.forEach((criterion) => {
+      if (!directlyRequestedCriteria.has(criterion.id)) return;
+      const fit = clamp(criterion.evaluate(item));
+      if (fit < 0.5) {
+        failures.push(`${criterion.label} does not meet the minimum directly requested fit`);
+      }
+    });
+
+    if (criterionIds.has("sealing") || criterionIds.has("flexible")) {
+      const text = materialText(item);
+      const category = String(item.category || "").toLowerCase();
+      const elongation = finiteNumber(item.elongation);
+      const sealingFit =
+        category.includes("elastomer") ||
+        category.includes("sealant") ||
+        text.includes("gasket") ||
+        text.includes("o-ring") ||
+        text.includes("sealing") ||
+        text.includes("seal ") ||
+        (elongation !== null && elongation >= 50);
+      if (!sealingFit) failures.push("material does not meet the minimum flexible/sealing form check");
+    }
+
+    return failures;
+  }
+
+  function finiteNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
 })();

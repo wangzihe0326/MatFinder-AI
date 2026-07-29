@@ -180,7 +180,7 @@ function estimateProfile(item) {
       values: profile("solid", 7.8, 450, 650, 15, null, 1450, 400, 45, null, 0, "environment dependent", "not classified", "commonly recyclable", true, "medium", ["machining", "forming", "welding"], ["structural parts", "machined components"], ["high strength", "recyclable", "结构件"], "B90")
     },
     {
-      match: /ceramic|alumina|zirconia|silicon carbide|nitride|porcelain|glass/,
+      match: /ceramic|alumina|zirconia|silicon carbide|nitride|porcelain|\bglass\b(?![- ]?(?:filled|fiber|fibre|reinforced))/,
       values: profile("solid", 3.2, 220, 320, 1, null, 1700, 1000, 15, 7.5, 0.02, "good to excellent", "noncombustible", "not typically recyclable", false, "high", ["sintering", "pressing", "grinding"], ["insulators", "wear parts"], ["heat resistant", "electrical insulation", "耐热"], "Mohs 8")
     },
     {
@@ -366,7 +366,7 @@ function inferSupplierOrBrand(item) {
 
 function inferFlameRating(item, tags = []) {
   const text = searchableText(item, tags);
-  if (/noncombustible|ceramic|metal|glass/.test(text)) return "noncombustible or not UL-rated";
+  if (/noncombustible|ceramic|metal|\bglass\b(?![- ]?(?:filled|fiber|fibre|reinforced))/.test(text)) return "noncombustible or not UL-rated";
   if (/flame|fire|fr-|ul 94|v-0|v0/.test(text)) return "flame-retardant grade available; verify UL 94 rating by grade";
   return "grade dependent; not specified";
 }

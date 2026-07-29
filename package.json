@@ -7,6 +7,8 @@
     "bilingual:materials": "node scripts/generate-bilingual-materials.js",
     "validate:bilingual": "node scripts/validate-bilingual-materials.js",
     "validate:materials": "node scripts/validate-material-database.js",
+    "test:catalog-search": "node scripts/test-catalog-search.js",
+    "test:recommendation-safety": "node scripts/test-recommendation-safety.js",
     "summary:materials": "node scripts/generate-database-summary.js",
     "smoke:openai": "node scripts/smoke-openai-analysis.js"
   },

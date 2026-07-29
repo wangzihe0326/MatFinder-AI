@@ -1,6 +1,9 @@
 let materials = [];
 let recommendationService = null;
+const materialDetailCache = new Map();
 const apiBaseUrl = String(window.MatFinderConfig?.apiBaseUrl || "").replace(/\/$/, "");
+const DEFAULT_MIN_TEMP = -200;
+const DEFAULT_MIN_STRENGTH = 0;
 
 const i18n = {
   zh: {
@@ -936,8 +939,8 @@ const state = {
   category: "all",
   property: "all",
   domain: "all",
-  minTemp: 60,
-  minStrength: 5,
+  minTemp: DEFAULT_MIN_TEMP,
+  minStrength: DEFAULT_MIN_STRENGTH,
   recyclableOnly: false,
   sort: "match",
   materialsPage: 1,
@@ -950,6 +953,7 @@ const state = {
   recommendations: [],
   recommendationCriteria: [],
   recommendationQuery: "",
+  recommendationResult: null,
   selectedMaterialId: null,
   copilotMessages: [],
   analysisCache: new Map(),
@@ -1204,6 +1208,11 @@ function materialNotes(item) {
 }
 
 function materialSummary(item) {
+  if (item.data_quality?.level === "rejected") {
+    return state.language === "zh"
+      ? "该记录包含不合理或相互矛盾的数值，已停止作为材料性能依据。"
+      : "This record contains implausible or contradictory values and is blocked as material evidence.";
+  }
   if (state.language !== "zh") return item.description_en || item.summary;
   if (item.description_zh) return item.description_zh;
   const uses = materialUses(item).slice(0, 3).join("\u3001");
@@ -1216,6 +1225,24 @@ function localizeRecommendationReason(reason) {
 
 function localizeRecommendationReasonFor(reason, language) {
   if (language !== "zh") return reason;
+  const verificationMatch = String(reason).match(/^requires external verification: (.+)$/);
+  if (verificationMatch) {
+    const labels = {
+      "certification or regulatory compliance": "\u8ba4\u8bc1\u6216\u6cd5\u89c4\u5408\u89c4",
+      "chemical identity and concentration compatibility": "\u5177\u4f53\u5316\u5b66\u4ecb\u8d28\u53ca\u6d53\u5ea6\u76f8\u5bb9\u6027",
+      "compression-set performance": "\u538b\u7f29\u6c38\u4e45\u53d8\u5f62\u6027\u80fd",
+      "supplier, grade, price, availability, or lead time": "\u4f9b\u5e94\u5546\u3001\u724c\u53f7\u3001\u4ef7\u683c\u3001\u5e93\u5b58\u6216\u4ea4\u671f",
+      "product BOM and quantity planning": "\u4ea7\u54c1 BOM \u4e0e\u7528\u91cf\u8ba1\u5212",
+      "test method and specimen conditions": "\u6d4b\u8bd5\u65b9\u6cd5\u4e0e\u8bd5\u6837\u6761\u4ef6"
+    };
+    return `\u9700\u5916\u90e8\u6838\u9a8c\uff1a${labels[verificationMatch[1]] || verificationMatch[1]}`;
+  }
+  if (reason === "no recognized engineering requirement; recommendation withheld") {
+    return "\u672a\u8bc6\u522b\u5230\u53ef\u5b89\u5168\u8bc4\u4f30\u7684\u5de5\u7a0b\u9700\u6c42\uff0c\u5df2\u505c\u6b62\u63a8\u8350\u3002";
+  }
+  if (reason === "no major unmatched requirement warnings within the supported screening fields") {
+    return "\u5728\u5f53\u524d\u53ef\u652f\u6301\u7684\u7b5b\u9009\u5b57\u6bb5\u5185\u672a\u53d1\u73b0\u4e3b\u8981\u672a\u5339\u914d\u9879\u3002";
+  }
   return reason
     .replace(/^low density \((.+)\)$/, "低密度（$1）")
     .replace(/^continuous use up to (.+)$/, "连续使用温度可达 $1")
@@ -1595,12 +1622,32 @@ function renderRoute() {
 async function loadMaterials() {
   elements.materialsGrid.innerHTML = `<p class="recommendation-empty">${t("generating")}</p>`;
   elements.emptyState.hidden = true;
-  const response = await fetch(apiUrl("/api/materials"));
+  const response = await fetch(apiUrl("/api/materials?view=compact"));
   if (!response.ok) {
     throw new Error("Failed to load materials from SQLite.");
   }
   materials = await response.json();
   state.filteredMaterialsCache = { key: "", items: [] };
+}
+
+async function loadMaterialDetail(item) {
+  if (materialDetailCache.has(item.id)) return materialDetailCache.get(item.id);
+  const detailPromise = fetch(apiUrl(`/api/materials/${encodeURIComponent(item.id)}`))
+    .then(async (response) => {
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Failed to load material detail.");
+      Object.assign(item, payload);
+      delete item.__catalogSearchIndex;
+      delete item.__signalText;
+      delete item.__applicationSignalText;
+      return item;
+    })
+    .catch((error) => {
+      materialDetailCache.delete(item.id);
+      throw error;
+    });
+  materialDetailCache.set(item.id, detailPromise);
+  return detailPromise;
 }
 
 function apiUrl(path) {
@@ -1667,6 +1714,7 @@ function bindEvents() {
     state.recommendations = [];
     state.recommendationCriteria = [];
     state.recommendationQuery = "";
+    state.recommendationResult = null;
     resetMaterialsPage();
     renderRecommendations();
     render();
@@ -1759,8 +1807,8 @@ function bindEvents() {
     state.category = "all";
     state.property = "all";
     state.domain = "all";
-    state.minTemp = 60;
-    state.minStrength = 5;
+    state.minTemp = DEFAULT_MIN_TEMP;
+    state.minStrength = DEFAULT_MIN_STRENGTH;
     state.recyclableOnly = false;
     state.sort = "match";
     resetMaterialsPage();
@@ -1793,6 +1841,7 @@ async function runRecommendation() {
   }
   state.recommendations = result.recommendations;
   state.recommendationCriteria = result.criteria;
+  state.recommendationResult = result;
   resetMaterialsPage();
   renderRecommendations(result);
   render();
@@ -1888,15 +1937,7 @@ function getMatchScore(item) {
   const recommendation = state.recommendations.find((candidate) => candidate.material.id === item.id);
   if (recommendation) return recommendation.score + 100;
   if (!state.query) return 0;
-
-  const query = state.query;
-  let score = 0;
-  if (item.name.toLowerCase().includes(query)) score += 8;
-  if (item.abbr.toLowerCase().includes(query)) score += 10;
-  if (item.tags.some((tag) => tag.toLowerCase().includes(query))) score += 5;
-  if (item.uses.some((use) => use.toLowerCase().includes(query))) score += 4;
-  if (item.summary.toLowerCase().includes(query)) score += 2;
-  return score;
+  return window.MatFinderCatalogSearch.scoreMaterial(item, state.query);
 }
 
 function localizedProfileText(en, zh) {
@@ -1904,6 +1945,13 @@ function localizedProfileText(en, zh) {
 }
 
 function materialAdvantageList(item) {
+  if (item.data_quality?.recommendation_eligible === false) {
+    return [
+      state.language === "zh"
+        ? "数据质量未通过，暂不提供该记录的性能优势结论。"
+        : "Data quality failed; no performance advantage is asserted for this record."
+    ];
+  }
   if (Array.isArray(item.advantages) && item.advantages.length) {
     return item.advantages;
   }
@@ -1930,6 +1978,16 @@ function materialAdvantageList(item) {
 }
 
 function materialDisadvantageList(item) {
+  if (item.data_quality?.recommendation_eligible === false) {
+    const issues = Array.isArray(item.data_quality?.issues) ? item.data_quality.issues : [];
+    return issues.length
+      ? issues.map((entry) => state.language === "zh" ? entry.zh : entry.en)
+      : [
+          state.language === "zh"
+            ? "该记录没有足够的可验证来源。"
+            : "This record lacks sufficient verifiable evidence."
+        ];
+  }
   if (Array.isArray(item.disadvantages) && item.disadvantages.length) {
     return item.disadvantages;
   }
@@ -1968,7 +2026,7 @@ function materialDisadvantageList(item) {
 
 function similarMaterials(item) {
   return materials
-    .filter((candidate) => candidate.id !== item.id)
+    .filter((candidate) => candidate.id !== item.id && candidate.data_quality?.recommendation_eligible !== false)
     .map((candidate) => {
       const sharedTags = candidate.tags.filter((tag) => item.tags.includes(tag)).length;
       const sameCategory = candidate.category === item.category ? 8 : 0;
@@ -2013,6 +2071,55 @@ function renderSources(item) {
         })
         .join("")}
     </div>
+  `;
+}
+
+function dataQualityMeta(item) {
+  const level = item.data_quality?.level || "low";
+  const labels = {
+    high: { zh: "供应商级证据", en: "Supplier-backed evidence", tone: "high" },
+    medium: { zh: "仅限初步筛选", en: "Screening evidence only", tone: "medium" },
+    synthetic: { zh: "程序生成记录", en: "Generated record", tone: "synthetic" },
+    rejected: { zh: "数据异常，已阻断", en: "Rejected data", tone: "rejected" },
+    low: { zh: "来源不足", en: "Insufficient evidence", tone: "low" }
+  };
+  const meta = labels[level] || labels.low;
+  return { ...meta, label: state.language === "zh" ? meta.zh : meta.en };
+}
+
+function renderDataQuality(item) {
+  const quality = item.data_quality || {};
+  const meta = dataQualityMeta(item);
+  const languageIsZh = state.language === "zh";
+  const issues = Array.isArray(quality.issues) ? quality.issues : [];
+  const issueItems = issues.length
+    ? issues.map((entry) => `<li>${escapeHtml(languageIsZh ? entry.zh : entry.en)}</li>`).join("")
+    : `<li>${languageIsZh ? "当前自动检查没有发现明显异常，但仍须核对具体牌号数据表。" : "No obvious automated check failure was found; the grade-specific datasheet still requires review."}</li>`;
+  const yes = languageIsZh ? "是" : "Yes";
+  const no = languageIsZh ? "否" : "No";
+
+  return `
+    <section class="profile-section data-quality-section is-${meta.tone}">
+      <div class="data-quality-heading">
+        <div>
+          <p class="result-label">${languageIsZh ? "证据与不确定性" : "Evidence and uncertainty"}</p>
+          <h3>${escapeHtml(meta.label)}</h3>
+        </div>
+        <span class="quality-badge is-${meta.tone}">${escapeHtml(meta.label)}</span>
+      </div>
+      <div class="quality-facts">
+        <span>${languageIsZh ? "外部来源" : "External sources"}: <strong>${escapeHtml(quality.external_source_count ?? 0)}</strong></span>
+        <span>${languageIsZh ? "制造商资料" : "Manufacturer source"}: <strong>${quality.manufacturer_backed ? yes : no}</strong></span>
+        <span>${languageIsZh ? "测试条件齐全" : "Test conditions attached"}: <strong>${quality.has_test_conditions ? yes : no}</strong></span>
+        <span>${languageIsZh ? "可用于投产放行" : "Factory-release ready"}: <strong>${quality.factory_ready ? yes : no}</strong></span>
+      </div>
+      <ul class="quality-issues">${issueItems}</ul>
+      <p class="profile-muted">${
+        languageIsZh
+          ? "连续使用温度、强度等数值只有在牌号、试样、测试标准、温度与介质条件一致时才可比较。"
+          : "Numeric values are comparable only when grade, specimen, standard, temperature, and media conditions match."
+      }</p>
+    </section>
   `;
 }
 
@@ -2085,8 +2192,8 @@ function keyPropertyRows(item) {
   const flameByData = tags.has("flame retardant") || hasAnyText(item, ["flame retardant", "fire", "self extinguishing"]);
 
   return [
-    [t("density"), formatValue(item.density, " g/cm3")],
-    [t("continuousUse"), formatValue(item.maxTemp, " deg C")],
+    [t("density"), formatQualityCheckedValue(item, "density", item.density, " g/cm3")],
+    [t("continuousUse"), formatQualityCheckedValue(item, "maxTemp", item.maxTemp, " deg C")],
     [
       t("propertyTransparency"),
       transparentByData
@@ -2119,13 +2226,32 @@ function keyPropertyRows(item) {
     ],
     [
       t("propertyFlameRetardant"),
-      item.flammability ? formatValue(item.flammability) : flameByData ? keyedText("Indicated by local tags or uses.", "\u672c\u5730\u6807\u7b7e\u6216\u7528\u9014\u663e\u793a\u652f\u6301\u3002") : formatValueFor(null)
+      item.flammability ? formatQualityCheckedValue(item, "flammability", item.flammability) : flameByData ? keyedText("Indicated by local tags or uses.", "\u672c\u5730\u6807\u7b7e\u6216\u7528\u9014\u663e\u793a\u652f\u6301\u3002") : formatValueFor(null)
     ],
     [
       t("chemicalResistance"),
       item.chemical_resistance ? formatValue(item.chemical_resistance) : tags.has("chemical resistant") ? keyedText("Indicated by local tags.", "\u672c\u5730\u6807\u7b7e\u663e\u793a\u652f\u6301\u3002") : formatValueFor(null)
     ]
   ];
+}
+
+function formatQualityCheckedValue(item, field, value, suffix = "") {
+  const issues = item.data_quality?.issues || [];
+  const issueCodes = new Set(issues.map((entry) => entry.code));
+  const fieldIssues = {
+    density: ["density_out_of_range"],
+    maxTemp: ["max_temperature_out_of_range", "temperature_inconsistency"],
+    tensile: ["tensile_out_of_range"],
+    tm: ["melting_temperature_out_of_range", "temperature_inconsistency"],
+    flammability: ["flammability_inconsistency"]
+  };
+  if (
+    (item.data_quality?.level === "rejected" && !issues.length) ||
+    (fieldIssues[field] || []).some((code) => issueCodes.has(code))
+  ) {
+    return state.language === "zh" ? "异常值已阻断" : "Invalid value blocked";
+  }
+  return formatValue(value, suffix);
 }
 
 function getRecommendationForMaterial(item) {
@@ -2148,6 +2274,11 @@ function getScoredRecommendationForMaterial(item) {
 }
 
 function buildMaterialSummary(item, language) {
+  if (item.data_quality?.level === "rejected") {
+    return language === "zh"
+      ? `${materialNameFor(item, language)} 的材料记录存在不合理或相互矛盾的数值，已停止作为选材、比较或投产依据。请先修复数据并核对具体牌号原始资料。`
+      : `${materialNameFor(item, language)} contains implausible or contradictory values and is blocked for selection, comparison, and factory release. Correct the data against an original grade-level source first.`;
+  }
   const name = materialNameFor(item, language);
   const category = materialCategoryFor(item, language);
   const propertyLabels = language === "zh"
@@ -2205,7 +2336,7 @@ function buildRecommendationSummary(item, candidate, language) {
 
 function rankSimilarMaterials(item, limit = 5) {
   return materials
-    .filter((candidate) => candidate.id !== item.id)
+    .filter((candidate) => candidate.id !== item.id && candidate.data_quality?.recommendation_eligible !== false)
     .map((candidate) => {
       const sharedTags = candidate.tags.filter((tag) => item.tags.includes(tag)).length;
       const sharedUses = candidate.uses.filter((use) => item.uses.includes(use)).length;
@@ -2289,11 +2420,113 @@ function renderCopilotRoute() {
 
 function detectCopilotIntent(prompt) {
   const text = String(prompt || "").toLowerCase();
+  if (
+    /(?:\btg\b.*\btm\b|\btm\b.*\btg\b|glass transition|melting (?:point|temperature)|玻璃化温度|熔点|熔融温度)/i.test(text)
+  ) return "thermal_concepts";
+  if (
+    /source|citation|reference|literature|datasheet|test method|test standard|specimen|原始文献|来源|引用|数据表|测试方法|试验方法|测试标准|试样条件/i.test(text)
+  ) return "evidence";
   if (/why|recommend|recommended|推荐|为什么|为何|原因/.test(text)) return "why";
   if (/advantage|strength|benefit|优点|优势|好处|强项/.test(text)) return "advantages";
   if (/limitation|weakness|risk|disadvantage|缺点|限制|风险|不足|弱点/.test(text)) return "limitations";
   if (/alternative|similar|replace|substitute|替代|相似|备选|换/.test(text)) return "alternatives";
   return "overview";
+}
+
+function copilotSourceList(item) {
+  const sources = Array.isArray(item.sources) ? item.sources : [];
+  if (!sources.length) {
+    return state.language === "zh" ? "- 未附来源记录" : "- No source record is attached";
+  }
+  return sources
+    .map((source, index) => {
+      const title = source.source_title || (state.language === "zh" ? "未命名来源" : "Untitled source");
+      const type = source.source_type || (state.language === "zh" ? "类型未知" : "unknown type");
+      const url = source.source_url || (state.language === "zh" ? "无链接" : "no link");
+      return `- ${index + 1}. ${title} [${type}]: ${url}`;
+    })
+    .join("\n");
+}
+
+function copilotQualityIssues(item) {
+  const issues = Array.isArray(item.data_quality?.issues) ? item.data_quality.issues : [];
+  return issues.map((entry) => state.language === "zh" ? entry.zh : entry.en).filter(Boolean);
+}
+
+function buildCopilotEvidenceAnswer(item) {
+  const languageIsZh = state.language === "zh";
+  const quality = item.data_quality || {};
+  const issues = copilotQualityIssues(item);
+  const testStatus = quality.has_test_conditions
+    ? (languageIsZh ? "记录附有测试标准与条件，但仍需打开原文核对。" : "A test standard and conditions are attached, but the original still requires review.")
+    : (languageIsZh ? "记录没有附带测试标准、试样状态或测试温度。" : "The record does not attach a test standard, specimen condition, or test temperature.");
+  return [
+    languageIsZh ? `证据审查：${materialName(item)} (${item.abbr})` : `Evidence review: ${materialName(item)} (${item.abbr})`,
+    `${languageIsZh ? "证据等级" : "Evidence level"}: ${dataQualityMeta(item).label}`,
+    `${languageIsZh ? "测试条件" : "Test conditions"}: ${testStatus}`,
+    issues.length
+      ? `${languageIsZh ? "已发现的问题" : "Detected issues"}:\n${copilotLineList(issues)}`
+      : null,
+    `${languageIsZh ? "当前记录附带的来源" : "Sources attached to this record"}:\n${copilotSourceList(item)}`,
+    languageIsZh
+      ? "这些链接只是当前记录声称使用的来源；除非原页面明确给出相同牌号、数值、测试方法和条件，否则不能视为该数值的原始文献。"
+      : "These are only the sources claimed by the record. They are not original evidence for a value unless the page states the same grade, value, method, and conditions."
+  ].filter(Boolean).join("\n\n");
+}
+
+function buildCopilotThermalConceptAnswer(item) {
+  const languageIsZh = state.language === "zh";
+  const issueText = copilotQualityIssues(item);
+  if (languageIsZh) {
+    return [
+      "Tg 与 Tm 不是同一个概念：",
+      "- Tg（玻璃化温度）：非晶区域由硬脆玻璃态逐渐转为高弹态的温区，通常不是一个绝对单点，并受测试方法、升温速率、含水率和配方影响。",
+      "- Tm（熔融温度）：结晶区域晶体结构熔化的温区；无定形聚合物通常没有真正的 Tm。",
+      "- 两者都不等于“连续使用温度”。连续使用温度还取决于载荷、时间、氧化、介质、阻燃体系和允许变形。",
+      "",
+      `${materialName(item)} 记录中的数值结论：不能接受为事实。当前记录已被数据质量层阻断。`,
+      issueText.length ? copilotLineList(issueText) : "- 缺乏可验证证据。",
+      "",
+      "1000°C 对 GF-ABS 这类热塑性聚合物是明显异常值；在原始牌号数据表、测试标准和试样条件缺失时，正确做法是撤销该数值，而不是为它编理由。",
+      "",
+      "常见验证方法：Tg/Tm 可用 DSC 测量，Tg 也常用 DMA；报告时必须同时给出标准、仪器方法、升温频率、试样状态和取值规则。",
+      "",
+      buildCopilotEvidenceAnswer(item)
+    ].join("\n");
+  }
+
+  return [
+    "Tg and Tm are different concepts:",
+    "- Tg is the transition range where amorphous regions change from glassy to rubber-like behavior. It depends on method, rate, moisture, and formulation.",
+    "- Tm is the melting range of crystalline regions. Fully amorphous polymers do not have a true Tm.",
+    "- Neither value is the continuous-use temperature, which also depends on load, time, oxidation, media, formulation, and allowable deformation.",
+    "",
+    `The numeric claim in ${materialName(item)} is not acceptable as fact. This record has been blocked by the data-quality layer.`,
+    issueText.length ? copilotLineList(issueText) : "- Verifiable evidence is missing.",
+    "",
+    "A 1000°C continuous-use claim is plainly implausible for a GF-ABS thermoplastic. Without a grade datasheet, method, and specimen conditions, the value must be withdrawn rather than rationalized.",
+    "",
+    "DSC is commonly used for Tg/Tm and DMA is also common for Tg. A usable report must identify the standard, instrument method, rate or frequency, specimen condition, and interpretation rule.",
+    "",
+    buildCopilotEvidenceAnswer(item)
+  ].join("\n");
+}
+
+function buildCopilotBlockedAnswer(item) {
+  const languageIsZh = state.language === "zh";
+  const issues = copilotQualityIssues(item);
+  return [
+    languageIsZh
+      ? `停止：${materialName(item)} (${item.abbr}) 的记录不可信，不能继续把其中数值当作事实解释。`
+      : `Stop: the ${materialName(item)} (${item.abbr}) record is not trustworthy enough to interpret as fact.`,
+    issues.length ? copilotLineList(issues) : `- ${languageIsZh ? "缺乏可验证来源。" : "Verifiable evidence is missing."}`,
+    "",
+    languageIsZh
+      ? "你仍可询问材料概念；涉及该记录的性能、优点或推荐时，必须先修复数据并核对具体牌号原始资料。"
+      : "You can still ask about material concepts. Record-specific properties, benefits, or recommendations require corrected data and an original grade-level source first.",
+    "",
+    buildCopilotEvidenceAnswer(item)
+  ].join("\n");
 }
 
 function copilotLineList(items) {
@@ -2324,6 +2557,18 @@ function buildCopilotAnswer(prompt) {
   const intent = detectCopilotIntent(prompt);
   const recommendationNote = candidate ? "" : `\n\n${t("copilotNoRecommendation")}`;
   const sourceNote = `\n\n${t("copilotSourceNote")}`;
+
+  if (intent === "thermal_concepts") {
+    return buildCopilotThermalConceptAnswer(item);
+  }
+
+  if (intent === "evidence") {
+    return buildCopilotEvidenceAnswer(item);
+  }
+
+  if (item.data_quality?.recommendation_eligible === false) {
+    return buildCopilotBlockedAnswer(item);
+  }
 
   if (intent === "why") {
     const reasons = (candidate?.reasons || []).map(localizeRecommendationReason);
@@ -2451,6 +2696,7 @@ function renderRecommendationDetail(item) {
     <div class="profile-hero recommendation-detail-hero">
       <div>
         <span class="category">${escapeHtml(materialCategory(item))}</span>
+        <span class="quality-badge is-${dataQualityMeta(item).tone}">${escapeHtml(dataQualityMeta(item).label)}</span>
         <p class="result-label">${hasRecommendationContext ? t("recommendationExplanation") : t("materialProfile")}</p>
         <h2>${escapeHtml(materialName(item))} (${escapeHtml(item.abbr)})</h2>
         <p class="summary">${escapeHtml(materialSummary(item))}</p>
@@ -2479,6 +2725,8 @@ function renderRecommendationDetail(item) {
 
     ${contextSections}
 
+    ${renderDataQuality(item)}
+
     <section class="profile-section">
       <h3>${t("typicalUses")}</h3>
       ${renderProfileList(materialUses(item))}
@@ -2492,6 +2740,11 @@ function renderRecommendationDetail(item) {
     <section class="profile-section">
       <h3>${hasRecommendationContext ? t("alternativeMaterials") : t("similarMaterials")}</h3>
       ${renderRankedAlternatives(item)}
+    </section>
+
+    <section class="profile-section">
+      <h3>${t("materialSources")}</h3>
+      ${renderSources(item)}
     </section>
   `;
 
@@ -2539,7 +2792,7 @@ function matchesCatalogFilters(item, options = {}) {
   const includeDomain = options.includeDomain !== false;
   const propertyPredicate = propertyPredicates[state.property];
   const domain = getApplicationDomain(state.domain);
-  return (!state.query || getSearchText(item).includes(state.query))
+  return window.MatFinderCatalogSearch.matchesMaterial(item, state.query)
     && (state.category === "all" || item.category === state.category)
     && (!includeProperty || state.property === "all" || (propertyPredicate && propertyPredicate(item)))
     && (!includeDomain || state.domain === "all" || (domain && matchesApplicationDomain(item, domain)))
@@ -2593,8 +2846,12 @@ function renderCatalogStats() {
 function render() {
   const needsMaterialGrid = state.route === "materials";
   const filtered = needsMaterialGrid ? getFilteredMaterials() : state.filteredMaterialsCache.items;
-  elements.tempOutput.textContent = `>= ${state.minTemp} deg C`;
-  elements.strengthOutput.textContent = `>= ${state.minStrength} MPa`;
+  elements.tempOutput.textContent = state.minTemp === DEFAULT_MIN_TEMP
+    ? (state.language === "zh" ? "不限" : "Any")
+    : `>= ${state.minTemp} deg C`;
+  elements.strengthOutput.textContent = state.minStrength === DEFAULT_MIN_STRENGTH
+    ? (state.language === "zh" ? "不限" : "Any")
+    : `>= ${state.minStrength} MPa`;
   elements.selectedCount.textContent = state.selected.size;
   renderCatalogStats();
   renderPropertyFacets();
@@ -2624,9 +2881,9 @@ function render() {
   renderRoute();
 }
 
-function renderRecommendations(result = null) {
+function renderRecommendations(result = state.recommendationResult) {
   if (!state.recommendations.length) {
-    renderRecommendationEmptyState();
+    renderRecommendationEmptyState(result);
     return;
   }
 
@@ -2635,6 +2892,7 @@ function renderRecommendations(result = null) {
     ? `${t("matchedRequirements")}: ${criteria.map(localizeTerm).join(state.language === "zh" ? "、" : ", ")}`
     : t("localDatasetMatch");
   elements.recommendationResults.innerHTML = `
+    ${renderRecommendationSafetyBanner(result)}
     <div class="recommendation-results-header">
       <div>
         <p class="result-label">${t("recommendedMaterials")}</p>
@@ -2680,7 +2938,97 @@ function getOnboardingUseCases() {
   ];
 }
 
-function renderRecommendationEmptyState() {
+function renderBomClarificationGuide(languageIsZh) {
+  const fields = languageIsZh
+    ? [
+        ["1. 产品结构", "列出杯体、内胆、杯盖、密封圈、阀件、涂层、包装等每个独立部件及功能。"],
+        ["2. 尺寸与数量", "给出每件数量、尺寸/体积、目标净重；仅有“生产 10,000 个”无法计算材料用量。"],
+        ["3. 工艺与损耗", "指定注塑、吹塑、冲压、拉深、焊接或涂装工艺，并给出水口、边料、良率和启动损耗。"],
+        ["4. 使用工况", "给出冷热温度、接触时间、压力、跌落、洗碗机、化学清洗剂和寿命要求。"],
+        ["5. 法规与测试", "明确销售国家/地区及食品接触、迁移、阻燃等标准；必须落实到具体牌号和测试报告。"],
+        ["6. 采购边界", "给出采购地区、币种、交期、MOQ、供应商白名单和允许的替代牌号。"]
+      ]
+    : [
+        ["1. Product architecture", "List every independent component and function, such as body, liner, lid, seal, valve, coating, and packaging."],
+        ["2. Dimensions and counts", "Provide quantity per unit, dimensions or volume, and target net mass. A 10,000-unit total alone cannot determine material demand."],
+        ["3. Process and loss", "Specify molding, blowing, stamping, drawing, welding, or coating, plus runner loss, trim, yield, and start-up scrap."],
+        ["4. Service conditions", "State hot/cold temperature, contact time, pressure, drop, dishwasher, cleaning chemistry, and design life."],
+        ["5. Regulation and tests", "State the sales region and applicable food-contact, migration, flame, or other standards, tied to a specific grade and report."],
+        ["6. Sourcing boundary", "State purchasing region, currency, lead time, MOQ, approved suppliers, and permitted substitute grades."]
+      ];
+  const columns = languageIsZh
+    ? ["部件", "功能", "具体牌号", "工艺", "单件数量", "净重", "损耗率", "采购量", "来源/验证"]
+    : ["Component", "Function", "Exact grade", "Process", "Qty/unit", "Net mass", "Scrap %", "Buy quantity", "Source/verification"];
+
+  return `
+    <div class="bom-guidance">
+      <div>
+        <h3>${languageIsZh ? "先补齐以下输入，再生成 BOM" : "Complete these inputs before generating a BOM"}</h3>
+        <div class="bom-field-grid">
+          ${fields.map(([title, body]) => `
+            <article>
+              <strong>${escapeHtml(title)}</strong>
+              <p>${escapeHtml(body)}</p>
+            </article>
+          `).join("")}
+        </div>
+      </div>
+      <div class="bom-template">
+        <h3>${languageIsZh ? "最终 BOM 至少应包含这些列" : "The final BOM must contain at least these columns"}</h3>
+        <div class="bom-column-list">${columns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>
+        <p>${
+          languageIsZh
+            ? "采购量计算应为：单件净用量 × 产量 ÷ 良率，再加启动/换线安全量；没有几何尺寸和工艺损耗时，不输出假数字。"
+            : "Purchase quantity should use net use per unit × production quantity ÷ yield, plus start-up or changeover allowance. No geometry and process loss means no invented quantity."
+        }</p>
+      </div>
+    </div>
+  `;
+}
+
+function renderRecommendationEmptyState(result = null) {
+  if (result?.query && result.status && result.status !== "empty") {
+    const unsupported = result.parsedRequirement?.unsupportedConstraints || [];
+    const hard = result.parsedRequirement?.hardConstraints || {};
+    const detected = result.criteria || [];
+    const languageIsZh = state.language === "zh";
+    const title = result.status === "no_safe_match"
+      ? (languageIsZh ? "\u6ca1\u6709\u901a\u8fc7\u786c\u6027\u6761\u4ef6\u7684\u53ef\u4fe1\u5019\u9009" : "No trustworthy candidate passed the hard constraints")
+      : (languageIsZh ? "\u5f53\u524d\u9700\u6c42\u65e0\u6cd5\u5b89\u5168\u81ea\u52a8\u63a8\u8350" : "This request cannot be safely auto-recommended");
+    const body = result.status === "needs_clarification"
+      ? (languageIsZh
+          ? "\u8bf7\u5148\u8865\u5145\u90e8\u4ef6\u3001\u5de5\u51b5\u3001\u6e29\u5ea6\u3001\u8f7d\u8377\u548c\u4ecb\u8d28\u7b49\u53ef\u9a8c\u8bc1\u7684\u9009\u6750\u6761\u4ef6\u3002\u7cfb\u7edf\u4e0d\u518d\u4f7f\u7528\u6587\u672c\u76f8\u4f3c\u5ea6\u515c\u5e95\u3002"
+          : "Add verifiable part, environment, temperature, load, and media requirements first. Text-similarity fallback has been disabled.")
+      : (languageIsZh
+          ? "\u53ef\u4fe1\u6570\u636e\u4e2d\u6ca1\u6709\u540c\u65f6\u6ee1\u8db3\u5df2\u8bc6\u522b\u786c\u6761\u4ef6\u7684\u8bb0\u5f55\u3002\u8bf7\u653e\u5bbd\u6761\u4ef6\u6216\u8865\u5145\u5b98\u65b9\u4f9b\u5e94\u5546\u6570\u636e\u3002"
+          : "No trustworthy record satisfies every detected hard constraint. Relax the requirement or add official supplier data.");
+    const hardItems = [
+      hard.minimumTemperatureC !== null && hard.minimumTemperatureC !== undefined
+        ? (languageIsZh ? `\u8fde\u7eed\u4f7f\u7528\u6e29\u5ea6 \u2265 ${hard.minimumTemperatureC}\u00b0C` : `Continuous use temperature \u2265 ${hard.minimumTemperatureC}\u00b0C`)
+        : null,
+      hard.minimumTensileMpa !== null && hard.minimumTensileMpa !== undefined
+        ? (languageIsZh ? `\u62c9\u4f38\u5f3a\u5ea6 \u2265 ${hard.minimumTensileMpa} MPa` : `Tensile strength \u2265 ${hard.minimumTensileMpa} MPa`)
+        : null
+    ].filter(Boolean);
+    const unsupportedItems = unsupported.map((entry) => languageIsZh ? entry.zh : entry.label);
+    const hasBomRequest = unsupported.some((entry) => entry.code === "bom");
+
+    elements.recommendationResults.innerHTML = `
+      <section class="recommendation-empty recommendation-blocked">
+        <div>
+          <p class="result-label">${languageIsZh ? "\u5b89\u5168\u62e6\u622a" : "Safety stop"}</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(body)}</p>
+          ${detected.length ? `<p><strong>${t("matchedRequirements")}:</strong> ${escapeHtml(detected.map(localizeTerm).join(languageIsZh ? "\u3001" : ", "))}</p>` : ""}
+          ${hardItems.length ? `<p><strong>${languageIsZh ? "\u786c\u6027\u6761\u4ef6" : "Hard constraints"}:</strong> ${escapeHtml(hardItems.join(languageIsZh ? "\u3001" : ", "))}</p>` : ""}
+          ${unsupportedItems.length ? `<p><strong>${languageIsZh ? "\u4ecd\u9700\u5916\u90e8\u9a8c\u8bc1" : "External verification still required"}:</strong> ${escapeHtml(unsupportedItems.join(languageIsZh ? "\u3001" : ", "))}</p>` : ""}
+        </div>
+        ${hasBomRequest ? renderBomClarificationGuide(languageIsZh) : ""}
+      </section>
+    `;
+    return;
+  }
+
   const useCases = getOnboardingUseCases();
   elements.recommendationResults.innerHTML = `
     <section class="recommendation-empty onboarding-empty">
@@ -2714,13 +3062,30 @@ function renderRecommendationEmptyState() {
   });
 }
 
+function renderRecommendationSafetyBanner(result) {
+  if (!result || result.status !== "needs_verification") return "";
+  const unsupported = result.parsedRequirement?.unsupportedConstraints || [];
+  const languageIsZh = state.language === "zh";
+  const items = unsupported.map((entry) => languageIsZh ? entry.zh : entry.label);
+  return `
+    <section class="recommendation-safety-banner" role="status">
+      <strong>${languageIsZh ? "\u4ec5\u4e3a\u65e9\u671f\u7b5b\u9009\uff0c\u4e0d\u5f97\u7528\u4e8e\u91c7\u8d2d\u6216\u5de5\u7a0b\u653e\u884c" : "Early screening only — not valid for procurement or engineering release"}</strong>
+      <p>${languageIsZh ? "\u4ee5\u4e0b\u6761\u4ef6\u672a\u88ab\u672c\u5730\u6570\u636e\u8bc1\u660e" : "The local data does not prove"}: ${escapeHtml(items.join(languageIsZh ? "\u3001" : ", "))}</p>
+    </section>
+  `;
+}
+
 function renderRecommendationCard(candidate, index) {
   const item = candidate.material;
+  const quality = dataQualityMeta(item);
   return `
     <article class="recommendation-card">
       <span class="rank">${index + 1}</span>
       <div>
-        <span class="category">${materialCategory(item)}</span>
+        <div class="recommendation-card-labels">
+          <span class="category">${materialCategory(item)}</span>
+          <span class="quality-badge is-${quality.tone}">${escapeHtml(quality.label)}</span>
+        </div>
         <h3>${materialName(item)} (${item.abbr})</h3>
         <p class="summary">${materialSummary(item)}</p>
         <div class="recommendation-reasons">
@@ -2895,8 +3260,8 @@ function renderChips() {
   if (state.category !== "all") chips.push(`${t("category")}: ${localizeTerm(state.category)}`);
   if (state.property !== "all") chips.push(`${t("focus")}: ${performanceLabel(state.property)}`);
   if (state.domain !== "all") chips.push(`${t("applicationDomain")}: ${domainLabel(state.domain)}`);
-  if (state.minTemp > 60) chips.push(`${t("temp")} >= ${state.minTemp} deg C`);
-  if (state.minStrength > 5) chips.push(`${t("strength")} >= ${state.minStrength} MPa`);
+  if (state.minTemp > DEFAULT_MIN_TEMP) chips.push(`${t("temp")} >= ${state.minTemp} deg C`);
+  if (state.minStrength > DEFAULT_MIN_STRENGTH) chips.push(`${t("strength")} >= ${state.minStrength} MPa`);
   if (state.recyclableOnly) chips.push(t("recyclable"));
 
   elements.activeFilters.replaceChildren(
@@ -2929,10 +3294,10 @@ function renderCards(items) {
         ${recommendation ? `<span class="chip">${t("aiScore")} ${recommendation.score}</span>` : ""}
         <p class="summary">${materialSummary(item)}</p>
         <div class="metrics">
-          <div class="metric"><span>${t("continuousUse")}</span><strong>${formatValue(item.maxTemp, " deg C")}</strong></div>
-          <div class="metric"><span>${t("tensileStrength")}</span><strong>${formatValue(item.tensile, " MPa")}</strong></div>
-          <div class="metric"><span>${t("density")}</span><strong>${formatValue(item.density, " g/cm3")}</strong></div>
-          <div class="metric"><span>Tg / Tm</span><strong>${formatValue(item.tg, " deg C")} / ${formatValue(item.tm, " deg C")}</strong></div>
+          <div class="metric"><span>${t("continuousUse")}</span><strong>${formatQualityCheckedValue(item, "maxTemp", item.maxTemp, " deg C")}</strong></div>
+          <div class="metric"><span>${t("tensileStrength")}</span><strong>${formatQualityCheckedValue(item, "tensile", item.tensile, " MPa")}</strong></div>
+          <div class="metric"><span>${t("density")}</span><strong>${formatQualityCheckedValue(item, "density", item.density, " g/cm3")}</strong></div>
+          <div class="metric"><span>Tg / Tm</span><strong>${formatValue(item.tg, " deg C")} / ${formatQualityCheckedValue(item, "tm", item.tm, " deg C")}</strong></div>
         </div>
         <div class="tag-list">${materialTags(item).map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
       </div>
@@ -3270,9 +3635,34 @@ function legacyShowDetail(id) {
   elements.detailDialog.showModal();
 }
 
-function showDetail(id) {
+async function showDetail(id) {
   const item = materials.find((material) => material.id === id);
   if (!item) return;
+
+  elements.detailContent.innerHTML = `
+    <div class="profile-hero">
+      <div>
+        <p class="result-label">${state.language === "zh" ? "正在加载完整证据" : "Loading complete evidence"}</p>
+        <h2>${escapeHtml(materialName(item))} (${escapeHtml(item.abbr)})</h2>
+        <p class="summary">${state.language === "zh" ? "正在读取来源、测试条件与质量问题……" : "Retrieving sources, test conditions, and quality issues\u2026"}</p>
+      </div>
+    </div>
+  `;
+  if (!elements.detailDialog.open) {
+    elements.detailDialog.showModal();
+  }
+
+  try {
+    await loadMaterialDetail(item);
+  } catch (error) {
+    elements.detailContent.innerHTML = `
+      <section class="profile-section data-quality-section is-rejected">
+        <h2>${state.language === "zh" ? "完整材料记录加载失败" : "Failed to load the complete material record"}</h2>
+        <p>${escapeHtml(error.message)}</p>
+      </section>
+    `;
+    return;
+  }
 
   selectMaterialForAnalysis(item);
 
@@ -3364,6 +3754,11 @@ async function selectMaterialForAnalysis(item) {
     updateCopilotContext();
   }
 
+  if (item.data_quality?.recommendation_eligible === false) {
+    renderAnalysisQualityBlocked(item);
+    return;
+  }
+
   const cacheKey = getLanguageCacheKey(item.id);
   if (state.analysisCache.has(cacheKey)) {
     renderAnalysis(item, state.analysisCache.get(cacheKey), t("cachedAnalysis"));
@@ -3393,6 +3788,27 @@ async function selectMaterialForAnalysis(item) {
       renderAnalysisError(item, error);
     }
   }
+}
+
+function renderAnalysisQualityBlocked(item) {
+  const languageIsZh = state.language === "zh";
+  const issues = Array.isArray(item.data_quality?.issues) ? item.data_quality.issues : [];
+  elements.analysisStatus.textContent = languageIsZh ? "数据已阻断" : "Data blocked";
+  elements.analysisContent.innerHTML = `
+    <div class="analysis-block analysis-quality-blocked">
+      <h3>${languageIsZh ? "不会把不可信记录发送给 AI 继续解释" : "Untrusted record is not sent to AI for further interpretation"}</h3>
+      <p>${
+        languageIsZh
+          ? "先修复来源或异常数值，再进行材料分析；否则 AI 只会把错误包装得更流畅。"
+          : "Correct the source or implausible values before analysis; otherwise AI would only make the error sound more convincing."
+      }</p>
+      ${renderProfileList(
+        issues.length
+          ? issues.map((entry) => languageIsZh ? entry.zh : entry.en)
+          : [languageIsZh ? "该记录没有足够的可验证来源。" : "This record lacks sufficient verifiable evidence."]
+      )}
+    </div>
+  `;
 }
 
 function renderAnalysisLoading(item) {

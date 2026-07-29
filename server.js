@@ -1,7 +1,9 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const zlib = require("node:zlib");
 const { readMaterials } = require("./scripts/read-materials-sqlite");
+const { annotateMaterialQuality } = require("./material-quality");
 
 const rootDir = __dirname;
 loadEnvFile(path.join(rootDir, ".env"));
@@ -14,6 +16,7 @@ const databasePath = path.resolve(rootDir, process.env.MATFINDER_DB_PATH || "mat
 const allowedOrigins = parseList(process.env.MATFINDER_ALLOWED_ORIGINS);
 
 const materials = loadMaterials();
+const compactMaterials = materials.map(toCompactMaterial);
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -25,7 +28,9 @@ const mimeTypes = {
 
 const server = http.createServer(async (request, response) => {
   try {
-    const requestPath = new URL(request.url, `http://localhost:${port}`).pathname;
+    const requestUrl = new URL(request.url, `http://localhost:${port}`);
+    const requestPath = requestUrl.pathname;
+    response.acceptsGzip = /\bgzip\b/i.test(String(request.headers["accept-encoding"] || ""));
     attachCorsHeaders(request, response, requestPath);
 
     if (request.method === "OPTIONS" && requestPath.startsWith("/api/")) {
@@ -46,7 +51,35 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/materials") {
-      sendJson(response, 200, materials);
+      const view = requestUrl.searchParams.get("view") === "full" ? "full" : "compact";
+      const source = view === "full" ? materials : compactMaterials;
+      const limitValue = requestUrl.searchParams.get("limit");
+      if (limitValue !== null) {
+        const limit = Math.min(200, Math.max(1, Number(limitValue) || 48));
+        const offset = Math.min(source.length, Math.max(0, Number(requestUrl.searchParams.get("offset")) || 0));
+        response.setHeader("X-Total-Count", String(source.length));
+        sendJson(response, 200, {
+          items: source.slice(offset, offset + limit),
+          total: source.length,
+          limit,
+          offset,
+          hasMore: offset + limit < source.length
+        });
+      } else {
+        response.setHeader("X-Total-Count", String(source.length));
+        sendJson(response, 200, source);
+      }
+      return;
+    }
+
+    if (request.method === "GET" && requestPath.startsWith("/api/materials/")) {
+      const materialId = decodeURIComponent(requestPath.slice("/api/materials/".length));
+      const material = materials.find((item) => item.id === materialId);
+      if (!material) {
+        sendJson(response, 404, { error: "Material not found" });
+        return;
+      }
+      sendJson(response, 200, material);
       return;
     }
 
@@ -91,15 +124,61 @@ function loadMaterials() {
     throw new Error(`SQLite database was not found at ${databasePath}. Ensure matfinder.db is included in the deployment artifact.`);
   }
 
-  return readMaterials(databasePath);
+  return readMaterials(databasePath).map(annotateMaterialQuality);
+}
+
+function toCompactMaterial(material) {
+  const fields = [
+    "id",
+    "name",
+    "name_zh",
+    "abbr",
+    "category",
+    "category_zh",
+    "subcategory",
+    "family",
+    "grade_name",
+    "supplier_or_brand",
+    "manufacturer",
+    "trade_name",
+    "density",
+    "tensile",
+    "flexural_strength",
+    "impact_strength",
+    "hardness",
+    "tg",
+    "tm",
+    "maxTemp",
+    "elongation",
+    "thermal_conductivity",
+    "dielectric",
+    "flame_rating",
+    "electrical_insulation",
+    "chemical_resistance",
+    "transparency",
+    "flexibility",
+    "waterproof_sealing",
+    "water_absorption",
+    "flammability",
+    "recyclability",
+    "recyclable",
+    "cost_level",
+    "processing_methods",
+    "tags",
+    "uses",
+    "summary"
+  ];
+  const compact = {};
+  fields.forEach((field) => {
+    if (material[field] !== undefined) compact[field] = material[field];
+  });
+  compact.data_quality = Object.fromEntries(
+    Object.entries(material.data_quality || {}).filter(([key]) => key !== "issues")
+  );
+  return compact;
 }
 
 async function handleMaterialAnalysis(request, response) {
-  if (!process.env.OPENAI_API_KEY) {
-    sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
-    return;
-  }
-
   const body = await readJsonBody(request);
   const language = normalizeLanguage(body.language);
   const material = materials.find((item) => item.id === body.materialId);
@@ -108,17 +187,23 @@ async function handleMaterialAnalysis(request, response) {
     sendJson(response, 404, { error: "Material not found" });
     return;
   }
+  if (material.data_quality?.recommendation_eligible === false) {
+    sendJson(response, 422, {
+      error: "Material data failed quality checks",
+      issues: material.data_quality.issues
+    });
+    return;
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
+    return;
+  }
 
   const analysis = await generateMaterialAnalysis(material, language);
   sendJson(response, 200, { materialId: material.id, materialName: material.name, analysis });
 }
 
 async function handleMaterialComparison(request, response) {
-  if (!process.env.OPENAI_API_KEY) {
-    sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
-    return;
-  }
-
   const body = await readJsonBody(request);
   const language = normalizeLanguage(body.language);
   const requestedIds = Array.isArray(body.materialIds) ? body.materialIds.slice(0, 2) : [];
@@ -131,6 +216,19 @@ async function handleMaterialComparison(request, response) {
 
   if (pair[0].id === pair[1].id) {
     sendJson(response, 400, { error: "Choose two different materials" });
+    return;
+  }
+  if (pair.some((item) => item.data_quality?.recommendation_eligible === false)) {
+    sendJson(response, 422, {
+      error: "One or more material records failed quality checks",
+      materialIds: pair
+        .filter((item) => item.data_quality?.recommendation_eligible === false)
+        .map((item) => item.id)
+    });
+    return;
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
     return;
   }
 
@@ -327,7 +425,16 @@ function readJsonBody(request) {
 }
 
 function sendJson(response, status, payload) {
+  const json = JSON.stringify(payload);
+  const body = response.acceptsGzip && Buffer.byteLength(json) > 1024
+    ? zlib.gzipSync(json, { level: zlib.constants.Z_BEST_SPEED })
+    : Buffer.from(json);
   response.setHeader("Content-Type", "application/json; charset=utf-8");
+  response.setHeader("Vary", "Accept-Encoding");
+  if (response.acceptsGzip && Buffer.byteLength(json) > 1024) {
+    response.setHeader("Content-Encoding", "gzip");
+  }
+  response.setHeader("Content-Length", String(body.length));
   response.writeHead(status);
-  response.end(JSON.stringify(payload));
+  response.end(body);
 }

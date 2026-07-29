@@ -184,16 +184,16 @@
           <fieldset class="range-group">
             <legend data-i18n="continuousTemp">连续使用温度</legend>
             <div class="range-row">
-              <input id="tempRange" type="range" min="60" max="260" step="10" value="60" />
-              <output id="tempOutput" for="tempRange">>= 60 deg C</output>
+              <input id="tempRange" type="range" min="-200" max="260" step="10" value="-200" />
+              <output id="tempOutput" for="tempRange">不限</output>
             </div>
           </fieldset>
 
           <fieldset class="range-group">
             <legend data-i18n="minimumStrength">最低拉伸强度</legend>
             <div class="range-row">
-              <input id="strengthRange" type="range" min="5" max="180" step="5" value="5" />
-              <output id="strengthOutput" for="strengthRange">>= 5 MPa</output>
+              <input id="strengthRange" type="range" min="0" max="180" step="5" value="0" />
+              <output id="strengthOutput" for="strengthRange">不限</output>
             </div>
           </fieldset>
 
@@ -345,6 +345,7 @@
     </dialog>
 
     <script src="config.js"></script>
+    <script src="catalog-search.js"></script>
     <script src="recommendation-engine.js"></script>
     <script src="app.js"></script>
   </body>

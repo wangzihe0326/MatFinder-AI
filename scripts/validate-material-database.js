@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { readMaterials } = require("./read-materials-sqlite");
+const { assessMaterialQuality } = require("../material-quality");
 
 const rootDir = path.join(__dirname, "..");
 const databasePath = path.resolve(rootDir, process.argv[2] || "matfinder.db");
@@ -61,6 +62,7 @@ function main() {
     duplicate_detection: duplicateReport(materials),
     missing_field_report: missingFieldReport(materials),
     category_normalization: categoryReport(materials),
+    material_quality: materialQualityReport(materials),
     encoding_check: encodingReport()
   };
 
@@ -70,12 +72,48 @@ function main() {
     report.duplicate_detection.duplicates_by_commercial_identity.length,
     report.missing_field_report.materials_with_absent_fields,
     report.category_normalization.non_normalized_records,
+    report.material_quality.rejected_records,
+    report.encoding_check.files.filter((file) => !file.ok).length,
     materials.length < minimumMaterialCount
   ].some(Boolean);
 
   report.ok = !hardFailures;
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   process.exit(report.ok ? 0 : 1);
+}
+
+function materialQualityReport(materials) {
+  const assessed = materials.map((material) => ({
+    id: material.id,
+    name: material.name,
+    quality: assessMaterialQuality(material)
+  }));
+  const byLevel = assessed.reduce((counts, item) => {
+    counts[item.quality.level] = (counts[item.quality.level] || 0) + 1;
+    return counts;
+  }, {});
+  const rejected = assessed.filter((item) => item.quality.level === "rejected");
+  const issueCounts = {};
+  assessed.forEach((item) => {
+    item.quality.issues.forEach((issue) => {
+      issueCounts[issue.code] = (issueCounts[issue.code] || 0) + 1;
+    });
+  });
+
+  return {
+    by_level: byLevel,
+    recommendation_eligible_records: assessed.filter((item) => item.quality.recommendation_eligible).length,
+    factory_ready_records: assessed.filter((item) => item.quality.factory_ready).length,
+    records_with_test_conditions: assessed.filter((item) => item.quality.has_test_conditions).length,
+    rejected_records: rejected.length,
+    issues_by_code: issueCounts,
+    rejected_sample_records: rejected.slice(0, 25).map((item) => ({
+      id: item.id,
+      name: item.name,
+      issues: item.quality.issues.map((issue) => issue.code)
+    })),
+    note: "Rejected records fail validation and are excluded from recommendation. Synthetic records remain browseable but are not engineering evidence."
+  };
 }
 
 function countSummary(materials) {
@@ -180,7 +218,7 @@ function encodingReport() {
         replacement_characters: replacementCharacters,
         control_characters: controlCharacters,
         possible_mojibake_markers: possibleMojibake,
-        ok: replacementCharacters === 0 && controlCharacters === 0
+        ok: replacementCharacters === 0 && controlCharacters === 0 && possibleMojibake === 0
       };
     })
   };
