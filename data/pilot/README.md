@@ -1,12 +1,12 @@
 # Real-material pilot
 
-This directory is for manual entry of the first 10–20 reviewed commercial
+This directory is for manual entry of the first 10 to 15 reviewed commercial
 grades. It contains no real manufacturer, grade, property, certification,
 standard, or source claim yet.
 
 ## Pilot allocation
 
-Select 2–4 independently verified grades from each family:
+Use the 12 neutral planning slots in `pilot-plan.json` across:
 
 - ABS
 - PC
@@ -14,12 +14,15 @@ Select 2–4 independently verified grades from each family:
 - POM
 - PP
 
-The total pilot must stay between 10 and 20 grades. Selection and transcription
-are manual. Do not generate grade names, infer missing values, or scrape data in
-bulk.
+Slot IDs are workflow identifiers, not commercial grades. Selection and
+transcription are manual. Do not generate grade names, infer missing values, or
+scrape data in bulk.
 
 ## Files
 
+- `pilot-plan.json` tracks the family allocation and one of these states:
+  `planned`, `entered`, `validation_failed`, `awaiting_review`, `Medium`,
+  `High`, or `imported`.
 - `pilot-materials.PLACEHOLDER.json` demonstrates the nested structure. It is
   explicitly marked as non-importable and the production importer will reject
   it.
@@ -41,17 +44,24 @@ bulk.
    npm.cmd run validate:real-material-import -- data/pilot/pilot-materials.reviewed.json
    ```
 
-6. Run the production importer without writing:
+6. Review the current workflow counts:
+
+   ```powershell
+   npm.cmd run pilot:status
+   ```
+
+7. Run the production importer without writing:
 
    ```powershell
    npm.cmd run import:real-materials -- --file data/pilot/pilot-materials.reviewed.json --dry-run --operator "reviewer name" --source "manual pilot"
    ```
 
-7. Have a second person review the dry-run report and cited documents.
-8. Import only after the dry-run has zero rejected records:
+8. Have a second person review the dry-run report and cited documents.
+9. Import only after the dry-run has zero rejected records:
 
    ```powershell
    npm.cmd run import:real-materials -- --file data/pilot/pilot-materials.reviewed.json --operator "reviewer name" --source "manual pilot"
    ```
 
-Keep the returned `importBatchId`. It is required for a scoped rollback.
+Keep the returned `importBatchId`. It is required for a scoped rollback. Update
+the relevant planning slot only after each workflow transition is confirmed.

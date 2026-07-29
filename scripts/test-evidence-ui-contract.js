@@ -40,8 +40,9 @@ assert.ok(
   "Server-side AI analysis must reject non-eligible evidence."
 );
 assert.ok(
-  serverSource.includes('pair.some((item) => item.data_quality?.level === "quarantined")'),
-  "Server-side comparison must reject quarantined materials."
+  serverSource.includes('item.data_quality?.level === "quarantined"') &&
+    serverSource.includes("!isDefaultVisibleCommercialGrade(item)"),
+  "Server-side comparison must reject quarantined and non-public legacy materials."
 );
 
 process.stdout.write("Evidence UI contract tests passed.\n");

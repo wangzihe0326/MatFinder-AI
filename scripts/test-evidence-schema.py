@@ -6,6 +6,9 @@ database_path = Path(__file__).resolve().parents[1] / "matfinder.db"
 connection = sqlite3.connect(database_path)
 
 expected_columns = {
+    "materials": {
+        "record_type", "record_origin", "scope_status", "catalog_visibility",
+    },
     "material_evidence": {
         "manufacturer", "brand", "commercial_grade", "material_family",
         "source_type", "source_title", "source_url", "source_date",

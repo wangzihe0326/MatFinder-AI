@@ -88,7 +88,15 @@ def main():
               description_zh TEXT NOT NULL,
               translation_quality TEXT NOT NULL,
               translation_status TEXT NOT NULL,
-              notes TEXT NOT NULL
+              notes TEXT NOT NULL,
+              record_type TEXT NOT NULL DEFAULT 'legacy'
+                CHECK (record_type IN ('legacy', 'commercial_grade')),
+              record_origin TEXT NOT NULL DEFAULT 'legacy'
+                CHECK (record_origin IN ('legacy', 'generated', 'imported')),
+              scope_status TEXT NOT NULL DEFAULT 'in_scope'
+                CHECK (scope_status IN ('in_scope', 'out_of_scope')),
+              catalog_visibility TEXT NOT NULL DEFAULT 'admin_only'
+                CHECK (catalog_visibility IN ('public', 'review', 'admin_only'))
             );
 
             CREATE TABLE material_tags (

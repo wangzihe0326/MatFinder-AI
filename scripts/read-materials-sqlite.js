@@ -85,7 +85,12 @@ function readMaterials(databasePath) {
       description_zh: row.description_zh ?? row.summary,
       translation_quality: row.translation_quality ?? row.translation_status ?? "partial",
       translation_status: row.translation_status ?? "partial",
-      notes: row.notes
+      notes: row.notes,
+      record_type: row.record_type ?? "legacy",
+      record_origin: row.record_origin ?? "legacy",
+      scope_status: row.scope_status ?? "in_scope",
+      catalog_visibility: row.catalog_visibility ?? "admin_only",
+      entityType: row.record_type === "commercial_grade" ? "commercial_grade" : "legacy_record"
     };
     material.state = material.state || inferState(material);
     return material;

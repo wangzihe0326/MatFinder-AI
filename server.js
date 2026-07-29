@@ -4,6 +4,14 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 const { readMaterials } = require("./scripts/read-materials-sqlite");
 const { annotateMaterialQuality } = require("./material-quality");
+const { matchesMaterial, scoreMaterial } = require("./catalog-search");
+const { families: polymerFamilies } = require("./polymer-families");
+const {
+  buildAuditStats,
+  buildTrustedStats,
+  isDefaultVisibleCommercialGrade
+} = require("./catalog-layer");
+const { readPilotStatus } = require("./pilot-status");
 
 const rootDir = __dirname;
 loadEnvFile(path.join(rootDir, ".env"));
@@ -17,6 +25,11 @@ const allowedOrigins = parseList(process.env.MATFINDER_ALLOWED_ORIGINS);
 
 const materials = loadMaterials();
 const compactMaterials = materials.map(toCompactMaterial);
+const publicMaterials = materials.filter(isDefaultVisibleCommercialGrade);
+const compactPublicMaterials = publicMaterials.map(toCompactMaterial);
+const trustedStats = buildTrustedStats(materials, polymerFamilies);
+const auditStats = buildAuditStats(materials);
+const pilotStatus = readPilotStatus();
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -52,7 +65,19 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && requestPath === "/api/materials") {
       const view = requestUrl.searchParams.get("view") === "full" ? "full" : "compact";
-      const source = view === "full" ? materials : compactMaterials;
+      const auditMode = requestUrl.searchParams.get("audit") === "1";
+      let source = auditMode
+        ? (view === "full" ? materials : compactMaterials)
+        : (view === "full" ? publicMaterials : compactPublicMaterials);
+      const query = String(requestUrl.searchParams.get("q") || "").trim();
+      if (query) {
+        source = source
+          .filter((item) => matchesMaterial(item, query))
+          .sort((left, right) =>
+            scoreMaterial(right, query) - scoreMaterial(left, query) ||
+            String(left.name || "").localeCompare(String(right.name || ""))
+          );
+      }
       const limitValue = requestUrl.searchParams.get("limit");
       if (limitValue !== null) {
         const limit = Math.min(200, Math.max(1, Number(limitValue) || 48));
@@ -72,11 +97,38 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && requestPath === "/api/polymer-families") {
+      sendJson(response, 200, polymerFamilies);
+      return;
+    }
+
+    if (request.method === "GET" && requestPath === "/api/catalog-stats") {
+      sendJson(response, 200, trustedStats);
+      return;
+    }
+
+    if (request.method === "GET" && requestPath === "/api/pilot-status") {
+      sendJson(response, 200, pilotStatus);
+      return;
+    }
+
+    if (request.method === "GET" && requestPath === "/api/admin/audit-summary") {
+      sendJson(response, 200, auditStats);
+      return;
+    }
+
     if (request.method === "GET" && requestPath.startsWith("/api/materials/")) {
       const materialId = decodeURIComponent(requestPath.slice("/api/materials/".length));
       const material = materials.find((item) => item.id === materialId);
       if (!material) {
         sendJson(response, 404, { error: "Material not found" });
+        return;
+      }
+      if (
+        requestUrl.searchParams.get("audit") !== "1" &&
+        !isDefaultVisibleCommercialGrade(material)
+      ) {
+        sendJson(response, 404, { error: "Material not found in the public catalog" });
         return;
       }
       sendJson(response, 200, material);
@@ -166,7 +218,12 @@ function toCompactMaterial(material) {
     "processing_methods",
     "tags",
     "uses",
-    "summary"
+    "summary",
+    "record_type",
+    "record_origin",
+    "scope_status",
+    "catalog_visibility",
+    "entityType"
   ];
   const compact = {};
   fields.forEach((field) => {
@@ -279,11 +336,17 @@ async function handleMaterialComparison(request, response) {
     sendJson(response, 400, { error: "Choose two different materials" });
     return;
   }
-  if (pair.some((item) => item.data_quality?.level === "quarantined")) {
+  if (pair.some((item) =>
+    item.data_quality?.level === "quarantined" ||
+    !isDefaultVisibleCommercialGrade(item)
+  )) {
     sendJson(response, 422, {
       error: "One or more material records failed quality checks",
       materialIds: pair
-        .filter((item) => item.data_quality?.level === "quarantined")
+        .filter((item) =>
+          item.data_quality?.level === "quarantined" ||
+          !isDefaultVisibleCommercialGrade(item)
+        )
         .map((item) => item.id)
     });
     return;
@@ -444,7 +507,16 @@ function serveStatic(request, response) {
   }
 
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-    const appRoutes = new Set(["/", "/materials", "/compare", "/copilot", "/about"]);
+    const appRoutes = new Set([
+      "/",
+      "/materials",
+      "/families",
+      "/pilot",
+      "/audit",
+      "/compare",
+      "/copilot",
+      "/about"
+    ]);
     const acceptsHtml = String(request.headers.accept || "").includes("text/html");
     const hasExtension = Boolean(path.extname(requestedPath));
     if ((acceptsHtml && !hasExtension) || appRoutes.has(url.pathname)) {

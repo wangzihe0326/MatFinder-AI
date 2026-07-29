@@ -160,6 +160,41 @@ with tempfile.TemporaryDirectory() as directory:
     input_file = temp / "pilot-test-only.json"
     write_fixture(input_file, fixture())
 
+    legacy_id = "TEST-ONLY-LEGACY-GENERATED-COLLISION"
+    connection = sqlite3.connect(database)
+    try:
+        connection.row_factory = sqlite3.Row
+        source_row = connection.execute(
+            "SELECT * FROM materials LIMIT 1"
+        ).fetchone()
+        legacy_row = dict(source_row)
+        legacy_row.update(
+            {
+                "material_id": legacy_id,
+                "name": "TEST ONLY LEGACY COLLISION",
+                "name_en": "TEST ONLY LEGACY COLLISION",
+                "name_zh": "TEST ONLY LEGACY COLLISION",
+                "manufacturer": "TEST ONLY - NOT A REAL MANUFACTURER",
+                "grade_name": "TEST-ONLY-GRADE",
+                "trade_name": "TEST-ONLY-GRADE",
+                "material_family": "PC",
+                "family": "PC",
+                "record_type": "legacy",
+                "record_origin": "generated",
+                "scope_status": "in_scope",
+                "catalog_visibility": "admin_only",
+            }
+        )
+        columns = list(legacy_row)
+        connection.execute(
+            f"INSERT INTO materials ({', '.join(columns)}) "
+            f"VALUES ({', '.join('?' for _ in columns)})",
+            [legacy_row[column] for column in columns],
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
     before_hash = hashlib.sha256(database.read_bytes()).hexdigest()
     before_counts = counts(database)
     dry_run = execute_import(
@@ -191,6 +226,31 @@ with tempfile.TemporaryDirectory() as directory:
     assert first["status"] == "committed"
     after_first = counts(database)
     assert after_first["materials"] == before_counts["materials"] + 1
+    connection = sqlite3.connect(database)
+    try:
+        exact_rows = connection.execute(
+            """
+            SELECT material_id, record_type, record_origin
+              FROM materials
+             WHERE manufacturer = ?
+               AND grade_name = ?
+               AND material_family = ?
+             ORDER BY material_id
+            """,
+            (
+                "TEST ONLY - NOT A REAL MANUFACTURER",
+                "TEST-ONLY-GRADE",
+                "PC",
+            ),
+        ).fetchall()
+    finally:
+        connection.close()
+    assert len(exact_rows) == 2
+    assert {row[0] for row in exact_rows} != {legacy_id}
+    assert any(
+        row[1:] == ("commercial_grade", "imported")
+        for row in exact_rows
+    ), "A real import must create a distinct commercial-grade identity."
     assert (
         after_first["material_property_evidence"]
         == before_counts["material_property_evidence"] + 4

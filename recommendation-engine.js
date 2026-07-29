@@ -917,6 +917,10 @@
     return {
       id: "evidence-rules-v3",
       async recommend({ description, materials, limit = 5 }) {
+        const gradeMaterials = materials.filter((item) =>
+          item?.entityType !== "polymer_family" &&
+          item?.record_type !== "polymer_family"
+        );
         const trimmed = description.trim();
         const parsedRequirement = parseRequirement(trimmed);
         const emptyGroups = createEmptyGroups();
@@ -945,11 +949,11 @@
             recommendations: [],
             groups: emptyGroups,
             status: "needs_clarification",
-            eligibleMaterialCount: materials.filter((item) => item.data_quality?.recommendation_eligible).length
+            eligibleMaterialCount: gradeMaterials.filter((item) => item.data_quality?.recommendation_eligible).length
           };
         }
 
-        const evaluated = materials
+        const evaluated = gradeMaterials
           .map((item) => evaluateEvidenceRecommendation(item, parsedRequirement))
           .sort((left, right) => right.score - left.score || left.material.name.localeCompare(right.material.name));
         const groups = {
@@ -971,9 +975,9 @@
             : groups.potentialMatches.length
               ? "potential_matches"
               : "no_safe_match",
-          eligibleMaterialCount: materials.filter((item) => item.data_quality?.recommendation_eligible).length,
-          referenceMaterialCount: materials.filter((item) => item.data_quality?.reference_only).length,
-          quarantinedMaterialCount: materials.filter((item) => item.data_quality?.level === "quarantined").length
+          eligibleMaterialCount: gradeMaterials.filter((item) => item.data_quality?.recommendation_eligible).length,
+          referenceMaterialCount: gradeMaterials.filter((item) => item.data_quality?.reference_only).length,
+          quarantinedMaterialCount: gradeMaterials.filter((item) => item.data_quality?.level === "quarantined").length
         };
       }
     };

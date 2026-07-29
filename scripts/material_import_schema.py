@@ -116,6 +116,94 @@ def ensure_import_schema(connection):
     ):
         add_column(connection, "material_property_evidence", definition)
 
+    for definition in (
+        "record_type TEXT NOT NULL DEFAULT 'legacy'",
+        "record_origin TEXT NOT NULL DEFAULT 'legacy'",
+        "scope_status TEXT NOT NULL DEFAULT 'in_scope'",
+        "catalog_visibility TEXT NOT NULL DEFAULT 'admin_only'",
+    ):
+        add_column(connection, "materials", definition)
+
+    tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    connection.execute(
+        """
+        UPDATE materials
+           SET record_type = CASE
+             WHEN EXISTS (
+               SELECT 1 FROM real_material_identities identity_row
+                WHERE identity_row.material_id = materials.material_id
+                  AND identity_row.active = 1
+             ) THEN 'commercial_grade'
+             ELSE 'legacy'
+           END
+        """
+    )
+    generated_clauses = [
+        """
+        EXISTS (
+          SELECT 1 FROM material_evidence identity_evidence
+           WHERE identity_evidence.material_id = materials.material_id
+             AND identity_evidence.source_type = 'generated'
+        )
+        """,
+        """
+        EXISTS (
+          SELECT 1 FROM material_property_evidence property_evidence
+           WHERE property_evidence.material_id = materials.material_id
+             AND property_evidence.source_type = 'generated'
+        )
+        """,
+    ]
+    material_columns = table_columns(connection, "materials")
+    if "translation_quality" in material_columns:
+        generated_clauses.append(
+            "LOWER(COALESCE(materials.translation_quality, '')) = 'generated'"
+        )
+    if "source_note" in material_columns:
+        generated_clauses.append(
+            "LOWER(COALESCE(materials.source_note, '')) LIKE '%generated%'"
+        )
+    if "material_sources" in tables:
+        generated_clauses.append(
+            """
+            EXISTS (
+              SELECT 1 FROM material_sources legacy_source
+               WHERE legacy_source.material_id = materials.material_id
+                 AND LOWER(COALESCE(legacy_source.source_type, ''))
+                     LIKE '%generated%'
+            )
+            """
+        )
+    connection.execute(
+        f"""
+        UPDATE materials
+           SET record_origin = CASE
+             WHEN record_type = 'commercial_grade' THEN 'imported'
+             WHEN {' OR '.join(generated_clauses)} THEN 'generated'
+             ELSE 'legacy'
+           END
+        """
+    )
+    connection.execute(
+        """
+        UPDATE materials
+           SET scope_status = CASE
+             WHEN category IN ('Metals', 'Ceramics', 'Glasses')
+               THEN 'out_of_scope'
+             ELSE 'in_scope'
+           END,
+               catalog_visibility = CASE
+             WHEN record_type = 'commercial_grade' THEN 'review'
+             ELSE 'admin_only'
+           END
+        """
+    )
+
     connection.executescript(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_import_batches_active_hash
@@ -157,5 +245,10 @@ def ensure_import_schema(connection):
 
         CREATE INDEX IF NOT EXISTS idx_materials_identity_lookup
           ON materials(manufacturer, grade_name, material_family);
+
+        CREATE INDEX IF NOT EXISTS idx_materials_catalog_layer
+          ON materials(
+            record_type, catalog_visibility, scope_status, record_origin
+          );
         """
     )

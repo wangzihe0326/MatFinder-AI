@@ -1,0 +1,25 @@
+{
+  "target": 12,
+  "families": [
+    "ABS",
+    "PC",
+    "PA66",
+    "POM",
+    "PP"
+  ],
+  "note": "Planning slots only. No slot is a manufacturer, brand, commercial grade, property, certification, standard, or source claim.",
+  "slots": [
+    { "slotId": "ABS-01", "materialFamily": "ABS", "status": "planned" },
+    { "slotId": "ABS-02", "materialFamily": "ABS", "status": "planned" },
+    { "slotId": "ABS-03", "materialFamily": "ABS", "status": "planned" },
+    { "slotId": "PC-01", "materialFamily": "PC", "status": "planned" },
+    { "slotId": "PC-02", "materialFamily": "PC", "status": "planned" },
+    { "slotId": "PC-03", "materialFamily": "PC", "status": "planned" },
+    { "slotId": "PA66-01", "materialFamily": "PA66", "status": "planned" },
+    { "slotId": "PA66-02", "materialFamily": "PA66", "status": "planned" },
+    { "slotId": "POM-01", "materialFamily": "POM", "status": "planned" },
+    { "slotId": "POM-02", "materialFamily": "POM", "status": "planned" },
+    { "slotId": "PP-01", "materialFamily": "PP", "status": "planned" },
+    { "slotId": "PP-02", "materialFamily": "PP", "status": "planned" }
+  ]
+}

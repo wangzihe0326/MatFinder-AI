@@ -19,7 +19,10 @@
         <nav class="top-nav" aria-label="Primary navigation">
           <a href="/" data-route-link="home" data-i18n="navHome">Home</a>
           <a href="/materials" data-route-link="materials" data-i18n="navMaterials">Materials</a>
+          <a href="/families" data-route-link="families" data-i18n="navFamilies">Learn</a>
+          <a href="/pilot" data-route-link="pilot" data-i18n="navPilot">Pilot</a>
           <a href="/compare" data-route-link="compare" data-i18n="navCompare">Compare</a>
+          <a href="/audit" data-route-link="audit" data-i18n="navAudit">Audit</a>
           <a href="/about" data-route-link="about" data-i18n="navAbout">About</a>
         </nav>
         <div class="top-actions" aria-label="Platform overview">
@@ -47,20 +50,20 @@
           </div>
           <div class="home-stats" aria-label="Product highlights">
             <div class="home-stat">
-              <strong id="homeMaterialCount">1219</strong>
-              <span data-i18n="homeStatMaterials">materials</span>
+              <strong id="homeFamilyCount">0</strong>
+              <span data-i18n="statPolymerFamilies">Polymer families</span>
             </div>
             <div class="home-stat">
-              <strong data-i18n="homeStatScoringValue">Live</strong>
-              <span data-i18n="homeStatScoring">Dynamic scoring</span>
+              <strong id="homeVerifiedGradeCount">0</strong>
+              <span data-i18n="statVerifiedGrades">Verified commercial grades</span>
             </div>
             <div class="home-stat">
-              <strong data-i18n="homeStatCompareValue">3-way</strong>
-              <span data-i18n="homeStatCompare">Material comparison</span>
+              <strong id="homeVerifiedPropertyCount">0</strong>
+              <span data-i18n="statVerifiedProperties">Verified property data points</span>
             </div>
             <div class="home-stat">
-              <strong data-i18n="homeStatReportValue">PDF</strong>
-              <span data-i18n="homeStatReport">Report export</span>
+              <strong id="homeAwaitingCount">0</strong>
+              <span data-i18n="statAwaitingVerification">Materials awaiting verification</span>
             </div>
           </div>
         </div>
@@ -147,6 +150,17 @@
         <div id="catalogStats" class="catalog-stats" aria-label="Database statistics"></div>
       </section>
 
+      <section class="catalog-section route-panel" data-route-pages="materials">
+        <div class="section-heading">
+          <div>
+            <p class="result-label" data-i18n="polymerFamiliesLabel">Polymer Families</p>
+            <h2 data-i18n="polymerFamiliesSearchTitle">Learning-first family results</h2>
+          </div>
+          <a href="/families" data-route-link="families" data-i18n="openLearningPages">Open learning pages</a>
+        </div>
+        <div id="familySearchResults" class="family-grid"></div>
+      </section>
+
       <main class="layout catalog-layout route-panel" data-route-pages="materials">
         <aside class="filters" aria-label="Database filters">
           <button id="filterToggleButton" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterBody">
@@ -231,6 +245,49 @@
           <p id="emptyState" class="empty-state" hidden>没有匹配的材料。</p>
         </section>
       </main>
+
+      <section class="about-page route-panel" data-route-pages="families">
+        <div class="about-hero">
+          <p class="result-label" data-i18n="polymerFamiliesLabel">Polymer Families</p>
+          <h2 data-i18n="familyLearningTitle">Polymer family learning library</h2>
+          <p data-i18n="familyLearningIntro">Family-level knowledge is educational context. It is never a commercial grade and never enters recommendation values.</p>
+        </div>
+        <div id="familyLearningGrid" class="family-learning-grid"></div>
+      </section>
+
+      <section class="about-page route-panel" data-route-pages="pilot">
+        <div class="about-hero">
+          <p class="result-label" data-i18n="pilotLabel">Pilot Data</p>
+          <h2 data-i18n="pilotTitle">First reviewed commercial-grade pilot</h2>
+          <p data-i18n="pilotIntro">Twelve neutral planning slots across ABS, PC, PA66, POM, and PP. No manufacturer or grade is prefilled.</p>
+        </div>
+        <div id="pilotStatusGrid" class="catalog-stats"></div>
+        <div id="pilotPlanGrid" class="family-grid"></div>
+      </section>
+
+      <section class="about-page route-panel" data-route-pages="audit">
+        <div class="about-hero">
+          <p class="result-label" data-i18n="auditLabel">Administrator audit mode</p>
+          <h2 data-i18n="auditTitle">Reference and legacy records</h2>
+          <p data-i18n="auditIntro">These records are isolated from default search, recommendation, comparison, AI analysis, and trusted statistics.</p>
+        </div>
+        <div id="auditStatsGrid" class="catalog-stats"></div>
+        <div class="catalog-search audit-search">
+          <label for="auditSearchInput" data-i18n="auditSearchLabel">Search isolated records</label>
+          <input id="auditSearchInput" type="search" placeholder="Exact family, grade, or record identity" autocomplete="off" />
+        </div>
+        <div class="section-heading">
+          <div>
+            <p class="result-label">Reference or Legacy Records</p>
+            <h2 id="auditResultTitle">0 records</h2>
+          </div>
+        </div>
+        <div id="auditRecordsGrid" class="family-grid"></div>
+        <div class="about-section">
+          <h3 data-i18n="auditBoundaryTitle">Audit boundary</h3>
+          <p data-i18n="auditBoundaryBody">Audit counts are operational inventory only. They are not trusted material or property claims.</p>
+        </div>
+      </section>
 
       <section id="compareIntro" class="compare-dashboard route-panel" data-route-pages="compare">
         <div class="compare-hero">
@@ -346,6 +403,8 @@
 
     <script src="config.js"></script>
     <script src="catalog-search.js"></script>
+    <script src="polymer-families.js"></script>
+    <script src="catalog-layer.js"></script>
     <script src="recommendation-engine.js"></script>
     <script src="app.js"></script>
   </body>

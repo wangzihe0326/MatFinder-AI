@@ -112,7 +112,7 @@ function materialQualityReport(materials) {
       name: item.name,
       issues: item.quality.issues.map((issue) => issue.code)
     })),
-    note: "Rejected records fail validation and are excluded from recommendation. Synthetic records remain browseable but are not engineering evidence."
+    note: "Rejected records fail validation and are excluded from recommendation. Synthetic and quarantined records are visible only in administrator audit mode."
   };
 }
 
@@ -211,7 +211,10 @@ function encodingReport() {
       const text = fs.readFileSync(filePath, "utf8");
       const replacementCharacters = countMatches(text, /\uFFFD/g);
       const controlCharacters = countMatches(text, /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g);
-      const possibleMojibake = countMatches(text, /(?:鑰|閫|闃|瀵|鏌|绮|缁|鑸|鍖|鐢|浣|娑|杞|楂|搴|枡|寮|垫|姘|槑)/g);
+      const possibleMojibake = countMatches(
+        text,
+        /(?:[ÃÂ][\u0080-\u00BF]|â[\u0080-\u00BF]{2})/g
+      );
       return {
         file: path.relative(rootDir, filePath),
         utf8_readable: true,

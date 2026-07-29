@@ -1001,7 +1001,8 @@ def create_material_shell(connection, batch_id, record, material_id, imported_at
           limitations, alternatives, source_note, typical_applications,
           advantages, disadvantages, tags_en, tags_zh, summary,
           description_en, description_zh, translation_quality,
-          translation_status, notes
+          translation_status, notes, record_type, record_origin,
+          scope_status, catalog_visibility
         )
         VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?, 'Plastics', 'Plastics', 'Plastics',
@@ -1010,7 +1011,8 @@ def create_material_shell(connection, batch_id, record, material_id, imported_at
           NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?,
           'Evidence sources are stored in normalized evidence tables.', ?, ?, ?,
           ?, ?, ?, ?, ?, 'source', 'untranslated',
-          'Imported shell; engineering claims are stored only in evidence records.'
+          'Imported shell; engineering claims are stored only in evidence records.',
+          'commercial_grade', 'imported', 'in_scope', 'review'
         )
         """,
         (

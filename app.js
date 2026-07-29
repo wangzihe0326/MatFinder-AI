@@ -1,4 +1,15 @@
 let materials = [];
+let polymerFamilies = [];
+let catalogLayerStats = {
+  polymerFamilies: 0,
+  verifiedCommercialGrades: 0,
+  verifiedPropertyDataPoints: 0,
+  materialsAwaitingVerification: 0
+};
+let pilotStatus = { target: 0, families: [], counts: {}, slots: [] };
+let auditSummary = {};
+let auditMaterials = [];
+let auditMaterialTotal = 0;
 let recommendationService = null;
 const materialDetailCache = new Map();
 const apiBaseUrl = String(window.MatFinderConfig?.apiBaseUrl || "").replace(/\/$/, "");
@@ -137,16 +148,43 @@ const i18n = {
     brandEyebrow: "Polymer-Centered Engineering Materials Database + AI",
     navHome: "Home",
     navMaterials: "Materials",
+    navFamilies: "Learn",
+    navPilot: "Pilot",
     navCompare: "Compare",
     navCopilot: "AI Copilot",
+    navAudit: "Audit",
     navAbout: "About",
     languageLabel: "Language",
     filtersToggle: "Filters",
     materialsUnit: "materials",
+    verifiedGradesUnit: "verified grades",
     comparedUnit: "compared",
+    statPolymerFamilies: "Polymer families",
+    statVerifiedGrades: "Verified commercial grades",
+    statVerifiedProperties: "Verified property data points",
+    statAwaitingVerification: "Materials awaiting verification",
+    polymerFamiliesLabel: "Polymer Families",
+    polymerFamiliesSearchTitle: "Learning-first family results",
+    openLearningPages: "Open learning pages",
+    familyLearningTitle: "Polymer family learning library",
+    familyLearningIntro: "Family-level knowledge is educational context. It is never a commercial grade and never enters recommendation values.",
+    familyTypicalWarning: "Typical ranges cannot replace a commercial-grade TDS.",
+    familySourcesPending: "Learning sources awaiting review",
+    verifiedGradesTitle: "Verified Commercial Grades",
+    noVerifiedGrades: "No verified or potential commercial grades have been imported yet.",
+    pilotLabel: "Pilot Data",
+    pilotTitle: "First reviewed commercial-grade pilot",
+    pilotIntro: "Twelve neutral planning slots across ABS, PC, PA66, POM, and PP. No manufacturer or grade is prefilled.",
+    auditLabel: "Administrator audit mode",
+    auditTitle: "Reference and legacy records",
+    auditIntro: "These records are isolated from default search, recommendation, comparison, AI analysis, and trusted statistics.",
+    auditBoundaryTitle: "Audit boundary",
+    auditBoundaryBody: "Audit counts are operational inventory only. They are not trusted material or property claims.",
+    auditSearchLabel: "Search isolated records",
+    potentialGradesTitle: "Potential Commercial Grades with Missing Evidence",
     homeHeroLabel: "MatFinder AI",
     homeHeroTitle: "AI-powered material selection assistant",
-    homeHeroBody: "Focused on polymer engineering materials such as plastics, elastomers, and composites, with selected metals and other engineering materials for comparison.",
+    homeHeroBody: "Learn polymer families separately, then screen only evidence-backed commercial grades for engineering recommendations.",
     startSelection: "Start Material Selection",
     homeStatMaterials: "materials",
     homeStatScoringValue: "Live",
@@ -193,7 +231,7 @@ const i18n = {
     searchPlaceholder: "Name, abbreviation, use, property",
     materialsPageLabel: "Polymer-centered database",
     materialsPageTitle: "Browse the polymer-centered engineering library",
-    materialsPageBody: "Search plastics, elastomers, thermosets, composites, adhesives, coatings, foams, and selected comparison references such as metals and ceramics.",
+    materialsPageBody: "Search polymer families for learning and keep verified or potential commercial grades in a separate engineering catalog.",
     catalogTotalMaterials: "Total materials",
     catalogCategories: "Categories",
     catalogTopCategory: "Largest category",
@@ -394,17 +432,44 @@ const i18n = {
 const zhDetailLabels = {
   navHome: "\u9996\u9875",
   navMaterials: "\u6750\u6599\u5e93",
+  navFamilies: "\u5b66\u4e60",
+  navPilot: "\u8bd5\u70b9",
   navCompare: "\u6750\u6599\u5bf9\u6bd4",
   navCopilot: "AI \u52a9\u624b",
+  navAudit: "\u5ba1\u8ba1",
   navAbout: "\u5173\u4e8e",
   brandEyebrow: "\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u5de5\u7a0b\u6750\u6599\u6570\u636e\u5e93 + AI",
   languageLabel: "\u8bed\u8a00",
   filtersToggle: "\u7b5b\u9009",
   materialsUnit: "\u79cd\u6750\u6599",
+  verifiedGradesUnit: "\u4e2a\u5df2\u9a8c\u8bc1\u724c\u53f7",
   comparedUnit: "\u4e2a\u5bf9\u6bd4",
+  statPolymerFamilies: "\u9ad8\u5206\u5b50\u6750\u6599\u5bb6\u65cf",
+  statVerifiedGrades: "\u5df2\u9a8c\u8bc1\u5546\u4e1a\u724c\u53f7",
+  statVerifiedProperties: "\u5df2\u9a8c\u8bc1\u7269\u6027\u6570\u636e\u70b9",
+  statAwaitingVerification: "\u7b49\u5f85\u9a8c\u8bc1\u7684\u6750\u6599",
+  polymerFamiliesLabel: "\u9ad8\u5206\u5b50\u6750\u6599\u5bb6\u65cf",
+  polymerFamiliesSearchTitle: "\u5b66\u4e60\u4f18\u5148\u7684\u5bb6\u65cf\u641c\u7d22\u7ed3\u679c",
+  openLearningPages: "\u6253\u5f00\u5b66\u4e60\u9875",
+  familyLearningTitle: "\u9ad8\u5206\u5b50\u6750\u6599\u5bb6\u65cf\u5b66\u4e60\u5e93",
+  familyLearningIntro: "\u5bb6\u65cf\u7ea7\u77e5\u8bc6\u53ea\u7528\u4e8e\u5b66\u4e60\uff0c\u4e0d\u662f\u5546\u4e1a\u724c\u53f7\uff0c\u4e5f\u4e0d\u4f1a\u8fdb\u5165\u63a8\u8350\u6570\u503c\u3002",
+  familyTypicalWarning: "\u5178\u578b\u8303\u56f4\u4e0d\u80fd\u66ff\u4ee3\u5177\u4f53\u5546\u4e1a\u724c\u53f7 TDS\u3002",
+  familySourcesPending: "\u5b66\u4e60\u6765\u6e90\u5f85\u590d\u6838",
+  verifiedGradesTitle: "\u5df2\u9a8c\u8bc1\u5546\u4e1a\u724c\u53f7",
+  noVerifiedGrades: "\u5c1a\u672a\u5bfc\u5165\u5df2\u9a8c\u8bc1\u6216\u6f5c\u5728\u5339\u914d\u7684\u5546\u4e1a\u724c\u53f7\u3002",
+  pilotLabel: "\u8bd5\u70b9\u6570\u636e",
+  pilotTitle: "\u9996\u6279\u771f\u5b9e\u5546\u4e1a\u724c\u53f7\u5ba1\u6838\u8bd5\u70b9",
+  pilotIntro: "\u5728 ABS\u3001PC\u3001PA66\u3001POM \u548c PP \u4e2d\u8bbe\u7f6e 12 \u4e2a\u4e2d\u6027\u8ba1\u5212\u4f4d\uff0c\u4e0d\u9884\u586b\u5236\u9020\u5546\u6216\u724c\u53f7\u3002",
+  auditLabel: "\u7ba1\u7406\u5458\u5ba1\u8ba1\u6a21\u5f0f",
+  auditTitle: "\u53c2\u8003\u4e0e\u65e7\u6570\u636e\u8bb0\u5f55",
+  auditIntro: "\u8fd9\u4e9b\u8bb0\u5f55\u5df2\u4e0e\u9ed8\u8ba4\u641c\u7d22\u3001\u63a8\u8350\u3001\u6bd4\u8f83\u3001AI \u5206\u6790\u548c\u53ef\u4fe1\u7edf\u8ba1\u9694\u79bb\u3002",
+  auditBoundaryTitle: "\u5ba1\u8ba1\u8fb9\u754c",
+  auditBoundaryBody: "\u5ba1\u8ba1\u6570\u5b57\u53ea\u662f\u8fd0\u8425\u5e93\u5b58\uff0c\u4e0d\u662f\u53ef\u4fe1\u6750\u6599\u6216\u7269\u6027\u58f0\u660e\u3002",
+  auditSearchLabel: "\u641c\u7d22\u5df2\u9694\u79bb\u8bb0\u5f55",
+  potentialGradesTitle: "\u7f3a\u5c11\u8bc1\u636e\u7684\u6f5c\u5728\u5546\u4e1a\u724c\u53f7",
   homeHeroLabel: "MatFinder AI",
   homeHeroTitle: "AI \u6750\u6599\u9009\u578b\u52a9\u624b",
-  homeHeroBody: "\u4e13\u6ce8\u5851\u6599\u3001\u5f39\u6027\u4f53\u3001\u590d\u5408\u6750\u6599\u7b49\u9ad8\u5206\u5b50\u5de5\u7a0b\u6750\u6599\uff0c\u5e76\u652f\u6301\u90e8\u5206\u91d1\u5c5e\u4e0e\u5176\u4ed6\u5de5\u7a0b\u6750\u6599\u7684\u5bf9\u6bd4\u5206\u6790\u3002",
+  homeHeroBody: "\u5148\u5206\u5f00\u5b66\u4e60\u9ad8\u5206\u5b50\u6750\u6599\u5bb6\u65cf\uff0c\u518d\u4ec5\u7528\u5177\u6709\u8bc1\u636e\u7684\u771f\u5b9e\u5546\u4e1a\u724c\u53f7\u8fdb\u884c\u5de5\u7a0b\u63a8\u8350\u3002",
   startSelection: "\u5f00\u59cb\u6750\u6599\u9009\u578b",
   homeStatMaterials: "\u6750\u6599\u6570\u636e",
   homeStatScoringValue: "\u52a8\u6001",
@@ -433,7 +498,7 @@ const zhDetailLabels = {
   searchPlaceholder: "\u540d\u79f0\u3001\u7f29\u5199\u3001\u7528\u9014\u3001\u6027\u80fd",
   materialsPageLabel: "\u9ad8\u5206\u5b50\u6750\u6599\u6570\u636e\u5e93",
   materialsPageTitle: "\u9ad8\u5206\u5b50\u4e3a\u6838\u5fc3\u7684\u5de5\u7a0b\u6750\u6599\u5e93",
-  materialsPageBody: "\u641c\u7d22\u3001\u7b5b\u9009\u5e76\u5bf9\u6bd4\u5851\u6599\u3001\u5f39\u6027\u4f53\u3001\u70ed\u56fa\u6027\u6750\u6599\u3001\u590d\u5408\u6750\u6599\u3001\u80f6\u7c98\u5242\u3001\u6d82\u5c42\u548c\u6ce1\u6cab\u6750\u6599\uff0c\u540c\u65f6\u4fdd\u7559\u90e8\u5206\u91d1\u5c5e\u4e0e\u5176\u4ed6\u5de5\u7a0b\u6750\u6599\u4f5c\u4e3a\u6a2a\u5411\u5bf9\u6bd4\u53c2\u8003\u3002",
+  materialsPageBody: "\u5b66\u4e60\u7528\u7684\u9ad8\u5206\u5b50\u6750\u6599\u5bb6\u65cf\u4e0e\u5de5\u7a0b\u7b5b\u9009\u7528\u7684\u5df2\u9a8c\u8bc1\u6216\u5f85\u8865\u8bc1\u5546\u4e1a\u724c\u53f7\u5206\u5f00\u5c55\u793a\u3002",
   catalogTotalMaterials: "\u6750\u6599\u603b\u6570",
   catalogCategories: "\u6750\u6599\u7c7b\u522b",
   catalogTopCategory: "\u6700\u5927\u7c7b\u522b",
@@ -967,8 +1032,19 @@ const elements = {
   routePanels: document.querySelectorAll("[data-route-pages]"),
   routeLinks: document.querySelectorAll("[data-route-link]"),
   startSelectionButton: document.querySelector("#startSelectionButton"),
-  homeMaterialCount: document.querySelector("#homeMaterialCount"),
+  homeFamilyCount: document.querySelector("#homeFamilyCount"),
+  homeVerifiedGradeCount: document.querySelector("#homeVerifiedGradeCount"),
+  homeVerifiedPropertyCount: document.querySelector("#homeVerifiedPropertyCount"),
+  homeAwaitingCount: document.querySelector("#homeAwaitingCount"),
   catalogStats: document.querySelector("#catalogStats"),
+  familySearchResults: document.querySelector("#familySearchResults"),
+  familyLearningGrid: document.querySelector("#familyLearningGrid"),
+  pilotStatusGrid: document.querySelector("#pilotStatusGrid"),
+  pilotPlanGrid: document.querySelector("#pilotPlanGrid"),
+  auditStatsGrid: document.querySelector("#auditStatsGrid"),
+  auditSearchInput: document.querySelector("#auditSearchInput"),
+  auditResultTitle: document.querySelector("#auditResultTitle"),
+  auditRecordsGrid: document.querySelector("#auditRecordsGrid"),
   aboutMaterialCount: document.querySelector("#aboutMaterialCount"),
   aboutCategoryCount: document.querySelector("#aboutCategoryCount"),
   requirementInput: document.querySelector("#requirementInput"),
@@ -1310,6 +1386,19 @@ function applyLanguage() {
     button.textContent = state.language === "zh" ? button.dataset.copilotPromptZh : button.dataset.copilotPromptEn;
   });
 
+  const totalCountUnit = elements.totalCount.nextElementSibling;
+  if (totalCountUnit) totalCountUnit.textContent = t("verifiedGradesUnit");
+  if (elements.aboutMaterialCount.nextElementSibling) {
+    elements.aboutMaterialCount.nextElementSibling.textContent = t("verifiedGradesUnit");
+  }
+  if (elements.aboutCategoryCount.nextElementSibling) {
+    elements.aboutCategoryCount.nextElementSibling.textContent = t("statPolymerFamilies");
+  }
+  renderFamilySearchResults();
+  renderFamilyLearningPages();
+  renderPilotStatus();
+  renderAuditSummary();
+  renderAuditRecords();
   updateCopilotContext();
 }
 
@@ -1534,11 +1623,26 @@ async function init() {
   categories = [...new Set(materials.map((material) => material.category))].sort((a, b) => a.localeCompare(b));
   renderCategoryOptions();
 
-  elements.totalCount.textContent = materials.length;
-  elements.homeMaterialCount.textContent = materials.length;
-  elements.aboutMaterialCount.textContent = materials.length;
-  elements.aboutCategoryCount.textContent = categories.length;
+  elements.totalCount.textContent = catalogLayerStats.verifiedCommercialGrades;
+  const totalCountUnit = elements.totalCount.nextElementSibling;
+  if (totalCountUnit) totalCountUnit.textContent = t("verifiedGradesUnit");
+  elements.homeFamilyCount.textContent = catalogLayerStats.polymerFamilies;
+  elements.homeVerifiedGradeCount.textContent = catalogLayerStats.verifiedCommercialGrades;
+  elements.homeVerifiedPropertyCount.textContent = catalogLayerStats.verifiedPropertyDataPoints;
+  elements.homeAwaitingCount.textContent = catalogLayerStats.materialsAwaitingVerification;
+  elements.aboutMaterialCount.textContent = catalogLayerStats.verifiedCommercialGrades;
+  elements.aboutCategoryCount.textContent = catalogLayerStats.polymerFamilies;
+  if (elements.aboutMaterialCount.nextElementSibling) {
+    elements.aboutMaterialCount.nextElementSibling.textContent = t("verifiedGradesUnit");
+  }
+  if (elements.aboutCategoryCount.nextElementSibling) {
+    elements.aboutCategoryCount.nextElementSibling.textContent = t("statPolymerFamilies");
+  }
   renderCatalogStats();
+  renderFamilySearchResults();
+  renderFamilyLearningPages();
+  renderPilotStatus();
+  renderAuditSummary();
   bindEvents();
   applyLanguage();
   setRoute(routeFromPath(window.location.pathname), { replace: true });
@@ -1551,6 +1655,9 @@ function routeFromPath(pathname) {
   const routes = {
     "/": "home",
     "/materials": "materials",
+    "/families": "families",
+    "/pilot": "pilot",
+    "/audit": "audit",
     "/compare": "compare",
     "/copilot": "copilot",
     "/about": "about"
@@ -1562,6 +1669,9 @@ function pathFromRoute(route) {
   return {
     home: "/",
     materials: "/materials",
+    families: "/families",
+    pilot: "/pilot",
+    audit: "/audit",
     compare: "/compare",
     copilot: "/copilot",
     about: "/about"
@@ -1584,6 +1694,9 @@ function setRoute(route, options = {}) {
   if (state.route === "copilot") {
     renderCopilotRoute();
   }
+  if (state.route === "audit") {
+    loadAuditRecords();
+  }
   if (!options.replace && state.route === "materials" && materials.length && !state.materialsGridRendered) {
     render();
   }
@@ -1596,6 +1709,9 @@ function renderRoute() {
   const routeTitles = {
     home: "MatFinder AI",
     materials: `${t("navMaterials")} - MatFinder AI`,
+    families: `${t("navFamilies")} - MatFinder AI`,
+    pilot: `${t("navPilot")} - MatFinder AI`,
+    audit: `${t("navAudit")} - MatFinder AI`,
     compare: `${t("navCompare")} - MatFinder AI`,
     copilot: `${t("navCopilot")} - MatFinder AI`,
     about: `${t("navAbout")} - MatFinder AI`
@@ -1622,12 +1738,63 @@ function renderRoute() {
 async function loadMaterials() {
   elements.materialsGrid.innerHTML = `<p class="recommendation-empty">${t("generating")}</p>`;
   elements.emptyState.hidden = true;
-  const response = await fetch(apiUrl("/api/materials?view=compact"));
-  if (!response.ok) {
-    throw new Error("Failed to load materials from SQLite.");
+  const responses = await Promise.all([
+    fetch(apiUrl("/api/materials?view=compact")),
+    fetch(apiUrl("/api/polymer-families")),
+    fetch(apiUrl("/api/catalog-stats")),
+    fetch(apiUrl("/api/pilot-status")),
+    fetch(apiUrl("/api/admin/audit-summary"))
+  ]);
+  if (responses.some((response) => !response.ok)) {
+    throw new Error("Failed to load the layered material catalog.");
   }
-  materials = await response.json();
+  [
+    materials,
+    polymerFamilies,
+    catalogLayerStats,
+    pilotStatus,
+    auditSummary
+  ] = await Promise.all(responses.map((response) => response.json()));
   state.filteredMaterialsCache = { key: "", items: [] };
+}
+
+async function loadAuditRecords() {
+  if (!elements.auditRecordsGrid) return;
+  const query = elements.auditSearchInput?.value.trim() || "";
+  elements.auditRecordsGrid.innerHTML = `<p class="recommendation-empty">${escapeHtml(t("generating"))}</p>`;
+  const response = await fetch(
+    apiUrl(`/api/materials?view=compact&audit=1&limit=48&q=${encodeURIComponent(query)}`)
+  );
+  if (!response.ok) {
+    elements.auditRecordsGrid.innerHTML = `<p class="recommendation-empty">Audit records unavailable.</p>`;
+    return;
+  }
+  const payload = await response.json();
+  auditMaterials = payload.items || [];
+  auditMaterialTotal = Number(payload.total) || 0;
+  renderAuditRecords();
+}
+
+function renderAuditRecords() {
+  if (!elements.auditRecordsGrid) return;
+  elements.auditResultTitle.textContent = state.language === "zh"
+    ? `${auditMaterialTotal} 条隔离记录`
+    : `${auditMaterialTotal} isolated records`;
+  elements.auditRecordsGrid.innerHTML = auditMaterials.map((item) => `
+    <article class="family-card audit-record-card">
+      <span class="entity-badge">${escapeHtml(item.record_type || "legacy")}</span>
+      <h3>${escapeHtml(materialName(item))}</h3>
+      <p>${escapeHtml([
+        item.material_family || item.family,
+        item.record_origin,
+        item.scope_status,
+        item.data_quality?.level
+      ].filter(Boolean).join(" · "))}</p>
+      <small>${state.language === "zh"
+        ? "仅限审计；已禁止推荐、比较与 AI 分析。"
+        : "Audit only; recommendation, comparison, and AI analysis are blocked."}</small>
+    </article>
+  `).join("");
 }
 
 async function loadMaterialDetail(item) {
@@ -1678,6 +1845,9 @@ function bindEvents() {
     }
     if (state.route === "copilot") {
       renderCopilotRoute();
+    }
+    if (state.route === "audit") {
+      loadAuditRecords();
     }
     if (state.route === "materials" && materials.length && !state.materialsGridRendered) {
       render();
@@ -1747,6 +1917,10 @@ function bindEvents() {
     state.query = event.target.value.trim().toLowerCase();
     resetMaterialsPage();
     render();
+  });
+
+  elements.auditSearchInput.addEventListener("input", () => {
+    loadAuditRecords();
   });
 
   elements.categoryFilter.addEventListener("change", (event) => {
@@ -2962,27 +3136,144 @@ function getCategoryCounts() {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
-function renderCatalogStats() {
-  if (!elements.catalogStats || !materials.length) return;
-  const categoryCounts = getCategoryCounts();
-  const topCategory = categoryCounts[0];
-  const topCategories = categoryCounts.slice(0, 5);
+function familyDisplayName(family) {
+  return state.language === "zh"
+    ? `${family.chineseName} (${family.abbreviations.join(" / ")})`
+    : `${family.canonicalName} (${family.abbreviations.join(" / ")})`;
+}
 
+function renderFamilySearchResults() {
+  if (!elements.familySearchResults) return;
+  const matches = polymerFamilies.filter((family) =>
+    window.MatFinderPolymerFamilies.matchesFamily(family, state.query)
+  );
+  elements.familySearchResults.innerHTML = matches.length
+    ? matches.map((family) => `
+      <article class="family-card">
+        <span class="entity-badge">${escapeHtml(t("polymerFamiliesLabel"))}</span>
+        <h3>${escapeHtml(familyDisplayName(family))}</h3>
+        <p>${escapeHtml(state.language === "zh" ? family.description.zh : family.description.en)}</p>
+        <p class="family-warning">${escapeHtml(t("familyTypicalWarning"))}</p>
+        <button type="button" data-family-route="${escapeHtml(family.familyId)}">${escapeHtml(t("openLearningPages"))}</button>
+      </article>
+    `).join("")
+    : `<p class="recommendation-empty">${escapeHtml(t("noMatches"))}</p>`;
+  elements.familySearchResults.querySelectorAll("[data-family-route]").forEach((button) => {
+    button.addEventListener("click", () => setRoute("families"));
+  });
+}
+
+function renderFamilyLearningPages() {
+  if (!elements.familyLearningGrid) return;
+  const thermalTerms = window.MatFinderPolymerFamilies.thermalTerms;
+  elements.familyLearningGrid.innerHTML = polymerFamilies.map((family) => {
+    const typicalRows = family.typicalProperties.map((property) => `
+      <li><strong>${escapeHtml(property.propertyKey)}</strong>: ${escapeHtml(
+        state.language === "zh" ? property.note.zh : property.note.en
+      )}</li>
+    `).join("");
+    const learningSources = family.learningSources.length
+      ? family.learningSources.map((source) => `<li>${escapeHtml(source.sourceTitle)}</li>`).join("")
+      : `<li>${escapeHtml(t("familySourcesPending"))}</li>`;
+    return `
+      <article class="family-learning-card" id="${escapeHtml(family.familyId)}">
+        <div class="card-head">
+          <div>
+            <span class="entity-badge">${escapeHtml(family.polymerType)}</span>
+            <h2>${escapeHtml(family.chineseName)}</h2>
+            <p>${escapeHtml(family.canonicalName)} · ${escapeHtml(family.abbreviations.join(" / "))}</p>
+          </div>
+          <span class="quality-badge is-low">${escapeHtml(family.verificationStatus)}</span>
+        </div>
+        <p>${escapeHtml(state.language === "zh" ? family.description.zh : family.description.en)}</p>
+        <div class="family-learning-columns">
+          <section><h3>${state.language === "zh" ? "典型性能范围" : "Typical property ranges"}</h3><ul>${typicalRows}</ul></section>
+          <section><h3>${state.language === "zh" ? "优点" : "Advantages"}</h3><ul>${family.advantages.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+          <section><h3>${state.language === "zh" ? "局限" : "Limitations"}</h3><ul>${family.limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+          <section><h3>${state.language === "zh" ? "常见应用" : "Common applications"}</h3><ul>${family.commonApplications.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+          <section><h3>${state.language === "zh" ? "加工方式" : "Processing methods"}</h3><ul>${family.processingMethods.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+          <section><h3>${state.language === "zh" ? "增强或改性" : "Enhancement and modification"}</h3><ul>${family.modificationMethods.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+        </div>
+        <section class="thermal-term-grid">
+          ${Object.values(thermalTerms).map((term) => `
+            <div><strong>${term.label}</strong><p>${escapeHtml(state.language === "zh" ? term.zh : term.en)}</p></div>
+          `).join("")}
+        </section>
+        <section>
+          <h3>${state.language === "zh" ? "学习来源" : "Learning sources"}</h3>
+          <ul>${learningSources}</ul>
+        </section>
+        <p class="family-warning">${escapeHtml(t("familyTypicalWarning"))}</p>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderPilotStatus() {
+  if (!elements.pilotStatusGrid || !elements.pilotPlanGrid) return;
+  const statusLabels = state.language === "zh"
+    ? {
+        planned: "计划中",
+        entered: "已录入",
+        validation_failed: "验证失败",
+        awaiting_review: "等待复核",
+        Medium: "Medium",
+        High: "High",
+        imported: "已导入"
+      }
+    : {};
+  elements.pilotStatusGrid.innerHTML = Object.entries(pilotStatus.counts || {}).map(([status, count]) => `
+    <div class="catalog-stat">
+      <span>${escapeHtml(statusLabels[status] || status)}</span>
+      <strong>${Number(count) || 0}</strong>
+    </div>
+  `).join("");
+  elements.pilotPlanGrid.innerHTML = (pilotStatus.slots || []).map((slot) => `
+    <article class="family-card">
+      <span class="entity-badge">${escapeHtml(slot.materialFamily)}</span>
+      <h3>${escapeHtml(slot.slotId)}</h3>
+      <p>${escapeHtml(statusLabels[slot.status] || slot.status)}</p>
+      <small>${state.language === "zh" ? "仅为录入流程位置，不是商业牌号。" : "Planning slot only; not a commercial grade."}</small>
+    </article>
+  `).join("");
+}
+
+function renderAuditSummary() {
+  if (!elements.auditStatsGrid) return;
+  const definitions = [
+    ["legacyMaterialRecords", state.language === "zh" ? "旧材料记录" : "Legacy material records"],
+    ["legacyPropertyRecords", state.language === "zh" ? "旧物性记录" : "Legacy property records"],
+    ["generatedRecords", state.language === "zh" ? "生成记录" : "Generated records"],
+    ["quarantinedRecords", state.language === "zh" ? "隔离证据记录" : "Quarantined evidence records"],
+    ["quarantinedMaterialRecords", state.language === "zh" ? "隔离材料记录" : "Quarantined material records"],
+    ["outOfScopeRecords", state.language === "zh" ? "范围外记录" : "Out-of-scope records"]
+  ];
+  elements.auditStatsGrid.innerHTML = definitions.map(([key, label]) => `
+    <div class="catalog-stat">
+      <span>${escapeHtml(label)}</span>
+      <strong>${Number(auditSummary[key]) || 0}</strong>
+    </div>
+  `).join("");
+}
+
+function renderCatalogStats() {
+  if (!elements.catalogStats) return;
   elements.catalogStats.innerHTML = `
     <div class="catalog-stat">
-      <span>${t("catalogTotalMaterials")}</span>
-      <strong>${materials.length}</strong>
+      <span>${t("statPolymerFamilies")}</span>
+      <strong>${catalogLayerStats.polymerFamilies}</strong>
     </div>
     <div class="catalog-stat">
-      <span>${t("catalogCategories")}</span>
-      <strong>${categories.length}</strong>
+      <span>${t("statVerifiedGrades")}</span>
+      <strong>${catalogLayerStats.verifiedCommercialGrades}</strong>
     </div>
-    <div class="catalog-stat catalog-stat-wide">
-      <span>${t("catalogTopCategory")}</span>
-      <strong>${topCategory ? `${localizeTerm(topCategory[0])} · ${topCategory[1]}` : t("none")}</strong>
+    <div class="catalog-stat">
+      <span>${t("statVerifiedProperties")}</span>
+      <strong>${catalogLayerStats.verifiedPropertyDataPoints}</strong>
     </div>
-    <div class="catalog-category-strip">
-      ${topCategories.map(([category, count]) => `<span>${localizeTerm(category)} <strong>${count}</strong></span>`).join("")}
+    <div class="catalog-stat">
+      <span>${t("statAwaitingVerification")}</span>
+      <strong>${catalogLayerStats.materialsAwaitingVerification}</strong>
     </div>
   `;
 }
@@ -2998,6 +3289,7 @@ function render() {
     : `>= ${state.minStrength} MPa`;
   elements.selectedCount.textContent = state.selected.size;
   renderCatalogStats();
+  renderFamilySearchResults();
   renderPropertyFacets();
   renderDomainFacets();
 
@@ -3007,8 +3299,9 @@ function render() {
     const pageStart = (state.materialsPage - 1) * state.materialsPageSize;
     const pageItems = filtered.slice(pageStart, pageStart + state.materialsPageSize);
 
-    elements.resultTitle.textContent = `${filtered.length} ${t("matchingMaterials")}`;
+    elements.resultTitle.textContent = `${t("verifiedGradesTitle")} · ${filtered.length}`;
     elements.emptyState.hidden = filtered.length > 0;
+    elements.emptyState.textContent = state.query ? t("noMatches") : t("noVerifiedGrades");
 
     renderChips();
     renderCards(pageItems);
@@ -3506,7 +3799,24 @@ function renderCards(items) {
   const recommendedIds = new Set(state.recommendations.map((candidate) => candidate.material.id));
   const fragment = document.createDocumentFragment();
 
-  items.forEach((item) => {
+  const groups = [
+    {
+      title: t("verifiedGradesTitle"),
+      items: items.filter((item) => ["high", "medium"].includes(item.data_quality?.level))
+    },
+    {
+      title: t("potentialGradesTitle"),
+      items: items.filter((item) => !["high", "medium"].includes(item.data_quality?.level))
+    }
+  ];
+
+  groups.forEach((group) => {
+    if (!group.items.length) return;
+    const heading = document.createElement("h3");
+    heading.className = "catalog-entity-group-title";
+    heading.textContent = `${group.title} · ${group.items.length}`;
+    fragment.append(heading);
+    group.items.forEach((item) => {
     const recommendation = state.recommendations.find((candidate) => candidate.material.id === item.id);
     const isQuarantined = item.data_quality?.level === "quarantined";
     const card = document.createElement("article");
@@ -3546,6 +3856,7 @@ function renderCards(items) {
     card.querySelector(".detail-button").addEventListener("click", () => showDetail(item.id));
     card.querySelector(".compare-button")?.addEventListener("click", () => toggleCompare(item.id));
     fragment.append(card);
+    });
   });
 
   elements.materialsGrid.replaceChildren(fragment);
