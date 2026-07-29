@@ -2,19 +2,15 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { readMaterials } = require("./read-materials-sqlite");
-const { annotateMaterialQuality } = require("../material-quality");
+const { MaterialRepository } = require("../material-repository");
 const { families, matchesFamily } = require("../polymer-families");
 const {
-  buildAuditStats,
-  buildTrustedStats,
-  isDefaultVisibleCommercialGrade,
   isPolymerFamily,
   partitionSearchResults
 } = require("../catalog-layer");
 
 const root = path.resolve(__dirname, "..");
-const materials = readMaterials(path.join(root, "matfinder.db")).map(annotateMaterialQuality);
+const repository = new MaterialRepository(path.join(root, "matfinder.db"));
 const absFamily = families.find((family) => family.abbreviations.includes("ABS"));
 
 assert.ok(absFamily, "ABS polymer family must exist.");
@@ -33,8 +29,8 @@ assert.ok(
   "Unsourced family ranges must remain null."
 );
 
-const trustedStats = buildTrustedStats(materials, families);
-const auditStats = buildAuditStats(materials);
+const trustedStats = repository.getCatalogStats();
+const auditStats = repository.getAuditStats();
 assert.equal(trustedStats.polymerFamilies, 7);
 assert.equal(trustedStats.verifiedCommercialGrades, 0);
 assert.equal(trustedStats.verifiedPropertyDataPoints, 0);
@@ -45,14 +41,22 @@ assert.equal(auditStats.quarantinedRecords, 128314);
 assert.equal(auditStats.quarantinedMaterialRecords, 7531);
 assert.ok(auditStats.generatedRecords > 0);
 assert.equal(
-  materials.some(isDefaultVisibleCommercialGrade),
+  repository.listMaterials({ limit: 48 }).total,
+  0,
+  "Quarantined legacy records must not enter the default commercial-grade catalog."
+);
+const audited = repository.listMaterials({ audit: true, limit: 48 }).items;
+assert.equal(
+  audited.some((material) => material.data_quality?.recommendation_eligible),
   false,
   "Quarantined legacy records must not enter the default commercial-grade catalog."
 );
 assert.equal(
-  partitionSearchResults(materials).referenceOrLegacyRecords.length,
-  materials.length
+  partitionSearchResults(audited).referenceOrLegacyRecords.length,
+  audited.length
 );
+assert.equal(repository.getMetrics().propertyEvidenceRowsRead, 0);
+repository.close();
 
 const browserContext = { window: {} };
 vm.createContext(browserContext);
@@ -116,8 +120,14 @@ const fakeFamilyForBoundaryTest = {
   );
   assert.ok(
     fs.readFileSync(path.join(root, "server.js"), "utf8")
-      .includes("isDefaultVisibleCommercialGrade"),
-    "The public API must use the commercial-grade visibility boundary."
+      .includes("new MaterialRepository"),
+    "The public API must use the SQL-backed material repository."
+  );
+  assert.equal(
+    fs.readFileSync(path.join(root, "server.js"), "utf8")
+      .includes("readMaterials("),
+    false,
+    "Server startup must not load the full material database."
   );
   process.stdout.write(
     "Catalog layering, family separation, trusted statistics, and recommendation boundary tests passed.\n"

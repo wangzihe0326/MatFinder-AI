@@ -1,8 +1,12 @@
 {
+  "engines": {
+    "node": ">=22.13 <25"
+  },
   "scripts": {
     "test": "npm run test:acceptance",
     "start": "node server.js",
     "start:prod": "node scripts/start-production.js",
+    "migrate": "python -B scripts/migrate.py",
     "build:frontend-config": "node scripts/build-frontend-config.js",
     "migrate:materials": "node scripts/migrate-materials-to-sqlite.js",
     "bilingual:materials": "node scripts/generate-bilingual-materials.js",
@@ -10,6 +14,7 @@
     "validate:materials": "node scripts/validate-material-database.js",
     "test:catalog-search": "node scripts/test-catalog-search.js",
     "test:catalog-layer": "node scripts/test-catalog-layer.js",
+    "test:startup-memory": "node scripts/test-startup-memory.js",
     "test:recommendation-safety": "node scripts/test-recommendation-safety.js",
     "test:evidence-quality": "node scripts/test-evidence-quality.js",
     "test:evidence-ui": "node scripts/test-evidence-ui-contract.js",
@@ -21,7 +26,7 @@
     "import:real-materials": "python -B scripts/import-real-materials.py",
     "rollback:real-materials": "python -B scripts/import-real-materials.py --rollback",
     "test:real-material-importer": "python -B scripts/test-real-material-importer.py",
-    "test:acceptance": "npm run test:evidence && npm run test:real-material-importer && npm run test:catalog-search && npm run test:catalog-layer",
+    "test:acceptance": "npm run test:evidence && npm run test:real-material-importer && npm run test:catalog-search && npm run test:catalog-layer && npm run test:startup-memory",
     "audit:database": "python -B scripts/analyze-database-storage.py",
     "optimize:database-indexes": "python -B scripts/optimize-database-indexes.py",
     "validate:real-material-import": "node scripts/validate-real-material-import.js",

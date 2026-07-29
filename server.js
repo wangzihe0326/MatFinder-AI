@@ -2,15 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { readMaterials } = require("./scripts/read-materials-sqlite");
-const { annotateMaterialQuality } = require("./material-quality");
-const { matchesMaterial, scoreMaterial } = require("./catalog-search");
-const { families: polymerFamilies } = require("./polymer-families");
-const {
-  buildAuditStats,
-  buildTrustedStats,
-  isDefaultVisibleCommercialGrade
-} = require("./catalog-layer");
+const { MaterialRepository } = require("./material-repository");
 const { readPilotStatus } = require("./pilot-status");
 
 const rootDir = __dirname;
@@ -23,12 +15,23 @@ const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const databasePath = path.resolve(rootDir, process.env.MATFINDER_DB_PATH || "matfinder.db");
 const allowedOrigins = parseList(process.env.MATFINDER_ALLOWED_ORIGINS);
 
-const materials = loadMaterials();
-const compactMaterials = materials.map(toCompactMaterial);
-const publicMaterials = materials.filter(isDefaultVisibleCommercialGrade);
-const compactPublicMaterials = publicMaterials.map(toCompactMaterial);
-const trustedStats = buildTrustedStats(materials, polymerFamilies);
-const auditStats = buildAuditStats(materials);
+const startupMemorySamples = [];
+logMemory("before_sqlite_connection");
+const repository = new MaterialRepository(databasePath);
+logMemory("after_sqlite_connection");
+const schemaInfo = repository.checkSchema();
+logMemory("after_schema_version_check", {
+  migrationExecuted: false,
+  schemaVersion: schemaInfo.version
+});
+const { families: polymerFamilies } = require("./polymer-families");
+const polymerFamilyCount = repository.getPolymerFamilyCount();
+logMemory("after_polymer_family_initialization", { polymerFamilyCount });
+const searchIndexInfo = repository.checkSearchIndexes();
+logMemory("after_search_index_check", {
+  indexBuildExecuted: false,
+  verifiedIndexCount: searchIndexInfo.verified.length
+});
 const pilotStatus = readPilotStatus();
 
 const mimeTypes = {
@@ -53,47 +56,35 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/health") {
+      const counts = repository.getDatabaseCounts();
       sendJson(response, 200, {
         status: "ok",
         environment: nodeEnv,
-        materials: materials.length,
+        materials: counts.materials,
+        propertyEvidence: counts.propertyEvidence,
         database: path.basename(databasePath),
-        openaiConfigured: Boolean(process.env.OPENAI_API_KEY)
+        openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
+        memory: memoryUsageInMegabytes(),
+        startupPeak: startupPeakInMegabytes(),
+        repository: repository.getMetrics()
       });
       return;
     }
 
     if (request.method === "GET" && requestPath === "/api/materials") {
-      const view = requestUrl.searchParams.get("view") === "full" ? "full" : "compact";
       const auditMode = requestUrl.searchParams.get("audit") === "1";
-      let source = auditMode
-        ? (view === "full" ? materials : compactMaterials)
-        : (view === "full" ? publicMaterials : compactPublicMaterials);
       const query = String(requestUrl.searchParams.get("q") || "").trim();
-      if (query) {
-        source = source
-          .filter((item) => matchesMaterial(item, query))
-          .sort((left, right) =>
-            scoreMaterial(right, query) - scoreMaterial(left, query) ||
-            String(left.name || "").localeCompare(String(right.name || ""))
-          );
-      }
-      const limitValue = requestUrl.searchParams.get("limit");
-      if (limitValue !== null) {
-        const limit = Math.min(200, Math.max(1, Number(limitValue) || 48));
-        const offset = Math.min(source.length, Math.max(0, Number(requestUrl.searchParams.get("offset")) || 0));
-        response.setHeader("X-Total-Count", String(source.length));
-        sendJson(response, 200, {
-          items: source.slice(offset, offset + limit),
-          total: source.length,
-          limit,
-          offset,
-          hasMore: offset + limit < source.length
-        });
-      } else {
-        response.setHeader("X-Total-Count", String(source.length));
-        sendJson(response, 200, source);
-      }
+      const result = repository.listMaterials({
+        audit: auditMode,
+        query,
+        limit: requestUrl.searchParams.get("limit"),
+        offset: requestUrl.searchParams.get("offset")
+      });
+      response.setHeader("X-Total-Count", String(result.total));
+      sendJson(response, 200, {
+        ...result,
+        items: result.items.map(toCompactMaterial)
+      });
       return;
     }
 
@@ -103,7 +94,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/catalog-stats") {
-      sendJson(response, 200, trustedStats);
+      sendJson(response, 200, repository.getCatalogStats());
       return;
     }
 
@@ -113,22 +104,29 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/admin/audit-summary") {
-      sendJson(response, 200, auditStats);
+      sendJson(response, 200, repository.getAuditStats());
+      return;
+    }
+
+    if (request.method === "GET" && requestPath === "/api/recommendation-candidates") {
+      const candidates = repository.getRecommendationCandidates({
+        limit: requestUrl.searchParams.get("limit")
+      });
+      sendJson(response, 200, {
+        items: candidates,
+        total: candidates.length,
+        bounded: true
+      });
       return;
     }
 
     if (request.method === "GET" && requestPath.startsWith("/api/materials/")) {
       const materialId = decodeURIComponent(requestPath.slice("/api/materials/".length));
-      const material = materials.find((item) => item.id === materialId);
+      const material = repository.getMaterialById(materialId, {
+        audit: requestUrl.searchParams.get("audit") === "1"
+      });
       if (!material) {
         sendJson(response, 404, { error: "Material not found" });
-        return;
-      }
-      if (
-        requestUrl.searchParams.get("audit") !== "1" &&
-        !isDefaultVisibleCommercialGrade(material)
-      ) {
-        sendJson(response, 404, { error: "Material not found in the public catalog" });
         return;
       }
       sendJson(response, 200, material);
@@ -157,8 +155,43 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, () => {
+  logMemory("after_http_listen");
   console.log(`MatFinder AI running in ${nodeEnv} mode at http://localhost:${port}`);
 });
+
+function logMemory(phase, metadata = {}) {
+  const usage = process.memoryUsage();
+  startupMemorySamples.push({ phase, ...usage });
+  console.log(JSON.stringify({
+    type: "startup_memory",
+    phase,
+    bytes: usage,
+    megabytes: memoryUsageInMegabytes(usage),
+    ...metadata
+  }));
+}
+
+function memoryUsageInMegabytes(usage = process.memoryUsage()) {
+  return Object.fromEntries(
+    ["rss", "heapTotal", "heapUsed", "external", "arrayBuffers"].map((field) => [
+      field,
+      Number((usage[field] / 1024 / 1024).toFixed(2))
+    ])
+  );
+}
+
+function startupPeakInMegabytes() {
+  return Object.fromEntries(
+    ["rss", "heapTotal", "heapUsed", "external", "arrayBuffers"].map((field) => [
+      field,
+      Number((
+        Math.max(0, ...startupMemorySamples.map((sample) => sample[field] || 0)) /
+        1024 /
+        1024
+      ).toFixed(2))
+    ])
+  );
+}
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -169,14 +202,6 @@ function loadEnvFile(filePath) {
     if (!match || process.env[match[1]]) return;
     process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
   });
-}
-
-function loadMaterials() {
-  if (!fs.existsSync(databasePath)) {
-    throw new Error(`SQLite database was not found at ${databasePath}. Ensure matfinder.db is included in the deployment artifact.`);
-  }
-
-  return readMaterials(databasePath).map(annotateMaterialQuality);
 }
 
 function toCompactMaterial(material) {
@@ -299,7 +324,7 @@ function compactSource(source) {
 async function handleMaterialAnalysis(request, response) {
   const body = await readJsonBody(request);
   const language = normalizeLanguage(body.language);
-  const material = materials.find((item) => item.id === body.materialId);
+  const material = repository.getMaterialById(body.materialId);
 
   if (!material) {
     sendJson(response, 404, { error: "Material not found" });
@@ -325,7 +350,7 @@ async function handleMaterialComparison(request, response) {
   const body = await readJsonBody(request);
   const language = normalizeLanguage(body.language);
   const requestedIds = Array.isArray(body.materialIds) ? body.materialIds.slice(0, 2) : [];
-  const pair = requestedIds.map((id) => materials.find((item) => item.id === id));
+  const pair = requestedIds.map((id) => repository.getMaterialById(id));
 
   if (pair.length !== 2 || pair.some((item) => !item)) {
     sendJson(response, 400, { error: "Exactly two valid materialIds are required" });
@@ -336,17 +361,11 @@ async function handleMaterialComparison(request, response) {
     sendJson(response, 400, { error: "Choose two different materials" });
     return;
   }
-  if (pair.some((item) =>
-    item.data_quality?.level === "quarantined" ||
-    !isDefaultVisibleCommercialGrade(item)
-  )) {
+  if (pair.some((item) => item.data_quality?.level === "quarantined")) {
     sendJson(response, 422, {
       error: "One or more material records failed quality checks",
       materialIds: pair
-        .filter((item) =>
-          item.data_quality?.level === "quarantined" ||
-          !isDefaultVisibleCommercialGrade(item)
-        )
+        .filter((item) => item.data_quality?.level === "quarantined")
         .map((item) => item.id)
     });
     return;

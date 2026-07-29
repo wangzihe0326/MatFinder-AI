@@ -10,8 +10,11 @@ let pilotStatus = { target: 0, families: [], counts: {}, slots: [] };
 let auditSummary = {};
 let auditMaterials = [];
 let auditMaterialTotal = 0;
+let materialCatalogTotal = 0;
 let recommendationService = null;
 const materialDetailCache = new Map();
+const MATERIAL_DETAIL_CACHE_LIMIT = 30;
+let materialSearchTimer = null;
 const apiBaseUrl = String(window.MatFinderConfig?.apiBaseUrl || "").replace(/\/$/, "");
 const DEFAULT_MIN_TEMP = -200;
 const DEFAULT_MIN_STRENGTH = 0;
@@ -1739,7 +1742,7 @@ async function loadMaterials() {
   elements.materialsGrid.innerHTML = `<p class="recommendation-empty">${t("generating")}</p>`;
   elements.emptyState.hidden = true;
   const responses = await Promise.all([
-    fetch(apiUrl("/api/materials?view=compact")),
+    fetch(apiUrl(`/api/materials?limit=${state.materialsPageSize}&offset=0`)),
     fetch(apiUrl("/api/polymer-families")),
     fetch(apiUrl("/api/catalog-stats")),
     fetch(apiUrl("/api/pilot-status")),
@@ -1748,14 +1751,41 @@ async function loadMaterials() {
   if (responses.some((response) => !response.ok)) {
     throw new Error("Failed to load the layered material catalog.");
   }
-  [
-    materials,
-    polymerFamilies,
-    catalogLayerStats,
-    pilotStatus,
-    auditSummary
+  const [
+    materialPayload,
+    familyPayload,
+    statsPayload,
+    pilotPayload,
+    auditPayload
   ] = await Promise.all(responses.map((response) => response.json()));
+  materials = materialPayload.items || [];
+  materialCatalogTotal = Number(materialPayload.total) || 0;
+  polymerFamilies = familyPayload;
+  catalogLayerStats = statsPayload;
+  pilotStatus = pilotPayload;
+  auditSummary = auditPayload;
   state.filteredMaterialsCache = { key: "", items: [] };
+}
+
+async function loadPublicMaterialPage(page = 1) {
+  const safePage = Math.max(1, Number(page) || 1);
+  const offset = (safePage - 1) * state.materialsPageSize;
+  const response = await fetch(
+    apiUrl(
+      `/api/materials?limit=${state.materialsPageSize}` +
+      `&offset=${offset}&q=${encodeURIComponent(state.query)}`
+    )
+  );
+  if (!response.ok) throw new Error("Failed to load the requested material page.");
+  const payload = await response.json();
+  materials = payload.items || [];
+  materialCatalogTotal = Number(payload.total) || 0;
+  state.materialsPage = safePage;
+  state.filteredMaterialsCache = { key: "", items: [] };
+  categories = [...new Set(materials.map((material) => material.category))]
+    .sort((left, right) => left.localeCompare(right));
+  renderCategoryOptions();
+  render();
 }
 
 async function loadAuditRecords() {
@@ -1813,8 +1843,16 @@ async function loadMaterialDetail(item) {
       materialDetailCache.delete(item.id);
       throw error;
     });
-  materialDetailCache.set(item.id, detailPromise);
+  setBoundedCache(materialDetailCache, item.id, detailPromise, MATERIAL_DETAIL_CACHE_LIMIT);
   return detailPromise;
+}
+
+function setBoundedCache(cache, key, value, limit) {
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > limit) {
+    cache.delete(cache.keys().next().value);
+  }
 }
 
 function apiUrl(path) {
@@ -1916,7 +1954,14 @@ function bindEvents() {
   elements.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value.trim().toLowerCase();
     resetMaterialsPage();
-    render();
+    renderFamilySearchResults();
+    window.clearTimeout(materialSearchTimer);
+    materialSearchTimer = window.setTimeout(() => {
+      loadPublicMaterialPage(1).catch((error) => {
+        console.error(error);
+        render();
+      });
+    }, 180);
   });
 
   elements.auditSearchInput.addEventListener("input", () => {
@@ -1987,7 +2032,7 @@ function bindEvents() {
     state.sort = "match";
     resetMaterialsPage();
     syncControls();
-    render();
+    loadPublicMaterialPage(1).catch(console.error);
   });
 
   elements.clearCompareButton.addEventListener("click", () => {
@@ -2007,11 +2052,17 @@ function bindEvents() {
 
 async function runRecommendation() {
   state.recommendationQuery = elements.requirementInput.value.trim();
-  const cacheKey = `${state.recommendationQuery}::${materials.length}`;
+  const cacheKey = state.recommendationQuery;
   let result = state.recommendationCache.get(cacheKey);
   if (!result) {
+    const response = await fetch(apiUrl("/api/recommendation-candidates?limit=200"));
+    if (!response.ok) throw new Error("Failed to load bounded recommendation candidates.");
+    const payload = await response.json();
+    recommendationService = window.MatFinderAI.createRecommendationService({
+      materials: payload.items || []
+    });
     result = await recommendationService.recommend(elements.requirementInput.value, { limit: 5 });
-    state.recommendationCache.set(cacheKey, result);
+    setBoundedCache(state.recommendationCache, cacheKey, result, 20);
   }
   state.recommendations = result.recommendations;
   state.recommendationCriteria = result.criteria;
@@ -3294,18 +3345,17 @@ function render() {
   renderDomainFacets();
 
   if (needsMaterialGrid) {
-    const totalPages = Math.max(1, Math.ceil(filtered.length / state.materialsPageSize));
+    const totalPages = Math.max(1, Math.ceil(materialCatalogTotal / state.materialsPageSize));
     if (state.materialsPage > totalPages) state.materialsPage = totalPages;
-    const pageStart = (state.materialsPage - 1) * state.materialsPageSize;
-    const pageItems = filtered.slice(pageStart, pageStart + state.materialsPageSize);
+    const pageItems = filtered;
 
-    elements.resultTitle.textContent = `${t("verifiedGradesTitle")} · ${filtered.length}`;
-    elements.emptyState.hidden = filtered.length > 0;
+    elements.resultTitle.textContent = `${t("verifiedGradesTitle")} · ${materialCatalogTotal}`;
+    elements.emptyState.hidden = pageItems.length > 0;
     elements.emptyState.textContent = state.query ? t("noMatches") : t("noVerifiedGrades");
 
     renderChips();
     renderCards(pageItems);
-    renderMaterialsPagination(filtered.length, totalPages);
+    renderMaterialsPagination(materialCatalogTotal, totalPages);
   }
 
   if (state.route === "compare") {
@@ -3884,8 +3934,7 @@ function renderMaterialsPagination(totalItems, totalPages) {
   previous.textContent = "‹";
   previous.disabled = state.materialsPage <= 1;
   previous.addEventListener("click", () => {
-    state.materialsPage = Math.max(1, state.materialsPage - 1);
-    render();
+    loadPublicMaterialPage(Math.max(1, state.materialsPage - 1)).catch(console.error);
   });
 
   const next = document.createElement("button");
@@ -3893,8 +3942,7 @@ function renderMaterialsPagination(totalItems, totalPages) {
   next.textContent = "›";
   next.disabled = state.materialsPage >= totalPages;
   next.addEventListener("click", () => {
-    state.materialsPage = Math.min(totalPages, state.materialsPage + 1);
-    render();
+    loadPublicMaterialPage(Math.min(totalPages, state.materialsPage + 1)).catch(console.error);
   });
 
   const select = document.createElement("select");
@@ -3907,8 +3955,7 @@ function renderMaterialsPagination(totalItems, totalPages) {
     select.append(option);
   }
   select.addEventListener("change", (event) => {
-    state.materialsPage = Number(event.target.value);
-    render();
+    loadPublicMaterialPage(Number(event.target.value)).catch(console.error);
   });
 
   elements.materialsPagination.replaceChildren(label, previous, select, next);

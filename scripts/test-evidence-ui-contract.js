@@ -41,7 +41,7 @@ assert.ok(
 );
 assert.ok(
   serverSource.includes('item.data_quality?.level === "quarantined"') &&
-    serverSource.includes("!isDefaultVisibleCommercialGrade(item)"),
+    serverSource.includes("repository.getMaterialById(id)"),
   "Server-side comparison must reject quarantined and non-public legacy materials."
 );
 
