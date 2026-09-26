@@ -3,11 +3,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const { MaterialRepository } = require("../material-repository");
-const { families, matchesFamily } = require("../polymer-families");
+const { families, matchesFamily } = require("../public/polymer-families");
 const {
   isPolymerFamily,
   partitionSearchResults
-} = require("../catalog-layer");
+} = require("../public/catalog-layer");
 
 const root = path.resolve(__dirname, "..");
 const repository = new MaterialRepository(path.join(root, "matfinder.db"));
@@ -61,7 +61,7 @@ repository.close();
 const browserContext = { window: {} };
 vm.createContext(browserContext);
 vm.runInContext(
-  fs.readFileSync(path.join(root, "recommendation-engine.js"), "utf8"),
+  fs.readFileSync(path.join(root, "public", "recommendation-engine.js"), "utf8"),
   browserContext,
   { filename: "recommendation-engine.js" }
 );
@@ -110,8 +110,8 @@ const fakeFamilyForBoundaryTest = {
   assert.equal(result.groups.rejectedMaterials.length, 0);
 
   const frontEndSource = [
-    fs.readFileSync(path.join(root, "index.html"), "utf8"),
-    fs.readFileSync(path.join(root, "app.js"), "utf8")
+    fs.readFileSync(path.join(root, "public", "index.html"), "utf8"),
+    fs.readFileSync(path.join(root, "public", "app.js"), "utf8")
   ].join("\n");
   assert.equal(
     frontEndSource.includes("120,496") || frontEndSource.includes("120496"),

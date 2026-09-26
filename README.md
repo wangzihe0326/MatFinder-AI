@@ -67,11 +67,13 @@ flowchart TD
 
 ```txt
 .
-|-- index.html
-|-- styles.css
-|-- app.js
-|-- recommendation-engine.js
-|-- config.js
+|-- public/
+|   |-- index.html
+|   |-- styles.css
+|   |-- app.js
+|   |-- recommendation-engine.js
+|   |-- config.js
+|   `-- assets/
 |-- server.js
 |-- matfinder.db
 |-- data/
@@ -206,7 +208,7 @@ Vercel is recommended for static frontend hosting only. Deploy the backend to Re
 
 - Set `MATFINDER_API_BASE_URL` to the backend URL.
 - Use `npm run build:frontend-config` as the build command.
-- Use `.` as the output directory.
+- Use `public` as the output directory.
 - Add the Vercel origin to the backend `MATFINDER_ALLOWED_ORIGINS` value.
 
 ## Quality Checks
@@ -215,8 +217,8 @@ Recommended checks before deployment:
 
 ```bash
 node --check server.js
-node --check app.js
-node --check recommendation-engine.js
+node --check public/app.js
+node --check public/recommendation-engine.js
 npm start
 ```
 

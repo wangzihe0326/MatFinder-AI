@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const appSource = fs.readFileSync(path.resolve(__dirname, "..", "app.js"), "utf8");
+const appSource = fs.readFileSync(path.resolve(__dirname, "..", "public", "app.js"), "utf8");
 const serverSource = fs.readFileSync(path.resolve(__dirname, "..", "server.js"), "utf8");
 
 [
