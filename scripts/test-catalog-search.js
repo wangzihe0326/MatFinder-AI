@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { MaterialRepository } = require("../material-repository");
-const { matchesMaterial, scoreMaterial } = require("../catalog-search");
+const { matchesMaterial, scoreMaterial } = require("../public/catalog-search");
 
 const repository = new MaterialRepository(path.resolve(__dirname, "..", "matfinder.db"));
 const absResult = repository.listMaterials({ audit: true, query: "ABS", limit: 200 });

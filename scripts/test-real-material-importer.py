@@ -311,7 +311,7 @@ vm.runInContext(fs.readFileSync(process.argv[5], "utf8"), browserContext);
             str(ROOT / "scripts" / "read-materials-sqlite.js"),
             str(database),
             str(ROOT / "material-quality.js"),
-            str(ROOT / "recommendation-engine.js"),
+            str(ROOT / "public" / "recommendation-engine.js"),
         ],
         capture_output=True,
         text=True,

@@ -6,6 +6,8 @@ const { MaterialRepository } = require("./material-repository");
 const { readPilotStatus } = require("./pilot-status");
 
 const rootDir = __dirname;
+const publicDir = path.join(rootDir, "public");
+const realPublicDir = fs.realpathSync(publicDir);
 loadEnvFile(path.join(rootDir, ".env"));
 loadEnvFile(path.join(rootDir, ".env.local"));
 
@@ -24,7 +26,7 @@ logMemory("after_schema_version_check", {
   migrationExecuted: false,
   schemaVersion: schemaInfo.version
 });
-const { families: polymerFamilies } = require("./polymer-families");
+const { families: polymerFamilies } = require("./public/polymer-families");
 const polymerFamilyCount = repository.getPolymerFamilyCount();
 logMemory("after_polymer_family_initialization", { polymerFamilyCount });
 const searchIndexInfo = repository.checkSearchIndexes();
@@ -41,6 +43,28 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml; charset=utf-8"
 };
+
+const appRoutes = new Set([
+  "/",
+  "/materials",
+  "/families",
+  "/pilot",
+  "/audit",
+  "/compare",
+  "/copilot",
+  "/about"
+]);
+
+const publicFiles = new Set([
+  "/index.html",
+  "/styles.css",
+  "/config.js",
+  "/catalog-search.js",
+  "/polymer-families.js",
+  "/catalog-layer.js",
+  "/recommendation-engine.js",
+  "/app.js"
+]);
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -516,38 +540,67 @@ function normalizeList(value) {
 
 function serveStatic(request, response) {
   const url = new URL(request.url, `http://localhost:${port}`);
-  const requestedPath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
-  const filePath = path.normalize(path.join(rootDir, requestedPath));
-
-  if (!filePath.startsWith(rootDir)) {
-    response.writeHead(403);
-    response.end("Forbidden");
+  if (appRoutes.has(url.pathname)) {
+    servePublicFile(path.join(publicDir, "index.html"), response);
     return;
   }
 
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-    const appRoutes = new Set([
-      "/",
-      "/materials",
-      "/families",
-      "/pilot",
-      "/audit",
-      "/compare",
-      "/copilot",
-      "/about"
-    ]);
-    const acceptsHtml = String(request.headers.accept || "").includes("text/html");
-    const hasExtension = Boolean(path.extname(requestedPath));
-    if ((acceptsHtml && !hasExtension) || appRoutes.has(url.pathname)) {
-      serveFile(path.join(rootDir, "index.html"), response);
+  const filePath = resolvePublicFile(url.pathname);
+  if (!filePath) {
+    sendNotFound(response);
+    return;
+  }
+
+  servePublicFile(filePath, response);
+}
+
+function resolvePublicFile(requestPath) {
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(requestPath).replace(/\\/g, "/");
+  } catch {
+    return null;
+  }
+
+  if (!decodedPath.startsWith("/") || decodedPath.includes("\0")) return null;
+  if (decodedPath.split("/").some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+
+  if (publicFiles.has(decodedPath)) {
+    return path.join(publicDir, decodedPath.slice(1));
+  }
+
+  if (!decodedPath.startsWith("/assets/")) return null;
+  const filePath = path.resolve(publicDir, `.${decodedPath}`);
+  const relativePath = path.relative(publicDir, filePath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) return null;
+  return filePath;
+}
+
+function servePublicFile(filePath, response) {
+  try {
+    if (!fs.statSync(filePath).isFile()) {
+      sendNotFound(response);
       return;
     }
-    response.writeHead(404);
-    response.end("Not found");
-    return;
-  }
 
-  serveFile(filePath, response);
+    const realFilePath = fs.realpathSync(filePath);
+    const relativePath = path.relative(realPublicDir, realFilePath);
+    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      sendNotFound(response);
+      return;
+    }
+
+    serveFile(realFilePath, response);
+  } catch {
+    sendNotFound(response);
+  }
+}
+
+function sendNotFound(response) {
+  response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+  response.end("Not found");
 }
 
 function serveFile(filePath, response) {

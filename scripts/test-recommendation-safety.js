@@ -9,7 +9,7 @@ const browserContext = { window: {} };
 
 vm.createContext(browserContext);
 vm.runInContext(
-  fs.readFileSync(path.join(rootDir, "recommendation-engine.js"), "utf8"),
+  fs.readFileSync(path.join(rootDir, "public", "recommendation-engine.js"), "utf8"),
   browserContext,
   { filename: "recommendation-engine.js" }
 );

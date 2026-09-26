@@ -122,11 +122,11 @@ Vercel is recommended for the static frontend only. Deploy the API/backend to Re
 4. Use build command:
    - `npm run build:frontend-config`
 5. Use output directory:
-   - `.`
+   - `public`
 6. Deploy.
 7. After Vercel gives you a production URL, add that exact origin to the backend `MATFINDER_ALLOWED_ORIGINS` value and redeploy/restart the backend if needed.
 
-The build command writes `config.js`, and the browser will call:
+The build command writes `public/config.js`, and the browser will call:
 
 ```txt
 https://your-backend-domain/api/materials

@@ -1,4 +1,4 @@
 {
   "buildCommand": "npm run build:frontend-config",
-  "outputDirectory": "."
+  "outputDirectory": "public"
 }
