@@ -4,6 +4,14 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 const { MaterialRepository } = require("./material-repository");
 const { readPilotStatus } = require("./pilot-status");
+const {
+  ApiError,
+  AiCoordinator,
+  MAX_PROMPT_BYTES,
+  createApiProtection,
+  readJsonBody,
+  validateAiBody
+} = require("./api-protection");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
@@ -14,8 +22,14 @@ loadEnvFile(path.join(rootDir, ".env.local"));
 const nodeEnv = process.env.NODE_ENV || "development";
 const port = Number(process.env.PORT || 3000);
 const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const allowedAiModels = new Set(["gpt-4.1-mini"]);
 const databasePath = path.resolve(rootDir, process.env.MATFINDER_DB_PATH || "matfinder.db");
 const allowedOrigins = parseList(process.env.MATFINDER_ALLOWED_ORIGINS);
+const apiProtection = createApiProtection({
+  adminToken: process.env.MATFINDER_ADMIN_TOKEN,
+  trustProxy: process.env.MATFINDER_TRUST_PROXY
+});
+const aiCoordinator = new AiCoordinator({ protection: apiProtection });
 
 const startupMemorySamples = [];
 logMemory("before_sqlite_connection");
@@ -79,6 +93,33 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    const auditMode = requestUrl.searchParams.get("audit") === "1";
+    const auditRoute = request.method === "GET" && (
+      requestPath === "/api/admin/audit-summary" ||
+      (auditMode && (requestPath === "/api/materials" || requestPath.startsWith("/api/materials/")))
+    );
+    const identity = apiProtection.identity(request);
+    if (auditRoute) {
+      response.setHeader("Cache-Control", "no-store");
+      const access = apiProtection.admin(identity, request.headers.authorization);
+      if (access.status === 401) {
+        response.setHeader("WWW-Authenticate", "Bearer");
+        response.setHeader("Cache-Control", "no-store");
+        sendJson(response, 401, { error: "Administrator authentication required" });
+        return;
+      }
+      if (access.status === 429) {
+        sendRateLimit(response, access.retryAfterSeconds);
+        return;
+      }
+    } else if (request.method === "GET" && requestPath.startsWith("/api/")) {
+      const retryAfterSeconds = apiProtection.publicGet(identity, publicApiWeight(requestPath));
+      if (retryAfterSeconds) {
+        sendRateLimit(response, retryAfterSeconds);
+        return;
+      }
+    }
+
     if (request.method === "GET" && requestPath === "/api/health") {
       const counts = repository.getDatabaseCounts();
       sendJson(response, 200, {
@@ -96,7 +137,6 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/materials") {
-      const auditMode = requestUrl.searchParams.get("audit") === "1";
       const query = String(requestUrl.searchParams.get("q") || "").trim();
       const result = repository.listMaterials({
         audit: auditMode,
@@ -147,7 +187,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "GET" && requestPath.startsWith("/api/materials/")) {
       const materialId = decodeURIComponent(requestPath.slice("/api/materials/".length));
       const material = repository.getMaterialById(materialId, {
-        audit: requestUrl.searchParams.get("audit") === "1"
+        audit: auditMode
       });
       if (!material) {
         sendJson(response, 404, { error: "Material not found" });
@@ -158,12 +198,12 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && requestPath === "/api/material-analysis") {
-      await handleMaterialAnalysis(request, response);
+      await handleMaterialAnalysis(request, response, identity);
       return;
     }
 
     if (request.method === "POST" && requestPath === "/api/material-comparison") {
-      await handleMaterialComparison(request, response);
+      await handleMaterialComparison(request, response, identity);
       return;
     }
 
@@ -174,9 +214,34 @@ const server = http.createServer(async (request, response) => {
 
     serveStatic(request, response);
   } catch (error) {
+    if (response.destroyed || response.writableEnded) return;
+    if (error instanceof ApiError) {
+      if (error.status === 499) return;
+      if (error.status === 429) {
+        sendRateLimit(response, error.retryAfterSeconds || 5);
+        return;
+      }
+      if (error.status === 413) response.setHeader("Connection", "close");
+      response.setHeader("Cache-Control", "no-store");
+      sendJson(response, error.status, { error: error.message });
+      return;
+    }
     sendJson(response, 500, { error: "Server error", detail: error.message });
   }
 });
+
+function publicApiWeight(requestPath) {
+  if (requestPath === "/api/catalog-stats" || requestPath === "/api/recommendation-candidates") return 5;
+  if (requestPath === "/api/materials" || requestPath.startsWith("/api/materials/")) return 2;
+  return 1;
+}
+
+function sendRateLimit(response, retryAfterSeconds) {
+  const seconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  response.setHeader("Retry-After", String(seconds));
+  response.setHeader("Cache-Control", "no-store");
+  sendJson(response, 429, { error: "Rate limit exceeded", retryAfterSeconds: seconds });
+}
 
 server.listen(port, () => {
   logMemory("after_http_listen");
@@ -345,10 +410,11 @@ function compactSource(source) {
   };
 }
 
-async function handleMaterialAnalysis(request, response) {
-  const body = await readJsonBody(request);
-  const language = normalizeLanguage(body.language);
-  const material = repository.getMaterialById(body.materialId);
+async function handleMaterialAnalysis(request, response, identity) {
+  const retryAfterSeconds = apiProtection.aiClient(identity);
+  if (retryAfterSeconds) return sendRateLimit(response, retryAfterSeconds);
+  const { materialIds, language } = validateAiBody("analysis", await readJsonBody(request));
+  const material = repository.getMaterialById(materialIds[0]);
 
   if (!material) {
     sendJson(response, 404, { error: "Material not found" });
@@ -365,16 +431,32 @@ async function handleMaterialAnalysis(request, response) {
     sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
     return;
   }
+  if (!allowedAiModels.has(model)) {
+    sendJson(response, 503, { error: "AI model is unavailable" });
+    return;
+  }
 
-  const analysis = await generateMaterialAnalysis(material, language);
+  const providerBody = buildProviderBody(buildAnalysisPrompt(material, language), 700);
+  const key = JSON.stringify(["analysis", model, language, material.id]);
+  const analysis = await aiCoordinator.run({
+    key,
+    identity,
+    response,
+    task: async (signal) => {
+      const parsed = parseJsonObject(await requestOpenAIJson(providerBody, signal));
+      validateProviderResult("analysis", parsed);
+      return normalizeAnalysis(parsed);
+    }
+  });
+  if (response.destroyed) return;
   sendJson(response, 200, { materialId: material.id, materialName: material.name, analysis });
 }
 
-async function handleMaterialComparison(request, response) {
-  const body = await readJsonBody(request);
-  const language = normalizeLanguage(body.language);
-  const requestedIds = Array.isArray(body.materialIds) ? body.materialIds.slice(0, 2) : [];
-  const pair = requestedIds.map((id) => repository.getMaterialById(id));
+async function handleMaterialComparison(request, response, identity) {
+  const retryAfterSeconds = apiProtection.aiClient(identity);
+  if (retryAfterSeconds) return sendRateLimit(response, retryAfterSeconds);
+  const { materialIds, language } = validateAiBody("comparison", await readJsonBody(request));
+  const pair = materialIds.map((id) => repository.getMaterialById(id));
 
   if (pair.length !== 2 || pair.some((item) => !item)) {
     sendJson(response, 400, { error: "Exactly two valid materialIds are required" });
@@ -398,8 +480,24 @@ async function handleMaterialComparison(request, response) {
     sendJson(response, 503, { error: "OPENAI_API_KEY is not configured" });
     return;
   }
+  if (!allowedAiModels.has(model)) {
+    sendJson(response, 503, { error: "AI model is unavailable" });
+    return;
+  }
 
-  const comparison = await generateMaterialComparison(pair, language);
+  const providerBody = buildProviderBody(buildComparisonPrompt(pair, language), 900);
+  const key = JSON.stringify(["comparison", model, language, ...pair.map((item) => item.id)]);
+  const comparison = await aiCoordinator.run({
+    key,
+    identity,
+    response,
+    task: async (signal) => {
+      const parsed = parseJsonObject(await requestOpenAIJson(providerBody, signal));
+      validateProviderResult("comparison", parsed);
+      return normalizeComparison(parsed);
+    }
+  });
+  if (response.destroyed) return;
   sendJson(response, 200, {
     materialIds: pair.map((item) => item.id),
     materialNames: pair.map((item) => item.name),
@@ -407,8 +505,8 @@ async function handleMaterialComparison(request, response) {
   });
 }
 
-async function generateMaterialAnalysis(material, language) {
-  const prompt = {
+function buildAnalysisPrompt(material, language) {
+  return {
     targetLanguage: language === "zh" ? "Simplified Chinese" : "English",
     task: "Explain this polymer material using only the supplied local database fields. Do not invent properties, standards, certifications, numeric values, grades, or applications that are not supported by the provided object. If something is not specified, say so plainly.",
     requiredJsonShape: {
@@ -419,13 +517,10 @@ async function generateMaterialAnalysis(material, language) {
     },
     material
   };
-
-  const content = await requestOpenAIJson(prompt);
-  return normalizeAnalysis(parseJsonObject(content));
 }
 
-async function generateMaterialComparison(pair, language) {
-  const prompt = {
+function buildComparisonPrompt(pair, language) {
+  return {
     targetLanguage: language === "zh" ? "Simplified Chinese" : "English",
     task: "Compare these two polymer materials using only the supplied local database profiles. Do not invent properties, standards, certifications, numeric values, grades, or applications that are not supported by the provided objects. If a difference is not supported by the fields, say it is not specified.",
     requiredJsonShape: {
@@ -436,43 +531,65 @@ async function generateMaterialComparison(pair, language) {
     },
     materials: pair
   };
-
-  const content = await requestOpenAIJson(prompt);
-  return normalizeComparison(parseJsonObject(content));
 }
 
-async function requestOpenAIJson(prompt) {
+function buildProviderBody(prompt, maxCompletionTokens) {
+  const body = JSON.stringify({
+    model,
+    temperature: 0.2,
+    max_completion_tokens: maxCompletionTokens,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a cautious polymer materials assistant. Explain only from provided source data. Return strict JSON in the requested targetLanguage and do not include markdown."
+      },
+      {
+        role: "user",
+        content: JSON.stringify(prompt)
+      }
+    ]
+  });
+  if (Buffer.byteLength(body) > MAX_PROMPT_BYTES) {
+    throw new ApiError(422, "AI input exceeds size limit");
+  }
+  return body;
+}
+
+async function requestOpenAIJson(body, signal) {
   const apiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
     },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a cautious polymer materials assistant. Explain only from provided source data. Return strict JSON in the requested targetLanguage and do not include markdown."
-        },
-        {
-          role: "user",
-          content: JSON.stringify(prompt)
-        }
-      ]
-    })
+    body
   });
 
   const payload = await apiResponse.json();
 
   if (!apiResponse.ok) {
-    const message = payload.error?.message || "OpenAI request failed";
-    throw new Error(message);
+    throw new Error("OpenAI request failed");
   }
 
-  return payload.choices?.[0]?.message?.content || "{}";
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content.trim()) throw new Error("Malformed AI response");
+  return content;
+}
+
+function validateProviderResult(type, result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    throw new Error("Malformed AI response");
+  }
+  const textField = type === "analysis" ? "overview" : "selectionAdvice";
+  const listFields = type === "analysis"
+    ? ["advantages", "limitations", "recommendedApplications"]
+    : ["keyDifferences", "strengthsAndWeaknesses", "recommendedUseCases"];
+  if (typeof result[textField] !== "string" || !result[textField].trim() ||
+      listFields.some((field) => !Array.isArray(result[field]))) {
+    throw new Error("Malformed AI response");
+  }
 }
 
 function normalizeAnalysis(analysis) {
@@ -491,10 +608,6 @@ function normalizeComparison(comparison) {
     recommendedUseCases: normalizeList(comparison.recommendedUseCases),
     selectionAdvice: String(comparison.selectionAdvice || "No selection advice returned.")
   };
-}
-
-function normalizeLanguage(value) {
-  return value === "en" ? "en" : "zh";
 }
 
 function parseList(value) {
@@ -609,33 +722,14 @@ function serveFile(filePath, response) {
   fs.createReadStream(filePath).pipe(response);
 }
 
-function readJsonBody(request) {
-  return new Promise((resolve, reject) => {
-    let body = "";
-    request.on("data", (chunk) => {
-      body += chunk;
-      if (body.length > 64_000) {
-        request.destroy();
-        reject(new Error("Request body too large"));
-      }
-    });
-    request.on("end", () => {
-      try {
-        resolve(JSON.parse(body || "{}"));
-      } catch (error) {
-        reject(new Error("Invalid JSON body"));
-      }
-    });
-  });
-}
-
 function sendJson(response, status, payload) {
   const json = JSON.stringify(payload);
   const body = response.acceptsGzip && Buffer.byteLength(json) > 1024
     ? zlib.gzipSync(json, { level: zlib.constants.Z_BEST_SPEED })
     : Buffer.from(json);
   response.setHeader("Content-Type", "application/json; charset=utf-8");
-  response.setHeader("Vary", "Accept-Encoding");
+  const vary = String(response.getHeader("Vary") || "");
+  response.setHeader("Vary", vary ? `${vary}, Accept-Encoding` : "Accept-Encoding");
   if (response.acceptsGzip && Buffer.byteLength(json) > 1024) {
     response.setHeader("Content-Encoding", "gzip");
   }

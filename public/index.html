@@ -22,7 +22,6 @@
           <a href="/families" data-route-link="families" data-i18n="navFamilies">Learn</a>
           <a href="/pilot" data-route-link="pilot" data-i18n="navPilot">Pilot</a>
           <a href="/compare" data-route-link="compare" data-i18n="navCompare">Compare</a>
-          <a href="/audit" data-route-link="audit" data-i18n="navAudit">Audit</a>
           <a href="/about" data-route-link="about" data-i18n="navAbout">About</a>
         </nav>
         <div class="top-actions" aria-label="Platform overview">
@@ -271,19 +270,25 @@
           <h2 data-i18n="auditTitle">Reference and legacy records</h2>
           <p data-i18n="auditIntro">These records are isolated from default search, recommendation, comparison, AI analysis, and trusted statistics.</p>
         </div>
-        <div id="auditStatsGrid" class="catalog-stats"></div>
-        <div class="catalog-search audit-search">
+        <form id="auditAuthForm" class="catalog-search audit-search">
+          <label for="auditAdminToken">Administrator token</label>
+          <input id="auditAdminToken" type="password" autocomplete="off" required />
+          <button class="primary-button" type="submit">Open audit</button>
+          <p id="auditAuthStatus" role="status"></p>
+        </form>
+        <div id="auditStatsGrid" class="catalog-stats" data-admin-content hidden></div>
+        <div class="catalog-search audit-search" data-admin-content hidden>
           <label for="auditSearchInput" data-i18n="auditSearchLabel">Search isolated records</label>
           <input id="auditSearchInput" type="search" placeholder="Exact family, grade, or record identity" autocomplete="off" />
         </div>
-        <div class="section-heading">
+        <div class="section-heading" data-admin-content hidden>
           <div>
             <p class="result-label">Reference or Legacy Records</p>
             <h2 id="auditResultTitle">0 records</h2>
           </div>
         </div>
-        <div id="auditRecordsGrid" class="family-grid"></div>
-        <div class="about-section">
+        <div id="auditRecordsGrid" class="family-grid" data-admin-content hidden></div>
+        <div class="about-section" data-admin-content hidden>
           <h3 data-i18n="auditBoundaryTitle">Audit boundary</h3>
           <p data-i18n="auditBoundaryBody">Audit counts are operational inventory only. They are not trusted material or property claims.</p>
         </div>

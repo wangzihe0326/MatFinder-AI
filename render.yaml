@@ -13,5 +13,9 @@ services:
         value: gpt-4.1-mini
       - key: MATFINDER_ALLOWED_ORIGINS
         sync: false
+      - key: MATFINDER_TRUST_PROXY
+        value: render
+      - key: MATFINDER_ADMIN_TOKEN
+        sync: false
       - key: OPENAI_API_KEY
         sync: false

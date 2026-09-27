@@ -10,6 +10,8 @@ let pilotStatus = { target: 0, families: [], counts: {}, slots: [] };
 let auditSummary = {};
 let auditMaterials = [];
 let auditMaterialTotal = 0;
+let adminToken = null;
+let auditSearchTimer;
 let materialCatalogTotal = 0;
 let recommendationService = null;
 const materialDetailCache = new Map();
@@ -1045,6 +1047,10 @@ const elements = {
   pilotStatusGrid: document.querySelector("#pilotStatusGrid"),
   pilotPlanGrid: document.querySelector("#pilotPlanGrid"),
   auditStatsGrid: document.querySelector("#auditStatsGrid"),
+  auditAuthForm: document.querySelector("#auditAuthForm"),
+  auditAdminToken: document.querySelector("#auditAdminToken"),
+  auditAuthStatus: document.querySelector("#auditAuthStatus"),
+  auditContent: document.querySelectorAll("[data-admin-content]"),
   auditSearchInput: document.querySelector("#auditSearchInput"),
   auditResultTitle: document.querySelector("#auditResultTitle"),
   auditRecordsGrid: document.querySelector("#auditRecordsGrid"),
@@ -1645,7 +1651,6 @@ async function init() {
   renderFamilySearchResults();
   renderFamilyLearningPages();
   renderPilotStatus();
-  renderAuditSummary();
   bindEvents();
   applyLanguage();
   setRoute(routeFromPath(window.location.pathname), { replace: true });
@@ -1698,7 +1703,7 @@ function setRoute(route, options = {}) {
     renderCopilotRoute();
   }
   if (state.route === "audit") {
-    loadAuditRecords();
+    showAuditAccess();
   }
   if (!options.replace && state.route === "materials" && materials.length && !state.materialsGridRendered) {
     render();
@@ -1745,8 +1750,7 @@ async function loadMaterials() {
     fetch(apiUrl(`/api/materials?limit=${state.materialsPageSize}&offset=0`)),
     fetch(apiUrl("/api/polymer-families")),
     fetch(apiUrl("/api/catalog-stats")),
-    fetch(apiUrl("/api/pilot-status")),
-    fetch(apiUrl("/api/admin/audit-summary"))
+    fetch(apiUrl("/api/pilot-status"))
   ]);
   if (responses.some((response) => !response.ok)) {
     throw new Error("Failed to load the layered material catalog.");
@@ -1755,15 +1759,13 @@ async function loadMaterials() {
     materialPayload,
     familyPayload,
     statsPayload,
-    pilotPayload,
-    auditPayload
+    pilotPayload
   ] = await Promise.all(responses.map((response) => response.json()));
   materials = materialPayload.items || [];
   materialCatalogTotal = Number(materialPayload.total) || 0;
   polymerFamilies = familyPayload;
   catalogLayerStats = statsPayload;
   pilotStatus = pilotPayload;
-  auditSummary = auditPayload;
   state.filteredMaterialsCache = { key: "", items: [] };
 }
 
@@ -1789,12 +1791,23 @@ async function loadPublicMaterialPage(page = 1) {
 }
 
 async function loadAuditRecords() {
-  if (!elements.auditRecordsGrid) return;
+  if (!elements.auditRecordsGrid || !adminToken) return;
   const query = elements.auditSearchInput?.value.trim() || "";
   elements.auditRecordsGrid.innerHTML = `<p class="recommendation-empty">${escapeHtml(t("generating"))}</p>`;
-  const response = await fetch(
-    apiUrl(`/api/materials?view=compact&audit=1&limit=48&q=${encodeURIComponent(query)}`)
-  );
+  let response;
+  try {
+    response = await fetch(
+      apiUrl(`/api/materials?view=compact&audit=1&limit=48&q=${encodeURIComponent(query)}`),
+      { headers: { Authorization: `Bearer ${adminToken}` } }
+    );
+  } catch {
+    elements.auditRecordsGrid.innerHTML = `<p class="recommendation-empty">Audit records unavailable.</p>`;
+    return;
+  }
+  if (response.status === 401) {
+    clearAuditAccess("Administrator token was rejected. Please enter it again.");
+    return;
+  }
   if (!response.ok) {
     elements.auditRecordsGrid.innerHTML = `<p class="recommendation-empty">Audit records unavailable.</p>`;
     return;
@@ -1803,6 +1816,53 @@ async function loadAuditRecords() {
   auditMaterials = payload.items || [];
   auditMaterialTotal = Number(payload.total) || 0;
   renderAuditRecords();
+}
+
+function clearAuditAccess(message = "") {
+  adminToken = null;
+  auditSummary = {};
+  auditMaterials = [];
+  auditMaterialTotal = 0;
+  elements.auditAuthForm.hidden = false;
+  elements.auditContent.forEach((item) => { item.hidden = true; });
+  elements.auditAuthStatus.textContent = message;
+}
+
+function showAuditAccess() {
+  if (!adminToken) {
+    clearAuditAccess();
+    return;
+  }
+  elements.auditAuthForm.hidden = true;
+  elements.auditContent.forEach((item) => { item.hidden = false; });
+  loadAuditRecords();
+}
+
+async function authenticateAudit(token) {
+  if (new URL(apiUrl("/api/admin/audit-summary"), window.location.href).origin !== window.location.origin) {
+    elements.auditAuthStatus.textContent = "Open the Render-hosted MatFinder app to access administrator audit.";
+    return;
+  }
+  elements.auditAuthStatus.textContent = "Checking administrator access…";
+  let response;
+  try {
+    response = await fetch(apiUrl("/api/admin/audit-summary"), {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  } catch {
+    elements.auditAuthStatus.textContent = "Audit service unavailable.";
+    return;
+  }
+  if (!response.ok) {
+    elements.auditAuthStatus.textContent = response.status === 429
+      ? "Too many attempts. Please wait and try again."
+      : "Administrator token was rejected.";
+    return;
+  }
+  auditSummary = await response.json();
+  adminToken = token;
+  renderAuditSummary();
+  showAuditAccess();
 }
 
 function renderAuditRecords() {
@@ -1885,7 +1945,7 @@ function bindEvents() {
       renderCopilotRoute();
     }
     if (state.route === "audit") {
-      loadAuditRecords();
+      showAuditAccess();
     }
     if (state.route === "materials" && materials.length && !state.materialsGridRendered) {
       render();
@@ -1965,7 +2025,15 @@ function bindEvents() {
   });
 
   elements.auditSearchInput.addEventListener("input", () => {
-    loadAuditRecords();
+    window.clearTimeout(auditSearchTimer);
+    auditSearchTimer = window.setTimeout(loadAuditRecords, 180);
+  });
+
+  elements.auditAuthForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const token = elements.auditAdminToken.value;
+    elements.auditAdminToken.value = "";
+    if (token) authenticateAudit(token);
   });
 
   elements.categoryFilter.addEventListener("change", (event) => {
