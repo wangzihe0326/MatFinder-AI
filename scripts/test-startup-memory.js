@@ -4,6 +4,11 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
+const adminFixture = "AD02_STARTUP_TEST_TOKEN_ONLY";
+const auditHeaders = (clientNumber) => ({
+  Authorization: `Bearer ${adminFixture}`,
+  "X-Forwarded-For": `198.51.100.${clientNumber}`
+});
 
 async function main() {
   const port = await freePort();
@@ -13,7 +18,9 @@ async function main() {
       ...process.env,
       NODE_ENV: "test",
       PORT: String(port),
-      MATFINDER_DB_PATH: path.join(root, "matfinder.db")
+      MATFINDER_DB_PATH: path.join(root, "matfinder.db"),
+      MATFINDER_ADMIN_TOKEN: adminFixture,
+      MATFINDER_TRUST_PROXY: "render"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -55,14 +62,16 @@ async function main() {
     assert.ok(publicSearch.items.length <= 20);
 
     const auditSearch = await requestJson(
-      `${base}/api/materials?audit=1&limit=20&offset=0&q=ABS`
+      `${base}/api/materials?audit=1&limit=20&offset=0&q=ABS`,
+      { headers: auditHeaders(1) }
     );
     assert.ok(auditSearch.items.length > 0);
     assert.ok(auditSearch.items.length <= 20);
     const auditId = auditSearch.items[0].id;
 
     const detail = await requestJson(
-      `${base}/api/materials/${encodeURIComponent(auditId)}?audit=1`
+      `${base}/api/materials/${encodeURIComponent(auditId)}?audit=1`,
+      { headers: auditHeaders(1) }
     );
     assert.equal(detail.id, auditId);
     assert.ok(detail.evidence?.properties);
@@ -76,11 +85,13 @@ async function main() {
     const beforeRepeatedReads = await requestJson(`${base}/api/health`);
     for (let index = 0; index < 25; index += 1) {
       const page = await requestJson(
-        `${base}/api/materials?audit=1&limit=20&offset=0&q=ABS`
+        `${base}/api/materials?audit=1&limit=20&offset=0&q=ABS`,
+        { headers: auditHeaders(10 + (index % 10)) }
       );
       assert.ok(page.items.length <= 20);
       const repeatedDetail = await requestJson(
-        `${base}/api/materials/${encodeURIComponent(auditId)}?audit=1`
+        `${base}/api/materials/${encodeURIComponent(auditId)}?audit=1`,
+        { headers: auditHeaders(10 + (index % 10)) }
       );
       assert.equal(repeatedDetail.id, auditId);
     }
@@ -138,8 +149,8 @@ async function main() {
   }
 }
 
-function requestJson(url) {
-  return fetch(url).then(async (response) => {
+function requestJson(url, options) {
+  return fetch(url, options).then(async (response) => {
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(`${response.status} ${url}: ${JSON.stringify(payload)}`);

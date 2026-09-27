@@ -13,10 +13,14 @@ Copy `.env.example` or `config/production.env.example` into your deployment plat
 | `MATFINDER_DB_PATH` | Optional | `matfinder.db` | SQLite database path. Use an absolute path if storing the DB on a mounted disk. |
 | `OPENAI_API_KEY` | Optional | none | Enables GPT material analysis and AI comparison. Local database features still work without it. |
 | `OPENAI_MODEL` | Optional | `gpt-4.1-mini` | Model used for AI analysis and comparison. |
+| `MATFINDER_ADMIN_TOKEN` | Audit access | none | Backend-only bearer credential for the `/audit` page and audit APIs. If absent, audit APIs remain closed. |
+| `MATFINDER_TRUST_PROXY` | Render only | empty | Set to exactly `render` on Render to derive client identity from a validated `X-Forwarded-For` chain. |
 | `MATFINDER_ALLOWED_ORIGINS` | Frontend-only deploys | empty | Comma-separated browser origins allowed to call `/api/*`, such as `https://matfinder-ai.vercel.app`. |
 | `MATFINDER_API_BASE_URL` | Frontend-only deploys | empty | Backend API origin for static frontend hosting, such as `https://matfinder-api.onrender.com`. |
 
-Do not commit `.env`, `.env.local`, or real API keys.
+Do not commit `.env`, `.env.local`, actual admin tokens, or real API keys. Keep the admin token out of `public/config.js` and Vercel build variables.
+
+Anonymous visitors do not see the Audit navigation item. Direct navigation to `/audit` on the same-origin backend prompts for the admin token. The browser keeps it only in current JavaScript memory; a refresh requires re-entry. The public catalog works when the token is absent.
 
 ## Health Check
 
@@ -85,11 +89,17 @@ Recommended backend deployment:
    - `NODE_ENV=production`
    - `MATFINDER_DB_PATH=/app/matfinder.db`
    - `OPENAI_MODEL=gpt-4.1-mini`
+   - `MATFINDER_TRUST_PROXY=render`
+   - `MATFINDER_ADMIN_TOKEN=<long random backend-only token>` if audit access is needed
    - `MATFINDER_ALLOWED_ORIGINS=https://your-vercel-app.vercel.app` if using a separate Vercel frontend
    - `OPENAI_API_KEY=<your key>` if AI explanations should be enabled
 6. Deploy and verify `/api/health`.
 
 Render will route traffic to the new instance after the health check passes.
+
+After deployment, verify how Render constructs `X-Forwarded-For` with a controlled request containing a forged prefix. The limiter uses the rightmost validated forwarded address in `render` trust mode and falls back to the socket address for malformed or oversized chains. Do not use `render` trust mode when the Node port is directly reachable from untrusted clients. In-process limits reset on restart and apply per instance; review the design before scaling beyond one instance.
+
+The AI API permits three quick actions per client, then refills one action every two minutes. A separate process-wide budget and a maximum of two active provider calls still apply when client IPs vary. Requests over 8 KiB, invalid fields, and non-public material IDs are rejected before provider use; provider calls time out after 20 seconds. Rate-limited requests return HTTP 429 with `Retry-After`.
 
 ## Railway
 
@@ -114,6 +124,8 @@ Recommended backend deployment:
 Official references: [Vercel environment variables](https://vercel.com/docs/environment-variables), [Vercel CLI deploy](https://vercel.com/docs/cli/deploy).
 
 Vercel is recommended for the static frontend only. Deploy the API/backend to Render or Railway first.
+
+Admin audit access is supported on the same-origin Render-hosted app. This deployment does not enable cross-origin `Authorization` for the separate Vercel frontend.
 
 1. Deploy the backend and copy its public URL, for example `https://matfinder-ai.onrender.com`.
 2. In Vercel, import the same repository as a static frontend project.
