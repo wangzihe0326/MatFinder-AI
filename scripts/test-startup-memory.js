@@ -22,7 +22,7 @@ async function main() {
       MATFINDER_ADMIN_TOKEN: adminFixture,
       MATFINDER_TRUST_PROXY: "render"
     },
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe", "ipc"]
   });
   let stdout = "";
   let stderr = "";
@@ -40,16 +40,17 @@ async function main() {
     const base = `http://127.0.0.1:${port}`;
     const startupHealth = await requestJson(`${base}/api/health`);
     assert.equal(startupHealth.status, "ok");
+    const startupDiagnostics = await requestDiagnostics(child);
     assert.ok(
-      startupHealth.startupPeak.heapUsed < 120,
-      `Startup heapUsed must stay below 120 MB; got ${startupHealth.startupPeak.heapUsed} MB.`
+      startupDiagnostics.startupPeak.heapUsed < 120,
+      `Startup heapUsed must stay below 120 MB; got ${startupDiagnostics.startupPeak.heapUsed} MB.`
     );
     assert.ok(
-      startupHealth.startupPeak.rss < 300,
-      `Startup RSS must stay below 300 MB; got ${startupHealth.startupPeak.rss} MB.`
+      startupDiagnostics.startupPeak.rss < 300,
+      `Startup RSS must stay below 300 MB; got ${startupDiagnostics.startupPeak.rss} MB.`
     );
-    assert.equal(startupHealth.repository.propertyEvidenceRowsRead, 0);
-    assert.equal(startupHealth.repository.fullEvidenceTableReads, 0);
+    assert.equal(startupDiagnostics.repository.propertyEvidenceRowsRead, 0);
+    assert.equal(startupDiagnostics.repository.fullEvidenceTableReads, 0);
 
     const home = await fetch(`${base}/`);
     assert.equal(home.status, 200);
@@ -82,7 +83,7 @@ async function main() {
     assert.ok(Array.isArray(candidates.items));
     assert.ok(candidates.items.length <= 200);
 
-    const beforeRepeatedReads = await requestJson(`${base}/api/health`);
+    const beforeRepeatedReads = await requestDiagnostics(child);
     for (let index = 0; index < 25; index += 1) {
       const page = await requestJson(
         `${base}/api/materials?audit=1&limit=20&offset=0&q=ABS`,
@@ -95,7 +96,7 @@ async function main() {
       );
       assert.equal(repeatedDetail.id, auditId);
     }
-    const afterRepeatedReads = await requestJson(`${base}/api/health`);
+    const afterRepeatedReads = await requestDiagnostics(child);
 
     assert.equal(afterRepeatedReads.repository.fullEvidenceTableReads, 0);
     assert.ok(
@@ -125,7 +126,7 @@ async function main() {
 
     process.stdout.write(
       JSON.stringify({
-        startupPeakMb: startupHealth.startupPeak,
+        startupPeakMb: startupDiagnostics.startupPeak,
         afterRepeatedReadsMb: afterRepeatedReads.memory,
         propertyEvidenceRowsRead:
           afterRepeatedReads.repository.propertyEvidenceRowsRead,
@@ -156,6 +157,28 @@ function requestJson(url, options) {
       throw new Error(`${response.status} ${url}: ${JSON.stringify(payload)}`);
     }
     return payload;
+  });
+}
+
+function requestDiagnostics(child) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.off("message", onMessage);
+      reject(new Error("Timed out waiting for test-process diagnostics"));
+    }, 5_000);
+    const onMessage = (message) => {
+      if (message?.type !== "test-diagnostics-response") return;
+      clearTimeout(timer);
+      child.off("message", onMessage);
+      resolve(message);
+    };
+    child.on("message", onMessage);
+    child.send({ type: "test-diagnostics-request" }, (error) => {
+      if (!error) return;
+      clearTimeout(timer);
+      child.off("message", onMessage);
+      reject(error);
+    });
   });
 }
 
