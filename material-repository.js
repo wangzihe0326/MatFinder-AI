@@ -14,6 +14,7 @@ const { annotateMaterialQuality } = require("./material-quality");
 const DEFAULT_PAGE_SIZE = 48;
 const MAX_PAGE_SIZE = 200;
 const DETAIL_BATCH_SIZE = 30;
+const READINESS_BATCH_SIZE = DETAIL_BATCH_SIZE;
 const FAMILY_CODES = Object.freeze(["ABS", "PC", "PA66", "POM", "PP", "PEEK", "TPU"]);
 
 const LIST_COLUMNS = `
@@ -216,6 +217,7 @@ class MaterialRepository {
       maximumRowsInSingleQuery: 0,
       fullEvidenceTableReads: 0
     };
+    this.readinessCache = null;
     this.database = new DatabaseSync(databasePath, {
       readOnly: true
     });
@@ -292,6 +294,61 @@ class MaterialRepository {
         )?.count || 0
       )
     };
+  }
+
+  checkTechnicalHealth() {
+    // Exercise the read-only connection and a required core table without a count scan.
+    this._get("SELECT 1 AS available FROM materials LIMIT 1", [], "health");
+  }
+
+  hasReadyPublicCommercialGrade() {
+    const now = Date.now();
+    if (this.readinessCache && now < this.readinessCache.expiresAt) {
+      return this.readinessCache.value;
+    }
+    let afterId = "";
+    let value = false;
+    while (true) {
+      const candidateIds = this._all(
+        `
+          SELECT m.material_id
+            FROM materials m
+            JOIN real_material_identities identity_row
+              ON identity_row.material_id = m.material_id
+           WHERE ${PUBLIC_BOUNDARY}
+             AND m.record_origin = 'imported'
+             AND NULLIF(TRIM(identity_row.manufacturer), '') IS NOT NULL
+             AND NULLIF(TRIM(identity_row.commercial_grade), '') IS NOT NULL
+             AND NULLIF(TRIM(identity_row.material_family), '') IS NOT NULL
+             AND m.material_id > ?
+           ORDER BY m.material_id
+           LIMIT ?
+        `,
+        [afterId, READINESS_BATCH_SIZE],
+        "readiness_candidates"
+      );
+      if (!candidateIds.length) break;
+      afterId = candidateIds[candidateIds.length - 1].material_id;
+      const ids = candidateIds.map((row) => row.material_id);
+      const rows = this._all(
+        `
+          SELECT ${LIST_COLUMNS}, NULL AS quality_level
+            FROM materials m
+            JOIN real_material_identities identity_row
+              ON identity_row.material_id = m.material_id
+           WHERE m.material_id IN (${placeholders(ids.length)})
+        `,
+        ids,
+        "readiness_materials"
+      );
+      // The normal candidate path uses this same hydration and quality authority.
+      value = this._hydrateDetailedRows(rows).some((material) =>
+        material.data_quality.recommendation_eligible === true);
+      if (value || candidateIds.length < READINESS_BATCH_SIZE) break;
+    }
+    // Bound public probe cost while still noticing offline data changes shortly after they occur.
+    this.readinessCache = { value, expiresAt: Date.now() + 5_000 };
+    return value;
   }
 
   getPolymerFamilyCount() {

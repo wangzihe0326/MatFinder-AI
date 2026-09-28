@@ -24,25 +24,33 @@ Anonymous visitors do not see the Audit navigation item. Direct navigation to `/
 
 ## Health Check
 
-The server exposes:
+The server exposes three separate operational signals:
 
 ```txt
-GET /api/health
+GET /api/live    -> process can serve HTTP; no database or OpenAI query
+GET /api/health  -> read-only SQLite technical health; Render/Docker health path
+GET /api/ready   -> an eligible public engineering commercial grade exists
 ```
 
-Expected response:
+Successful responses, respectively:
 
-```json
-{
-  "status": "ok",
-  "environment": "production",
-  "materials": 83,
-  "database": "matfinder.db",
-  "openaiConfigured": true
-}
+```txt
+{"status":"alive"}
+{"status":"ok"}
+{"status":"ready"}
 ```
 
-Use `/api/health` as the platform health check path.
+`/api/health` returns 503 with `{"status":"unhealthy","reason":"database_unavailable"}`
+if the SQLite read fails. `/api/ready` returns 503 with
+`{"status":"not_ready","reason":"no_verified_public_grades"}` when no eligible
+public commercial grade exists, even while `/api/health` remains 200. A database
+failure makes `/api/ready` return 503 with reason `database_unavailable`.
+Missing catalog data cannot be repaired by restarting a technically healthy
+instance, so Render and Docker continue using `/api/health` as their health path.
+These public responses do not include database counts, memory, configuration,
+or repository diagnostics. OpenAI and audit-admin credentials do not affect them.
+The product-grade existence result is cached for at most five seconds per
+process; the technical SQLite read still runs on every health/readiness probe.
 
 ## SQLite Deployment Notes
 

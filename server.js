@@ -93,6 +93,35 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && requestPath === "/api/live") {
+      response.setHeader("Cache-Control", "no-store");
+      sendJson(response, 200, { status: "alive" });
+      return;
+    }
+
+    if (request.method === "GET" &&
+        (requestPath === "/api/health" || requestPath === "/api/ready")) {
+      response.setHeader("Cache-Control", "no-store");
+      try {
+        repository.checkTechnicalHealth();
+        if (requestPath === "/api/health") {
+          sendJson(response, 200, { status: "ok" });
+        } else if (repository.hasReadyPublicCommercialGrade()) {
+          sendJson(response, 200, { status: "ready" });
+        } else {
+          sendJson(response, 503, {
+            status: "not_ready",
+            reason: "no_verified_public_grades"
+          });
+        }
+      } catch {
+        sendJson(response, 503, requestPath === "/api/health"
+          ? { status: "unhealthy", reason: "database_unavailable" }
+          : { status: "not_ready", reason: "database_unavailable" });
+      }
+      return;
+    }
+
     const auditMode = requestUrl.searchParams.get("audit") === "1";
     const auditRoute = request.method === "GET" && (
       requestPath === "/api/admin/audit-summary" ||
@@ -118,22 +147,6 @@ const server = http.createServer(async (request, response) => {
         sendRateLimit(response, retryAfterSeconds);
         return;
       }
-    }
-
-    if (request.method === "GET" && requestPath === "/api/health") {
-      const counts = repository.getDatabaseCounts();
-      sendJson(response, 200, {
-        status: "ok",
-        environment: nodeEnv,
-        materials: counts.materials,
-        propertyEvidence: counts.propertyEvidence,
-        database: path.basename(databasePath),
-        openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
-        memory: memoryUsageInMegabytes(),
-        startupPeak: startupPeakInMegabytes(),
-        repository: repository.getMetrics()
-      });
-      return;
     }
 
     if (request.method === "GET" && requestPath === "/api/materials") {
@@ -247,6 +260,19 @@ server.listen(port, () => {
   logMemory("after_http_listen");
   console.log(`MatFinder AI running in ${nodeEnv} mode at http://localhost:${port}`);
 });
+
+// Test-process IPC keeps memory/query assertions available without a public diagnostics API.
+if (nodeEnv === "test" && typeof process.send === "function") {
+  process.on("message", (message) => {
+    if (message?.type !== "test-diagnostics-request") return;
+    process.send({
+      type: "test-diagnostics-response",
+      memory: memoryUsageInMegabytes(),
+      startupPeak: startupPeakInMegabytes(),
+      repository: repository.getMetrics()
+    });
+  });
+}
 
 function logMemory(phase, metadata = {}) {
   const usage = process.memoryUsage();
