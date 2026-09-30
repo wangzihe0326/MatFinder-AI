@@ -221,6 +221,7 @@ async function testFrontendStartupContract() {
     state: { materialsPageSize: 48, filteredMaterialsCache: null },
     materials: [],
     materialCatalogTotal: 0,
+    catalogFacets: { categories: { all: 0, options: [] }, performance: { all: 0, groups: [], options: [] }, domains: { all: 0, options: [] } },
     t: () => "Loading",
     apiUrl: (value) => value,
     fetch: async (requestPath) => {
