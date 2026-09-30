@@ -16,6 +16,108 @@ const MAX_PAGE_SIZE = 200;
 const DETAIL_BATCH_SIZE = 30;
 const READINESS_BATCH_SIZE = DETAIL_BATCH_SIZE;
 const FAMILY_CODES = Object.freeze(["ABS", "PC", "PA66", "POM", "PP", "PEEK", "TPU"]);
+const CATALOG_JOINS = `
+  LEFT JOIN real_material_identities identity_row
+    ON identity_row.material_id = m.material_id
+   AND identity_row.active = 1
+`;
+const GRADE_TRIM_CHARACTERS = [
+  9, 10, 11, 12, 13, 32, 160, 5760,
+  ...Array.from({ length: 11 }, (_, index) => 8192 + index),
+  8232, 8233, 8239, 8287, 12288, 65279
+].map((codepoint) => `CHAR(${codepoint})`).join(" || ");
+const EFFECTIVE_GRADE_SQL =
+  `COALESCE(NULLIF(TRIM(m.grade_name, ${GRADE_TRIM_CHARACTERS}), ''), m.trade_name)`;
+
+// These are the signals available in the existing compact public catalog, not
+// the larger set of fields available on a material detail or audit record.
+const CATALOG_EFFECTIVE_IDENTITY_FIELDS = [
+  "m.name", "m.name_zh", "m.abbreviation", "m.family",
+  "COALESCE(m.grade_name, m.trade_name)"
+];
+const CATALOG_IDENTITY_FIELDS = [...CATALOG_EFFECTIVE_IDENTITY_FIELDS, "m.trade_name"];
+const CATALOG_BROAD_FIELDS = [
+  ...CATALOG_IDENTITY_FIELDS,
+  "m.category", "m.category_zh", "m.subcategory",
+  "COALESCE(m.supplier_or_brand, m.manufacturer)", "m.manufacturer",
+  "m.summary", "m.chemical_resistance",
+  "COALESCE(m.flame_rating, m.flammability)", "m.electrical_insulation", "m.transparency",
+  "m.flexibility", "m.waterproof_sealing", "m.flammability",
+  "m.recyclability", "m.cost_level"
+];
+const CATALOG_SIGNAL_FIELDS = [
+  "m.name", "m.name_zh", "m.abbreviation",
+  "m.category", "m.category_zh", "m.subcategory",
+  "m.family", EFFECTIVE_GRADE_SQL,
+  "COALESCE(m.supplier_or_brand, m.manufacturer)", "m.summary",
+  "COALESCE(m.flame_rating, m.flammability)", "m.electrical_insulation",
+  "m.chemical_resistance", "m.transparency", "m.flexibility",
+  "m.waterproof_sealing", "m.recyclability"
+];
+
+// Keep the current catalog facet IDs and keyword branches intact. Browser
+// definitions remain in place until the separately reviewed frontend phase.
+const PERFORMANCE_GROUPS = [
+  { id: "thermal", options: [
+    { id: "heat-resistant", signals: ["heat resistant", "high temperature", "thermal", "耐热", "高温"] },
+    { id: "flame-retardant", signals: ["flame retardant", "fire resistant", "ul 94", "v-0", "noncombustible", "阻燃", "防火"] },
+    { id: "low-temperature-resistant", signals: ["low temperature", "cryogenic", "cold resistant", "耐低温", "低温"] }
+  ] },
+  { id: "mechanical", options: [
+    { id: "high-strength", signals: ["high strength", "reinforced", "structural", "高强度", "增强"] },
+    { id: "high-toughness", signals: ["tough", "toughened", "high toughness", "韧性", "增韧"] },
+    { id: "wear-resistant", signals: ["wear resistant", "abrasion resistant", "low friction", "bearing", "耐磨", "低摩擦"] },
+    { id: "impact-resistant", signals: ["impact resistant", "impact modified", "energy absorption", "抗冲击", "抗冲"] }
+  ] },
+  { id: "chemical", options: [
+    { id: "chemical-resistant", signals: ["chemical resistant", "chemical resistance", "good to excellent", "耐化学", "化工"] },
+    { id: "acid-resistant", signals: ["acid resistant", "acid", "硫酸", "盐酸", "耐酸"] },
+    { id: "alkali-resistant", signals: ["alkali resistant", "alkaline", "caustic", "耐碱", "碱"] },
+    { id: "oil-resistant", signals: ["oil resistant", "fuel resistant", "hydrocarbon", "耐油", "燃油"] }
+  ] },
+  { id: "electrical", options: [
+    { id: "electrical-insulation", signals: ["electrical insulation", "dielectric", "insulator", "connector", "电绝缘", "绝缘"] },
+    { id: "high-dielectric", signals: ["high dielectric", "dielectric constant", "高介电"] },
+    { id: "low-dielectric", signals: ["low dielectric", "rf", "radome", "低介电"] },
+    { id: "conductive-antistatic", signals: ["conductive", "antistatic", "esd", "emi shielding", "导电", "防静电", "电磁屏蔽"] }
+  ] },
+  { id: "optical", options: [
+    { id: "transparent", signals: ["transparent", "clear", "透明"] },
+    { id: "optical-clarity", signals: ["optical", "lens", "light guide", "clarity", "光学", "透镜"] },
+    { id: "uv-resistant", signals: ["uv resistant", "uv stabilized", "weather resistant", "抗紫外", "耐候"] }
+  ] },
+  { id: "sealing-elastomer", options: [
+    { id: "elastomer", signals: ["elastomer", "rubber", "弹性体", "橡胶"] },
+    { id: "flexible", signals: ["flexible", "soft", "flexibility", "柔性", "柔韧"] },
+    { id: "waterproof-sealing", signals: ["waterproof", "sealing", "sealant", "gasket", "low moisture", "防水", "密封"] },
+    { id: "gasket-seal", signals: ["gasket", "o-ring", "seal", "flange", "垫片", "密封圈"] }
+  ] },
+  { id: "sustainability", options: [
+    { id: "recyclable", signals: ["recyclable", "recycling", "可回收"] },
+    { id: "bio-based", signals: ["bio-based", "biobased", "renewable", "生物基"] },
+    { id: "compostable", signals: ["compostable", "biodegradable", "可堆肥", "可降解"] },
+    { id: "low-density-lightweight", signals: ["lightweight", "low density", "轻量", "低密度"] }
+  ] }
+];
+const PERFORMANCE_OPTIONS = new Map(PERFORMANCE_GROUPS.flatMap((group) =>
+  group.options.map((option) => [option.id, option])));
+const PERFORMANCE_IDS = Object.freeze([...PERFORMANCE_OPTIONS.keys()]);
+const PERFORMANCE_ALIASES = Object.freeze({
+  "high-temp": "heat-resistant", strength: "high-strength",
+  chemical: "chemical-resistant", sustainable: "recyclable",
+  electrical: "electrical-insulation"
+});
+const DOMAIN_KEYWORDS = Object.freeze({
+  automotive: ["automotive", "vehicle", "under-hood", "bumper", "interior trim", "fuel system", "mirror housings", "汽车", "车身", "内饰"],
+  "ev-battery": ["ev battery", "battery", "battery pack", "battery packs", "cell", "thermal gap", "thermal interface", "fire barrier", "power electronics", "电池", "动力电池", "电池包"],
+  electronics: ["electronics", "electronic", "electrical", "connector", "connectors", "circuit", "pcb", "semiconductor", "potting", "wire", "cable", "relay", "switch", "电气", "电子", "连接器", "半导体"],
+  aerospace: ["aerospace", "aircraft", "radome", "satellite", "turbine", "rocket", "aircraft interiors", "flight", "航空", "航天", "飞机"],
+  medical: ["medical", "healthcare", "biocompatible", "sterilizable", "surgical", "diagnostic", "implant", "medical devices", "医疗", "医用", "植入"],
+  construction: ["construction", "building", "architectural", "roofing", "flooring", "window", "profiles", "pipe", "plumbing", "concrete", "建筑", "施工", "屋面", "管道"],
+  "industrial-sealing": ["seal", "seals", "sealing", "gasket", "gaskets", "o-ring", "o-rings", "valve", "flange", "pump", "chemical seal", "weather seals", "密封", "垫片", "阀门", "泵"],
+  "consumer-electronics": ["consumer electronics", "phone", "laptop", "tablet", "wearable", "display", "clear cover", "housings", "keyboard", "speaker", "消费电子", "手机", "显示"]
+});
+const DOMAIN_IDS = Object.freeze(Object.keys(DOMAIN_KEYWORDS));
 
 const LIST_COLUMNS = `
   m.material_id,
@@ -25,6 +127,7 @@ const LIST_COLUMNS = `
   m.abbreviation,
   m.material_family,
   m.grade_name,
+  ${EFFECTIVE_GRADE_SQL} AS effective_grade_name,
   m.supplier_or_brand,
   m.category,
   m.category_en,
@@ -488,6 +591,32 @@ class MaterialRepository {
   }
 
   listMaterials(options = {}) {
+    if (options.audit === true) return this._listAuditMaterials(options);
+    const limit = options.limit ?? DEFAULT_PAGE_SIZE;
+    const offset = options.offset ?? 0;
+    const predicate = buildPublicCatalogPredicate(options);
+    const total = Number(this._get(
+      `SELECT COUNT(DISTINCT m.material_id) AS count
+         FROM materials m ${CATALOG_JOINS}
+        WHERE ${predicate.sql}`,
+      predicate.params, "catalog_count"
+    )?.count || 0);
+    const facets = this._catalogFacets(options);
+    const order = buildCatalogOrder(options);
+    const rows = this._all(
+      `SELECT ${LIST_COLUMNS}, ${qualityLevelSql()} AS quality_level
+         FROM materials m ${CATALOG_JOINS}
+        WHERE ${predicate.sql}
+        ORDER BY ${order.sql}
+        LIMIT ? OFFSET ?`,
+      [...predicate.params, ...order.params, limit, offset], "material_list"
+    );
+    const items = rows.map(materialFromListRow);
+    this._attachTagsAndUses(items);
+    return { items, total, limit, offset, hasMore: offset + limit < total, facets };
+  }
+
+  _listAuditMaterials(options) {
     const audit = options.audit === true;
     const limit = Math.min(
       MAX_PAGE_SIZE,
@@ -539,6 +668,86 @@ class MaterialRepository {
       offset,
       hasMore: offset + limit < total
     };
+  }
+
+  _catalogFacets(options) {
+    const categoryBase = buildPublicCatalogPredicate(options, "category");
+    const categoryAll = Number(this._get(
+      `SELECT COUNT(DISTINCT m.material_id) AS count
+         FROM materials m ${CATALOG_JOINS} WHERE ${categoryBase.sql}`,
+      categoryBase.params, "catalog_category_count"
+    )?.count || 0);
+    const categoryRows = this._all(
+      `SELECT m.category AS value, COUNT(DISTINCT m.material_id) AS count
+         FROM materials m ${CATALOG_JOINS}
+        WHERE ${categoryBase.sql}
+          AND NULLIF(TRIM(m.category), '') IS NOT NULL
+        GROUP BY m.category
+        ORDER BY count DESC, m.category ASC`,
+      categoryBase.params, "catalog_categories"
+    );
+    return {
+      categories: {
+        all: categoryAll,
+        options: categoryRows.map((row) => ({ value: row.value, count: Number(row.count) }))
+      },
+      performance: this._catalogOptionFacets(options, "performance"),
+      domains: this._catalogOptionFacets(options, "domain")
+    };
+  }
+
+  _catalogOptionFacets(options, dimension) {
+    const base = buildPublicCatalogPredicate(options, dimension);
+    const ids = dimension === "performance" ? PERFORMANCE_IDS : DOMAIN_IDS;
+    const candidateFields = dimension === "performance" ? [
+      "m.material_id", "m.max_temperature", "m.continuous_use_temperature",
+      "m.glass_transition_temperature", "m.tensile_strength", "m.flexural_strength",
+      "m.elongation", "m.chemical_resistance", "m.dielectric_constant",
+      "m.category", "m.water_absorption", "m.recyclability", "m.density"
+    ] : ["m.material_id"];
+    const signal = dimension === "performance"
+      ? catalogPerformanceSignalText() : catalogDomainSignalText();
+    const predicates = ids.map((id) => dimension === "performance"
+      ? buildPerformancePredicate(id, "m.catalog_signal")
+      : buildDomainPredicate(id, "m.catalog_signal"));
+    const flags = predicates.map((predicate, index) =>
+      `CASE WHEN ${predicate.sql} THEN 1 ELSE 0 END AS flag${index}`);
+    const sums = ids.map((id, index) =>
+      `COALESCE(SUM(flag${index}), 0) AS option${index}`);
+    const groupSums = dimension === "performance" ? PERFORMANCE_GROUPS.map((group, index) => {
+      const flagsInGroup = group.options.map((option) =>
+        `flag${ids.indexOf(option.id)} = 1`).join(" OR ");
+      return `COALESCE(SUM(CASE WHEN ${flagsInGroup} THEN 1 ELSE 0 END), 0) AS group${index}`;
+    }) : [];
+    const row = this._get(
+      `WITH candidates AS MATERIALIZED (
+         SELECT ${candidateFields.join(", ")}, ${signal} AS catalog_signal
+           FROM materials m ${CATALOG_JOINS}
+          WHERE ${base.sql}
+       ), flags AS MATERIALIZED (
+         SELECT ${flags.join(", ")}
+           FROM candidates m
+       )
+       SELECT COUNT(*) AS all_count, ${[...sums, ...groupSums].join(", ")}
+         FROM flags`,
+      [...base.params, ...predicates.flatMap((predicate) => predicate.params)],
+      `catalog_${dimension}_facets`
+    );
+    const result = {
+      all: Number(row?.all_count || 0),
+      options: ids.flatMap((id, index) => {
+        const count = Number(row?.[`option${index}`] || 0);
+        return count > 0 ? [{ id, count }] : [];
+      })
+    };
+    if (dimension === "performance") {
+      result.groups = PERFORMANCE_GROUPS.flatMap((group, index) => {
+        const count = Number(row?.[`group${index}`] || 0);
+        return count > 0 ? [{ id: group.id, count }] : [];
+      });
+      return { all: result.all, groups: result.groups, options: result.options };
+    }
+    return result;
   }
 
   getMaterialById(materialId, options = {}) {
@@ -887,7 +1096,7 @@ function materialFromListRow(row) {
     abbr: row.abbreviation,
     abbreviation: row.abbreviation,
     material_family: row.material_family ?? row.family,
-    grade_name: row.grade_name ?? row.trade_name ?? null,
+    grade_name: row.effective_grade_name,
     supplier_or_brand: row.supplier_or_brand ?? row.manufacturer ?? null,
     category: row.category,
     category_en: row.category_en ?? row.category,
@@ -910,7 +1119,7 @@ function materialFromListRow(row) {
     melting_temperature: row.melting_temperature,
     maxTemp: row.max_temperature ?? row.continuous_use_temperature,
     max_temperature: row.max_temperature ?? row.continuous_use_temperature,
-    continuous_use_temperature: row.continuous_use_temperature ?? row.max_temperature,
+    continuous_use_temperature: row.continuous_use_temperature,
     thermal_conductivity: row.thermal_conductivity,
     dielectric: row.dielectric_constant,
     dielectric_constant: row.dielectric_constant,
@@ -993,6 +1202,297 @@ function qualityVerificationStatus(level) {
   if (level === "medium") return "partially_verified";
   if (level === "quarantined") return "quarantined";
   return "unverified";
+}
+
+function combinePredicates(operator, predicates) {
+  if (!predicates.length) return { sql: "1 = 1", params: [] };
+  return {
+    sql: `(${predicates.map((predicate) => `(${predicate.sql})`).join(` ${operator} `)})`,
+    params: predicates.flatMap((predicate) => predicate.params)
+  };
+}
+
+function combinedText(fields) {
+  return fields.map((field) => `COALESCE(CAST(${field} AS TEXT), '')`).join(" || ' ' || ");
+}
+
+function containsText(expression, value) {
+  // SQLite LOWER handles the existing ASCII technical codes and literal CJK
+  // text. It does not implement JavaScript's full Unicode case folding.
+  return {
+    sql: `LOWER(${expression}) LIKE ? ESCAPE '\\'`,
+    params: [`%${escapeLike(value)}%`]
+  };
+}
+
+function processingMethodContains(value) {
+  const pattern = `%${escapeLike(value)}%`;
+  const array = `CASE WHEN json_valid(m.processing_methods)
+    THEN CASE WHEN json_type(m.processing_methods) = 'array'
+      THEN m.processing_methods ELSE '[]' END
+    ELSE '[]' END`;
+  return {
+    sql: `(EXISTS (
+      SELECT 1 FROM json_each(${array}) method
+       WHERE LOWER(CAST(method.value AS TEXT)) LIKE ? ESCAPE '\\'
+    ) OR (
+      NOT json_valid(m.processing_methods)
+      AND LOWER(REPLACE(REPLACE(REPLACE(
+        COALESCE(m.processing_methods, ''), ',', ' '), ';', ' '), '|', ' '))
+        LIKE ? ESCAPE '\\'
+    ))`,
+    params: [pattern, pattern]
+  };
+}
+
+function compactTextContains(fields, value, { tags = true, uses = true, methods = true } = {}) {
+  const predicates = [containsText(combinedText(fields), value)];
+  if (tags) predicates.push({
+    sql: `EXISTS (SELECT 1 FROM material_tags tag
+      WHERE tag.material_id = m.material_id
+        AND LOWER(tag.tag) LIKE ? ESCAPE '\\')`,
+    params: [`%${escapeLike(value)}%`]
+  });
+  if (uses) predicates.push({
+    sql: `EXISTS (SELECT 1 FROM material_uses material_use
+      WHERE material_use.material_id = m.material_id
+        AND LOWER(material_use.use) LIKE ? ESCAPE '\\')`,
+    params: [`%${escapeLike(value)}%`]
+  });
+  if (methods) predicates.push(processingMethodContains(value));
+  return combinePredicates("OR", predicates);
+}
+
+function catalogOrderedTagsText() {
+  return `(SELECT GROUP_CONCAT(tag.tag, ' ' ORDER BY tag.position)
+    FROM material_tags tag WHERE tag.material_id = m.material_id AND tag.tag <> '')`;
+}
+
+function catalogOrderedUsesText() {
+  return `(SELECT GROUP_CONCAT(material_use.use, ' ' ORDER BY material_use.position)
+    FROM material_uses material_use
+    WHERE material_use.material_id = m.material_id AND material_use.use <> '')`;
+}
+
+function catalogProcessingMethodsText() {
+  return `CASE WHEN json_valid(m.processing_methods) THEN
+    CASE WHEN json_type(m.processing_methods) = 'array' THEN
+      (SELECT GROUP_CONCAT(CAST(method.value AS TEXT), ' '
+        ORDER BY CAST(method.key AS INTEGER))
+       FROM json_each(m.processing_methods) method
+       WHERE method.type NOT IN ('null', 'false')
+         AND NOT (method.type IN ('integer', 'real') AND method.value = 0)
+         AND NOT (method.type = 'text' AND method.value = ''))
+    ELSE NULL END
+  ELSE REPLACE(REPLACE(REPLACE(COALESCE(m.processing_methods, ''),
+    ',', ' '), ';', ' '), '|', ' ') END`;
+}
+
+function catalogVisibleText(parts) {
+  return `CONCAT_WS(' ', ${parts.map((part) =>
+    `NULLIF(CAST(${part} AS TEXT), '')`).join(", ")})`;
+}
+
+function normalizeCatalogWhitespace(expression) {
+  let normalized = `REPLACE(REPLACE(REPLACE(${expression}, CHAR(9), ' '),
+    CHAR(10), ' '), CHAR(13), ' ')`;
+  // Thirty fixed passes cover runs up to 2^30 characters, beyond the usual
+  // SQLite TEXT length limit, without an extension or per-character recursion.
+  for (let pass = 0; pass < 30; pass += 1) {
+    normalized = `REPLACE(${normalized}, '  ', ' ')`;
+  }
+  return `TRIM(${normalized})`;
+}
+
+function catalogPerformanceSignalText() {
+  return catalogVisibleText([
+    ...CATALOG_SIGNAL_FIELDS, catalogOrderedTagsText(), catalogOrderedUsesText(),
+    catalogProcessingMethodsText()
+  ]);
+}
+
+function catalogDomainSignalText() {
+  return catalogVisibleText([catalogOrderedUsesText(), "m.summary"]);
+}
+
+function catalogBroadPhraseText() {
+  // Keep the compact browser index order; aggregate only the current material.
+  return normalizeCatalogWhitespace(catalogVisibleText([
+    ...CATALOG_BROAD_FIELDS, catalogOrderedTagsText(), catalogOrderedUsesText(),
+    catalogProcessingMethodsText()
+  ]));
+}
+
+function identityComparison(value, kind) {
+  const pattern = kind === "prefix" ? `${escapeLike(value)}%` :
+    kind === "substring" ? `%${escapeLike(value)}%` : value;
+  return combinePredicates("OR", CATALOG_IDENTITY_FIELDS.map((field) => ({
+    sql: kind === "exact"
+      ? `LOWER(TRIM(COALESCE(${field}, ''))) = ?`
+      : `LOWER(TRIM(COALESCE(${field}, ''))) LIKE ? ESCAPE '\\'`,
+    params: [pattern]
+  })));
+}
+
+function identityToken(value) {
+  if (!/^[a-z0-9]+$/.test(value)) return { sql: "0 = 1", params: [] };
+  // JS catalog-search splits identity on non-ASCII-alphanumeric/non-CJK
+  // characters. Padded GLOB boundaries prevent PC from matching NPC.
+  const pattern = `*[^a-z0-9㐀-鿿]${value}[^a-z0-9㐀-鿿]*`;
+  return combinePredicates("OR", CATALOG_IDENTITY_FIELDS.map((field) => ({
+    sql: `(' ' || LOWER(COALESCE(${field}, '')) || ' ') GLOB ?`,
+    params: [pattern]
+  })));
+}
+
+function buildCatalogSearchWhere(query) {
+  if (!query) return { sql: "1 = 1", params: [] };
+  if (/^[a-z0-9+.-]{1,4}$/.test(query) && /[a-z]/.test(query)) {
+    return combinePredicates("OR", [identityComparison(query, "exact"), identityToken(query)]);
+  }
+  return combinePredicates("AND", query.split(/\s+/).map((token) =>
+    compactTextContains(CATALOG_BROAD_FIELDS, token)));
+}
+
+function knownNumeric(expression, comparison, threshold) {
+  return {
+    sql: `(typeof(${expression}) IN ('integer', 'real') AND ${expression} ${comparison} ?)`,
+    params: [threshold]
+  };
+}
+
+function recyclablePredicate() {
+  const text = "LOWER(COALESCE(m.recyclability, ''))";
+  return {
+    sql: `((' ' || ${text} || ' ') GLOB '*[^a-z0-9_]recyclable[^a-z0-9_]*'
+      AND INSTR(${text}, 'not typically recyclable') = 0)`,
+    params: []
+  };
+}
+
+function signalKeywords(keywords, signalExpression) {
+  return combinePredicates("OR", keywords.map((keyword) =>
+    containsText(signalExpression, keyword)));
+}
+
+function buildPerformancePredicate(id, signalExpression = catalogPerformanceSignalText()) {
+  const option = PERFORMANCE_OPTIONS.get(id);
+  if (!option) throw new RangeError(`Unknown catalog performance ID: ${id}`);
+  const branches = [signalKeywords(option.signals, signalExpression)];
+  switch (id) {
+    case "heat-resistant": {
+      const temperature = "CASE WHEN m.max_temperature IS NOT NULL THEN m.max_temperature ELSE m.continuous_use_temperature END";
+      branches.push(knownNumeric(temperature, ">=", 150));
+      break;
+    }
+    case "low-temperature-resistant":
+      branches.push(knownNumeric("m.glass_transition_temperature", "<=", -30));
+      break;
+    case "high-strength":
+      branches.push(knownNumeric("m.tensile_strength", ">=", 70));
+      branches.push(knownNumeric("m.flexural_strength", ">=", 100));
+      break;
+    case "high-toughness":
+      branches.push(knownNumeric("m.elongation", ">=", 80));
+      break;
+    case "acid-resistant":
+    case "alkali-resistant":
+      branches.push(combinePredicates("OR", ["excellent", "good", "resistant"].map(
+        (word) => containsText("COALESCE(m.chemical_resistance, '')", word))));
+      break;
+    case "high-dielectric":
+      branches.push(knownNumeric("m.dielectric_constant", ">=", 4));
+      break;
+    case "low-dielectric":
+      branches.push(combinePredicates("AND", [
+        knownNumeric("m.dielectric_constant", ">", 0),
+        knownNumeric("m.dielectric_constant", "<=", 2.8)
+      ]));
+      break;
+    case "elastomer":
+      branches.push({
+        sql: "m.category IN ('Elastomer', 'Elastomers', 'Rubber', 'Sealants')",
+        params: []
+      });
+      break;
+    case "flexible":
+      branches.push(knownNumeric("m.elongation", ">=", 150));
+      break;
+    case "waterproof-sealing":
+      branches.push(knownNumeric("m.water_absorption", "<=", 0.2));
+      break;
+    case "recyclable":
+      branches.push(recyclablePredicate());
+      break;
+    case "low-density-lightweight":
+      branches.push(combinePredicates("AND", [
+        knownNumeric("m.density", ">", 0), knownNumeric("m.density", "<=", 1.2)
+      ]));
+      break;
+  }
+  return combinePredicates("OR", branches);
+}
+
+function buildDomainPredicate(id, signalExpression = catalogDomainSignalText()) {
+  const keywords = DOMAIN_KEYWORDS[id];
+  if (!keywords) throw new RangeError(`Unknown catalog domain ID: ${id}`);
+  return combinePredicates("OR", keywords.map((keyword) =>
+    containsText(signalExpression, keyword)));
+}
+
+function buildPublicCatalogPredicate(options, excludedDimension) {
+  const predicates = [{ sql: PUBLIC_BOUNDARY, params: [] }];
+  if (options.query) predicates.push(buildCatalogSearchWhere(options.query));
+  if (excludedDimension !== "category" && options.category) {
+    predicates.push({ sql: "m.category = ?", params: [options.category] });
+  }
+  if (excludedDimension !== "performance" && options.performance) {
+    predicates.push(buildPerformancePredicate(options.performance));
+  }
+  if (excludedDimension !== "domain" && options.domain) {
+    predicates.push(buildDomainPredicate(options.domain));
+  }
+  if (options.minTempC !== undefined) {
+    predicates.push(knownNumeric("m.continuous_use_temperature", ">=", options.minTempC));
+  }
+  if (options.minTensileMpa !== undefined) {
+    predicates.push(knownNumeric("m.tensile_strength", ">=", options.minTensileMpa));
+  }
+  if (options.recyclable === true) predicates.push(recyclablePredicate());
+  return combinePredicates("AND", predicates);
+}
+
+function buildCatalogOrder(options) {
+  const nameAndId = "LOWER(COALESCE(m.name, '')) ASC, m.material_id ASC";
+  if (options.sort === "match" && options.query) {
+    const relevance = [
+      [100, identityComparison(options.query, "exact")],
+      [60, identityToken(options.query)],
+      [30, identityComparison(options.query, "prefix")],
+      [15, identityComparison(options.query, "substring")],
+      [5, containsText(catalogBroadPhraseText(), options.query)]
+    ];
+    return {
+      sql: `${relevance.map(([score, predicate]) =>
+        `(CASE WHEN ${predicate.sql} THEN ${score} ELSE 0 END)`).join(" + ")} DESC, ${nameAndId}`,
+      params: relevance.flatMap(([, predicate]) => predicate.params)
+    };
+  }
+  const numericSorts = {
+    temperature: ["m.continuous_use_temperature", "DESC"],
+    strength: ["m.tensile_strength", "DESC"],
+    density: ["m.density", "ASC"]
+  };
+  if (numericSorts[options.sort]) {
+    const [field, direction] = numericSorts[options.sort];
+    const known = `typeof(${field}) IN ('integer', 'real')`;
+    return {
+      sql: `CASE WHEN ${known} THEN 0 ELSE 1 END ASC,
+        CASE WHEN ${known} THEN ${field} ELSE NULL END ${direction}, ${nameAndId}`,
+      params: []
+    };
+  }
+  return { sql: nameAndId, params: [] };
 }
 
 function buildSearchWhere(queryValue) {
@@ -1096,9 +1596,13 @@ function chunks(values, size) {
 
 module.exports = {
   DEFAULT_PAGE_SIZE,
+  DOMAIN_IDS,
   FAMILY_CODES,
   MAX_PAGE_SIZE,
   MaterialRepository,
+  PERFORMANCE_ALIASES,
+  PERFORMANCE_IDS,
+  buildPublicCatalogPredicate,
   buildSearchWhere,
   dataQualityFromLevel,
   materialFromListRow

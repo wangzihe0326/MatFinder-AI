@@ -2,7 +2,14 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { MaterialRepository } = require("./material-repository");
+const {
+  DEFAULT_PAGE_SIZE,
+  DOMAIN_IDS,
+  MAX_PAGE_SIZE,
+  MaterialRepository,
+  PERFORMANCE_ALIASES,
+  PERFORMANCE_IDS
+} = require("./material-repository");
 const { readPilotStatus } = require("./pilot-status");
 const {
   ApiError,
@@ -80,6 +87,110 @@ const publicFiles = new Set([
   "/app.js"
 ]);
 
+const publicCatalogParameters = [
+  "q", "category", "performance", "domain", "minTempC", "minTensileMpa",
+  "recyclable", "sort", "limit", "offset"
+];
+const catalogSorts = new Set(["match", "temperature", "strength", "density", "name"]);
+const catalogPerformanceIds = new Set(PERFORMANCE_IDS);
+const catalogDomainIds = new Set(DOMAIN_IDS);
+
+class CatalogQueryError extends Error {
+  constructor(parameter) {
+    super("Invalid catalog query parameter");
+    this.parameter = parameter;
+  }
+}
+
+function parsePublicCatalogQuery(searchParams) {
+  for (const parameter of publicCatalogParameters) {
+    if (searchParams.getAll(parameter).length > 1) throw new CatalogQueryError(parameter);
+  }
+  const has = (parameter) => searchParams.has(parameter);
+  const read = (parameter) => searchParams.get(parameter);
+  const hasControl = (value) => /[\u0000-\u001f\u007f-\u009f]/u.test(value);
+
+  let query = "";
+  if (has("q")) {
+    const raw = read("q");
+    if (hasControl(raw)) throw new CatalogQueryError("q");
+    query = raw.trim().toLowerCase().replace(/\s+/gu, " ");
+    if ([...query].length > 256 || (query && query.split(" ").length > 16)) {
+      throw new CatalogQueryError("q");
+    }
+  }
+
+  let category;
+  if (has("category")) {
+    const raw = read("category");
+    if (hasControl(raw) || !raw.trim() || [...raw].length > 256) {
+      throw new CatalogQueryError("category");
+    }
+    category = raw;
+    if (category === "all") category = undefined;
+  }
+
+  let performance;
+  if (has("performance")) {
+    const raw = read("performance");
+    performance = PERFORMANCE_ALIASES[raw] || raw;
+    if (performance === "all") performance = undefined;
+    else if (!catalogPerformanceIds.has(performance)) throw new CatalogQueryError("performance");
+  }
+
+  let domain;
+  if (has("domain")) {
+    domain = read("domain");
+    if (domain === "all") domain = undefined;
+    else if (!catalogDomainIds.has(domain)) throw new CatalogQueryError("domain");
+  }
+
+  const plainDecimal = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/u;
+  const threshold = (parameter, minimum, maximum) => {
+    if (!has(parameter)) return undefined;
+    const raw = read(parameter);
+    if (!plainDecimal.test(raw)) throw new CatalogQueryError(parameter);
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < minimum || value > maximum) {
+      throw new CatalogQueryError(parameter);
+    }
+    return value;
+  };
+
+  let recyclable = false;
+  if (has("recyclable")) {
+    const raw = read("recyclable");
+    if (raw !== "true" && raw !== "false") throw new CatalogQueryError("recyclable");
+    recyclable = raw === "true";
+  }
+
+  const sort = has("sort") ? read("sort") : "match";
+  if (!catalogSorts.has(sort)) throw new CatalogQueryError("sort");
+  const integer = (parameter, defaultValue, minimum, maximum) => {
+    if (!has(parameter)) return defaultValue;
+    const raw = read(parameter);
+    if (!/^\d+$/u.test(raw)) throw new CatalogQueryError(parameter);
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+      throw new CatalogQueryError(parameter);
+    }
+    return value;
+  };
+
+  return {
+    query,
+    category,
+    performance,
+    domain,
+    minTempC: threshold("minTempC", -200, 260),
+    minTensileMpa: threshold("minTensileMpa", 0, 180),
+    recyclable,
+    sort,
+    limit: integer("limit", DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE),
+    offset: integer("offset", 0, 0, Number.MAX_SAFE_INTEGER - MAX_PAGE_SIZE)
+  };
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const requestUrl = new URL(request.url, `http://localhost:${port}`);
@@ -150,13 +261,12 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/materials") {
-      const query = String(requestUrl.searchParams.get("q") || "").trim();
-      const result = repository.listMaterials({
-        audit: auditMode,
-        query,
+      const result = repository.listMaterials(auditMode ? {
+        audit: true,
+        query: String(requestUrl.searchParams.get("q") || "").trim(),
         limit: requestUrl.searchParams.get("limit"),
         offset: requestUrl.searchParams.get("offset")
-      });
+      } : parsePublicCatalogQuery(requestUrl.searchParams));
       response.setHeader("X-Total-Count", String(result.total));
       sendJson(response, 200, {
         ...result,
@@ -228,6 +338,13 @@ const server = http.createServer(async (request, response) => {
     serveStatic(request, response);
   } catch (error) {
     if (response.destroyed || response.writableEnded) return;
+    if (error instanceof CatalogQueryError) {
+      response.setHeader("Cache-Control", "no-store");
+      sendJson(response, 400, {
+        error: "Invalid catalog query parameter", parameter: error.parameter
+      });
+      return;
+    }
     if (error instanceof ApiError) {
       if (error.status === 499) return;
       if (error.status === 429) {
@@ -341,6 +458,7 @@ function toCompactMaterial(material) {
     "tg",
     "tm",
     "maxTemp",
+    "continuous_use_temperature",
     "elongation",
     "thermal_conductivity",
     "dielectric",

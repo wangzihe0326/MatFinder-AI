@@ -13,6 +13,15 @@ let auditMaterialTotal = 0;
 let adminToken = null;
 let auditSearchTimer;
 let materialCatalogTotal = 0;
+const emptyCatalogFacets = () => ({
+  categories: { all: 0, options: [] },
+  performance: { all: 0, groups: [], options: [] },
+  domains: { all: 0, options: [] }
+});
+let catalogFacets = emptyCatalogFacets();
+let catalogRequestId = 0;
+let catalogLoadError = false;
+let catalogQueryResetPending = false;
 let recommendationService = null;
 const materialDetailCache = new Map();
 const MATERIAL_DETAIL_CACHE_LIMIT = 30;
@@ -955,10 +964,6 @@ const performanceFilterGroups = [
 ];
 
 const performanceFilterOptions = performanceFilterGroups.flatMap((group) => group.options.map((option) => ({ ...option, groupId: group.id })));
-const propertyPredicates = Object.fromEntries(
-  performanceFilterOptions.flatMap((option) => [[option.id, option.match], ...(option.legacyIds || []).map((id) => [id, option.match])])
-);
-
 const applicationDomainFilters = [
   {
     id: "automotive",
@@ -1016,7 +1021,6 @@ const state = {
   materialsPage: 1,
   materialsPageSize: 48,
   materialsGridRendered: false,
-  filteredMaterialsCache: { key: "", items: [] },
   recommendationCache: new Map(),
   compareTableCache: new Map(),
   selected: new Set(),
@@ -1301,7 +1305,7 @@ function materialSummary(item) {
   if (state.language !== "zh") return item.description_en || item.summary;
   if (item.description_zh) return item.description_zh;
   const uses = materialUses(item).slice(0, 3).join("\u3001");
-  return `${materialName(item)}\u5c5e\u4e8e${materialCategory(item)}\uff0c\u5178\u578b\u7528\u9014\u5305\u62ec${uses || t("notSpecified")}\uff0c\u8fde\u7eed\u4f7f\u7528\u6e29\u5ea6\u7ea6 ${formatValue(item.maxTemp, " deg C")}\u3002`;
+  return `${materialName(item)}\u5c5e\u4e8e${materialCategory(item)}\uff0c\u5178\u578b\u7528\u9014\u5305\u62ec${uses || t("notSpecified")}\uff0c\u8fde\u7eed\u4f7f\u7528\u6e29\u5ea6\u7ea6 ${formatValue(item.continuous_use_temperature, " deg C")}\u3002`;
 }
 
 function localizeRecommendationReason(reason) {
@@ -1445,6 +1449,7 @@ function renderCategoryOptions() {
   fragment.append(allOption);
 
   const remaining = new Set(categories);
+  if (selectedValue !== "all") remaining.add(selectedValue);
   const appendGroup = (label, orderedCategories) => {
     const groupCategories = orderedCategories.filter((category) => remaining.has(category));
     if (!groupCategories.length) return;
@@ -1559,17 +1564,12 @@ function createPropertyFacetButton({ id, label, count, selected, className = "" 
 }
 
 function getPerformanceFilterCounts() {
-  const counts = new Map();
-  const baseItems = materials.filter((item) => matchesCatalogFilters(item, { includeProperty: false }));
-  counts.set("all", baseItems.length);
-  performanceFilterOptions.forEach((option) => {
-    const count = baseItems.filter((item) => option.match(item)).length;
-    counts.set(option.id, count);
-  });
-  performanceFilterGroups.forEach((group) => {
-    counts.set(`group:${group.id}`, baseItems.filter((item) => group.options.some((option) => option.match(item))).length);
-  });
-  return counts;
+  const facet = catalogFacets.performance;
+  return new Map([
+    ["all", facet.all],
+    ...facet.options.map(({ id, count }) => [id, count]),
+    ...facet.groups.map(({ id, count }) => [`group:${id}`, count])
+  ]);
 }
 
 function countGroupMatches(group, counts) {
@@ -1617,19 +1617,17 @@ function createFacetButton({ id, label, count, selected, className = "", dataNam
 }
 
 function getApplicationDomainCounts() {
-  const counts = new Map();
-  const baseItems = materials.filter((item) => matchesCatalogFilters(item, { includeDomain: false }));
-  counts.set("all", baseItems.length);
-  applicationDomainFilters.forEach((domain) => {
-    counts.set(domain.id, baseItems.filter((item) => matchesApplicationDomain(item, domain)).length);
-  });
-  return counts;
+  const facet = catalogFacets.domains;
+  return new Map([
+    ["all", facet.all],
+    ...facet.options.map(({ id, count }) => [id, count])
+  ]);
 }
 
 async function init() {
   await loadMaterials();
   recommendationService = window.MatFinderAI.createRecommendationService({ materials });
-  categories = [...new Set(materials.map((material) => material.category))].sort((a, b) => a.localeCompare(b));
+  categories = catalogFacets.categories.options.map(({ value }) => value);
   renderCategoryOptions();
 
   elements.totalCount.textContent = catalogLayerStats.verifiedCommercialGrades;
@@ -1705,7 +1703,7 @@ function setRoute(route, options = {}) {
   if (state.route === "audit") {
     showAuditAccess();
   }
-  if (!options.replace && state.route === "materials" && materials.length && !state.materialsGridRendered) {
+  if (!options.replace && state.route === "materials") {
     render();
   }
 }
@@ -1747,7 +1745,7 @@ async function loadMaterials() {
   elements.materialsGrid.innerHTML = `<p class="recommendation-empty">${t("generating")}</p>`;
   elements.emptyState.hidden = true;
   const responses = await Promise.all([
-    fetch(apiUrl(`/api/materials?limit=${state.materialsPageSize}&offset=0`)),
+    fetch(apiUrl(`/api/materials?limit=${state.materialsPageSize}&offset=0&sort=match`)),
     fetch(apiUrl("/api/polymer-families")),
     fetch(apiUrl("/api/catalog-stats")),
     fetch(apiUrl("/api/pilot-status"))
@@ -1763,31 +1761,64 @@ async function loadMaterials() {
   ] = await Promise.all(responses.map((response) => response.json()));
   materials = materialPayload.items || [];
   materialCatalogTotal = Number(materialPayload.total) || 0;
+  catalogFacets = materialPayload.facets || catalogFacets;
   polymerFamilies = familyPayload;
   catalogLayerStats = statsPayload;
   pilotStatus = pilotPayload;
-  state.filteredMaterialsCache = { key: "", items: [] };
+}
+
+function catalogQueryParams(page) {
+  const params = new URLSearchParams();
+  if (state.query) params.set("q", state.query);
+  if (state.category !== "all") params.set("category", state.category);
+  if (state.property !== "all") params.set("performance", state.property);
+  if (state.domain !== "all") params.set("domain", state.domain);
+  if (state.minTemp !== DEFAULT_MIN_TEMP) params.set("minTempC", String(state.minTemp));
+  if (state.minStrength !== DEFAULT_MIN_STRENGTH) params.set("minTensileMpa", String(state.minStrength));
+  if (state.recyclableOnly) params.set("recyclable", "true");
+  params.set("sort", state.sort);
+  params.set("limit", String(state.materialsPageSize));
+  params.set("offset", String((page - 1) * state.materialsPageSize));
+  return params;
 }
 
 async function loadPublicMaterialPage(page = 1) {
   const safePage = Math.max(1, Number(page) || 1);
-  const offset = (safePage - 1) * state.materialsPageSize;
-  const response = await fetch(
-    apiUrl(
-      `/api/materials?limit=${state.materialsPageSize}` +
-      `&offset=${offset}&q=${encodeURIComponent(state.query)}`
-    )
-  );
-  if (!response.ok) throw new Error("Failed to load the requested material page.");
-  const payload = await response.json();
-  materials = payload.items || [];
-  materialCatalogTotal = Number(payload.total) || 0;
-  state.materialsPage = safePage;
-  state.filteredMaterialsCache = { key: "", items: [] };
-  categories = [...new Set(materials.map((material) => material.category))]
-    .sort((left, right) => left.localeCompare(right));
-  renderCategoryOptions();
-  render();
+  const requestId = ++catalogRequestId;
+  try {
+    const response = await fetch(apiUrl(`/api/materials?${catalogQueryParams(safePage)}`));
+    if (!response.ok) throw new Error("Catalog request failed");
+    const payload = await response.json();
+    if (requestId !== catalogRequestId) return;
+    if (!Array.isArray(payload.items) || !Number.isSafeInteger(payload.total) || payload.total < 0 ||
+        !payload.facets?.categories || !payload.facets?.performance || !payload.facets?.domains) {
+      throw new Error("Invalid catalog response");
+    }
+    const totalPages = Math.max(1, Math.ceil(payload.total / state.materialsPageSize));
+    if (safePage > totalPages && payload.total > 0) {
+      await loadPublicMaterialPage(totalPages);
+      return;
+    }
+    materials = payload.items;
+    materialCatalogTotal = payload.total;
+    catalogFacets = payload.facets;
+    categories = catalogFacets.categories.options.map(({ value }) => value);
+    state.materialsPage = Math.min(safePage, totalPages);
+    catalogLoadError = false;
+    catalogQueryResetPending = false;
+    renderCategoryOptions();
+    render();
+  } catch {
+    if (requestId !== catalogRequestId) return;
+    materials = [];
+    materialCatalogTotal = 0;
+    catalogFacets = emptyCatalogFacets();
+    categories = [];
+    catalogLoadError = true;
+    catalogQueryResetPending = false;
+    renderCategoryOptions();
+    render();
+  }
 }
 
 async function loadAuditRecords() {
@@ -1947,7 +1978,7 @@ function bindEvents() {
     if (state.route === "audit") {
       showAuditAccess();
     }
-    if (state.route === "materials" && materials.length && !state.materialsGridRendered) {
+    if (state.route === "materials") {
       render();
     }
   });
@@ -1983,7 +2014,6 @@ function bindEvents() {
     state.recommendationCriteria = [];
     state.recommendationQuery = "";
     state.recommendationResult = null;
-    resetMaterialsPage();
     renderRecommendations();
     render();
   });
@@ -2013,14 +2043,11 @@ function bindEvents() {
 
   elements.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value.trim().toLowerCase();
-    resetMaterialsPage();
+    resetMaterialsPage(true);
     renderFamilySearchResults();
     window.clearTimeout(materialSearchTimer);
     materialSearchTimer = window.setTimeout(() => {
-      loadPublicMaterialPage(1).catch((error) => {
-        console.error(error);
-        render();
-      });
+      loadPublicMaterialPage(1);
     }, 180);
   });
 
@@ -2038,55 +2065,55 @@ function bindEvents() {
 
   elements.categoryFilter.addEventListener("change", (event) => {
     state.category = event.target.value;
-    resetMaterialsPage();
-    render();
+    resetMaterialsPage(true);
+    loadPublicMaterialPage(1);
   });
 
   elements.propertyFilter.addEventListener("change", (event) => {
     state.property = event.target.value;
-    resetMaterialsPage();
-    render();
+    resetMaterialsPage(true);
+    loadPublicMaterialPage(1);
   });
 
   elements.propertyFacetFilter.addEventListener("click", (event) => {
     const button = event.target.closest("[data-property]");
     if (!button) return;
     state.property = button.dataset.property;
-    resetMaterialsPage();
+    resetMaterialsPage(true);
     syncControls();
-    render();
+    loadPublicMaterialPage(1);
   });
 
   elements.domainFacetFilter.addEventListener("click", (event) => {
     const button = event.target.closest("[data-domain]");
     if (!button) return;
     state.domain = button.dataset.domain;
-    resetMaterialsPage();
-    render();
+    resetMaterialsPage(true);
+    loadPublicMaterialPage(1);
   });
 
   elements.tempRange.addEventListener("input", (event) => {
     state.minTemp = Number(event.target.value);
-    resetMaterialsPage();
-    render();
+    resetMaterialsPage(true);
+    loadPublicMaterialPage(1);
   });
 
   elements.strengthRange.addEventListener("input", (event) => {
     state.minStrength = Number(event.target.value);
-    resetMaterialsPage();
-    render();
+    resetMaterialsPage(true);
+    loadPublicMaterialPage(1);
   });
 
   elements.recyclableOnly.addEventListener("change", (event) => {
     state.recyclableOnly = event.target.checked;
-    resetMaterialsPage();
-    render();
+    resetMaterialsPage(true);
+    loadPublicMaterialPage(1);
   });
 
   elements.sortSelect.addEventListener("change", (event) => {
     state.sort = event.target.value;
-    resetMaterialsPage();
-    render();
+    resetMaterialsPage(true);
+    loadPublicMaterialPage(1);
   });
 
   elements.resetButton.addEventListener("click", () => {
@@ -2098,9 +2125,11 @@ function bindEvents() {
     state.minStrength = DEFAULT_MIN_STRENGTH;
     state.recyclableOnly = false;
     state.sort = "match";
-    resetMaterialsPage();
+    resetMaterialsPage(true);
     syncControls();
-    loadPublicMaterialPage(1).catch(console.error);
+    renderFamilySearchResults();
+    window.clearTimeout(materialSearchTimer);
+    loadPublicMaterialPage(1);
   });
 
   elements.clearCompareButton.addEventListener("click", () => {
@@ -2135,7 +2164,6 @@ async function runRecommendation() {
   state.recommendations = result.recommendations;
   state.recommendationCriteria = result.criteria;
   state.recommendationResult = result;
-  resetMaterialsPage();
   renderRecommendations(result);
   render();
 }
@@ -2224,13 +2252,6 @@ function getSearchText(item) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
-}
-
-function getMatchScore(item) {
-  const recommendation = state.recommendations.find((candidate) => candidate.material.id === item.id);
-  if (recommendation) return recommendation.score + 100;
-  if (!state.query) return 0;
-  return window.MatFinderCatalogSearch.scoreMaterial(item, state.query);
 }
 
 function localizedProfileText(en, zh) {
@@ -3198,63 +3219,6 @@ function renderRecommendationDetail(item) {
   }
 }
 
-function getFilteredMaterials() {
-  const cacheKey = JSON.stringify({
-    language: state.language,
-    query: state.query,
-    category: state.category,
-    property: state.property,
-    domain: state.domain,
-    minTemp: state.minTemp,
-    minStrength: state.minStrength,
-    recyclableOnly: state.recyclableOnly,
-    sort: state.sort,
-    recommendations: state.recommendations.map((candidate) => `${candidate.material.id}:${candidate.score}`)
-  });
-
-  if (state.filteredMaterialsCache.key === cacheKey) {
-    return state.filteredMaterialsCache.items;
-  }
-
-  const items = materials
-    .filter((item) => matchesCatalogFilters(item, { includeProperty: true }))
-    .sort(sortMaterials);
-
-  state.filteredMaterialsCache = { key: cacheKey, items };
-  return items;
-}
-
-function matchesCatalogFilters(item, options = {}) {
-  const includeProperty = options.includeProperty !== false;
-  const includeDomain = options.includeDomain !== false;
-  const propertyPredicate = propertyPredicates[state.property];
-  const domain = getApplicationDomain(state.domain);
-  return window.MatFinderCatalogSearch.matchesMaterial(item, state.query)
-    && (state.category === "all" || item.category === state.category)
-    && (!includeProperty || state.property === "all" || (propertyPredicate && propertyPredicate(item)))
-    && (!includeDomain || state.domain === "all" || (domain && matchesApplicationDomain(item, domain)))
-    && numberValue(item.maxTemp) >= state.minTemp
-    && numberValue(item.tensile) >= state.minStrength
-    && (!state.recyclableOnly || item.recyclable);
-}
-
-function sortMaterials(a, b) {
-  const byName = a.name.localeCompare(b.name);
-  if (state.sort === "temperature") return b.maxTemp - a.maxTemp || byName;
-  if (state.sort === "strength") return b.tensile - a.tensile || byName;
-  if (state.sort === "density") return a.density - b.density || byName;
-  if (state.sort === "name") return byName;
-  return getMatchScore(b) - getMatchScore(a) || byName;
-}
-
-function getCategoryCounts() {
-  const counts = new Map();
-  materials.forEach((item) => {
-    counts.set(item.category, (counts.get(item.category) || 0) + 1);
-  });
-  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-}
-
 function familyDisplayName(family) {
   return state.language === "zh"
     ? `${family.chineseName} (${family.abbreviations.join(" / ")})`
@@ -3399,7 +3363,6 @@ function renderCatalogStats() {
 
 function render() {
   const needsMaterialGrid = state.route === "materials";
-  const filtered = needsMaterialGrid ? getFilteredMaterials() : state.filteredMaterialsCache.items;
   elements.tempOutput.textContent = state.minTemp === DEFAULT_MIN_TEMP
     ? (state.language === "zh" ? "不限" : "Any")
     : `>= ${state.minTemp} deg C`;
@@ -3414,15 +3377,14 @@ function render() {
 
   if (needsMaterialGrid) {
     const totalPages = Math.max(1, Math.ceil(materialCatalogTotal / state.materialsPageSize));
-    if (state.materialsPage > totalPages) state.materialsPage = totalPages;
-    const pageItems = filtered;
 
     elements.resultTitle.textContent = `${t("verifiedGradesTitle")} · ${materialCatalogTotal}`;
-    elements.emptyState.hidden = pageItems.length > 0;
-    elements.emptyState.textContent = state.query ? t("noMatches") : t("noVerifiedGrades");
+    elements.emptyState.hidden = materialCatalogTotal !== 0 && !catalogLoadError;
+    elements.emptyState.textContent = catalogLoadError
+      ? t("unavailable") : state.query ? t("noMatches") : t("noVerifiedGrades");
 
     renderChips();
-    renderCards(pageItems);
+    renderCards(materials);
     renderMaterialsPagination(materialCatalogTotal, totalPages);
   }
 
@@ -3916,25 +3878,21 @@ function renderChips() {
 function renderCards(items) {
   const recommendedIds = new Set(state.recommendations.map((candidate) => candidate.material.id));
   const fragment = document.createDocumentFragment();
+  const groupTitle = (item) => ["high", "medium"].includes(item.data_quality?.level)
+    ? t("verifiedGradesTitle") : t("potentialGradesTitle");
+  let previousTitle = null;
 
-  const groups = [
-    {
-      title: t("verifiedGradesTitle"),
-      items: items.filter((item) => ["high", "medium"].includes(item.data_quality?.level))
-    },
-    {
-      title: t("potentialGradesTitle"),
-      items: items.filter((item) => !["high", "medium"].includes(item.data_quality?.level))
+  items.forEach((item, index) => {
+    const title = groupTitle(item);
+    if (title !== previousTitle) {
+      let runEnd = index + 1;
+      while (runEnd < items.length && groupTitle(items[runEnd]) === title) runEnd += 1;
+      const heading = document.createElement("h3");
+      heading.className = "catalog-entity-group-title";
+      heading.textContent = `${title} · ${runEnd - index}`;
+      fragment.append(heading);
+      previousTitle = title;
     }
-  ];
-
-  groups.forEach((group) => {
-    if (!group.items.length) return;
-    const heading = document.createElement("h3");
-    heading.className = "catalog-entity-group-title";
-    heading.textContent = `${group.title} · ${group.items.length}`;
-    fragment.append(heading);
-    group.items.forEach((item) => {
     const recommendation = state.recommendations.find((candidate) => candidate.material.id === item.id);
     const isQuarantined = item.data_quality?.level === "quarantined";
     const card = document.createElement("article");
@@ -3954,7 +3912,7 @@ function renderCards(items) {
         ${recommendation ? `<span class="chip">${state.language === "zh" ? "证据评分" : "Evidence score"} ${recommendation.score}</span>` : ""}
         <p class="summary">${materialSummary(item)}</p>
         <div class="metrics">
-          <div class="metric"><span>${t("continuousUse")}</span><strong>${formatQualityCheckedValue(item, "maxTemp", item.maxTemp, " deg C")}</strong></div>
+          <div class="metric"><span>${t("continuousUse")}</span><strong>${formatQualityCheckedValue(item, "continuous_use_temperature", item.continuous_use_temperature, " deg C")}</strong></div>
           <div class="metric"><span>${t("tensileStrength")}</span><strong>${formatQualityCheckedValue(item, "tensile", item.tensile, " MPa")}</strong></div>
           <div class="metric"><span>${t("density")}</span><strong>${formatQualityCheckedValue(item, "density", item.density, " g/cm3")}</strong></div>
           <div class="metric"><span>Tg / Tm</span><strong>${formatValue(item.tg, " deg C")} / ${formatQualityCheckedValue(item, "tm", item.tm, " deg C")}</strong></div>
@@ -3974,23 +3932,32 @@ function renderCards(items) {
     card.querySelector(".detail-button").addEventListener("click", () => showDetail(item.id));
     card.querySelector(".compare-button")?.addEventListener("click", () => toggleCompare(item.id));
     fragment.append(card);
-    });
   });
 
   elements.materialsGrid.replaceChildren(fragment);
   state.materialsGridRendered = true;
 }
 
-function resetMaterialsPage() {
+function resetMaterialsPage(invalidateCatalogRequest = false) {
   state.materialsPage = 1;
+  if (invalidateCatalogRequest) {
+    catalogRequestId += 1;
+    catalogQueryResetPending = true;
+    elements.materialsPagination?.replaceChildren();
+  }
 }
 
 function renderMaterialsPagination(totalItems, totalPages) {
   if (!elements.materialsPagination) return;
-  if (!totalItems || totalPages <= 1) {
+  if (catalogQueryResetPending || catalogLoadError || !totalItems || totalPages <= 1) {
     elements.materialsPagination.replaceChildren();
     return;
   }
+  const renderedRequestId = catalogRequestId;
+  const navigate = (page) => {
+    if (catalogQueryResetPending || catalogLoadError || renderedRequestId !== catalogRequestId) return;
+    loadPublicMaterialPage(page);
+  };
 
   const label = document.createElement("span");
   const pageStart = (state.materialsPage - 1) * state.materialsPageSize + 1;
@@ -4002,7 +3969,7 @@ function renderMaterialsPagination(totalItems, totalPages) {
   previous.textContent = "‹";
   previous.disabled = state.materialsPage <= 1;
   previous.addEventListener("click", () => {
-    loadPublicMaterialPage(Math.max(1, state.materialsPage - 1)).catch(console.error);
+    navigate(Math.max(1, state.materialsPage - 1));
   });
 
   const next = document.createElement("button");
@@ -4010,7 +3977,7 @@ function renderMaterialsPagination(totalItems, totalPages) {
   next.textContent = "›";
   next.disabled = state.materialsPage >= totalPages;
   next.addEventListener("click", () => {
-    loadPublicMaterialPage(Math.min(totalPages, state.materialsPage + 1)).catch(console.error);
+    navigate(Math.min(totalPages, state.materialsPage + 1));
   });
 
   const select = document.createElement("select");
@@ -4023,7 +3990,7 @@ function renderMaterialsPagination(totalItems, totalPages) {
     select.append(option);
   }
   select.addEventListener("change", (event) => {
-    loadPublicMaterialPage(Number(event.target.value)).catch(console.error);
+    navigate(Number(event.target.value));
   });
 
   elements.materialsPagination.replaceChildren(label, previous, select, next);
@@ -4521,9 +4488,9 @@ function renderAnalysisError(item, error) {
   `;
 }
 
-init().catch((error) => {
-  elements.recommendationResults.innerHTML = `<p class="recommendation-empty">${error.message}</p>`;
+init().catch(() => {
+  elements.recommendationResults.innerHTML = `<p class="recommendation-empty">${t("unavailable")}</p>`;
   elements.materialsGrid.innerHTML = "";
   elements.emptyState.hidden = false;
-  elements.emptyState.textContent = error.message;
+  elements.emptyState.textContent = t("unavailable");
 });
