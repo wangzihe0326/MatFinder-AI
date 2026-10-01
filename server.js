@@ -2,6 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
+require("./catalog-policy").loadCanonicalPolicy();
 const {
   DEFAULT_PAGE_SIZE,
   DOMAIN_IDS,
@@ -217,10 +218,14 @@ const server = http.createServer(async (request, response) => {
         repository.checkTechnicalHealth();
         if (requestPath === "/api/health") {
           sendJson(response, 200, { status: "ok" });
-        } else if (repository.hasReadyPublicCommercialGrade()) {
-          sendJson(response, 200, { status: "ready" });
+        } else if (!repository.getCatalogGeneration()) {
+          sendJson(response, 503, { status: "not_ready", reason: "catalog_stats_unavailable" });
         } else {
-          sendJson(response, 503, {
+          const ready = repository.hasReadyPublicCommercialGrade();
+          if (!repository.getCatalogGeneration()) {
+            sendJson(response, 503, { status: "not_ready", reason: "catalog_stats_unavailable" });
+          } else if (ready) sendJson(response, 200, { status: "ready" });
+          else sendJson(response, 503, {
             status: "not_ready",
             reason: "no_verified_public_grades"
           });
@@ -261,6 +266,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/materials") {
+      response.setHeader("Cache-Control", "no-store");
       const result = repository.listMaterials(auditMode ? {
         audit: true,
         query: String(requestUrl.searchParams.get("q") || "").trim(),
@@ -281,7 +287,9 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/catalog-stats") {
-      sendJson(response, 200, repository.getCatalogStats());
+      response.setHeader("Cache-Control", "no-store");
+      const stats = repository.getCatalogStats();
+      sendJson(response, stats ? 200 : 503, stats || { status: "unavailable", reason: "catalog_stats_unavailable" });
       return;
     }
 
@@ -383,9 +391,15 @@ function sendRateLimit(response, retryAfterSeconds) {
   sendJson(response, 429, { error: "Rate limit exceeded", retryAfterSeconds: seconds });
 }
 
-server.listen(port, () => {
-  logMemory("after_http_listen");
-  console.log(`MatFinder AI running in ${nodeEnv} mode at http://localhost:${port}`);
+repository.initializeCatalogStats().then(() => {
+  logMemory("after_catalog_generation_verification", { catalogStatsAvailable: Boolean(repository.getCatalogGeneration()) });
+  server.listen(port, () => {
+    logMemory("after_http_listen");
+    console.log(`MatFinder AI running in ${nodeEnv} mode at http://localhost:${port}`);
+  });
+}).catch(() => {
+  console.error("Catalog generation initialization failed");
+  process.exitCode = 1;
 });
 
 // Test-process IPC keeps memory/query assertions available without a public diagnostics API.

@@ -117,6 +117,7 @@ const ok = (body) => ({ ok: true, status: 200, json: async () => body });
 const fixedResponse = (body) => { fetchHandler = async () => ok(body); };
 
 async function main() {
+  await catalogStatsDegradationChecks();
   const state = read("state");
   state.route = "materials";
   state.language = "en";
@@ -420,6 +421,80 @@ async function main() {
   await entityFrontendChecks();
   await comparisonFrontendChecks();
   process.stdout.write("AD-04 frontend catalog regressions 34–49 passed.\n");
+}
+
+async function catalogStatsDegradationChecks() {
+  const generation = { formatVersion: 1, datasetDigest: "a".repeat(64), policyDigest: "b".repeat(64) };
+  const aggregate = { polymerFamilies: 7, verifiedCommercialGrades: 3, verifiedPropertyDataPoints: 6,
+    materialsAwaitingVerification: 5, generation };
+  const page = { ...payload([grade("AD08-BROWSE", 110, 120)]), generation };
+  let statsMode = "good";
+  const mainPaths = [];
+  fetchHandler = async (url) => {
+    mainPaths.push(url);
+    if (url === "/api/catalog-stats") {
+      if (statsMode === "network") throw new Error("Stats unavailable");
+      if (statsMode === "503") return { ok: false, status: 503 };
+      if (statsMode === "json") return { ok: true, json: async () => { throw new Error("Malformed JSON"); } };
+      return { ok: true, json: async () => statsMode === "mismatch"
+        ? { ...aggregate, generation: { ...generation, datasetDigest: "c".repeat(64) } }
+        : statsMode === "malformed" ? { ...aggregate, verifiedCommercialGrades: -1 }
+          : statsMode === "zero" ? { ...aggregate, verifiedCommercialGrades: 0, verifiedPropertyDataPoints: 0, materialsAwaitingVerification: 0 }
+            : aggregate };
+    }
+    return { ok: true, json: async () => url.startsWith("/api/materials") ? page
+      : url === "/api/polymer-families" ? [] : { target: 0 } };
+  };
+  for (statsMode of ["good", "network", "503", "json", "mismatch", "malformed", "zero"]) {
+    mainPaths.length = 0;
+    await read("loadMaterials()");
+    assert.equal(read("materials[0].id"), "AD08-BROWSE", statsMode);
+    assert.equal(read("materialCatalogTotal"), 1);
+    assert.equal(mainPaths.length, 4, "No polling/rebuilding");
+    read("renderCatalogStats()");
+    if (["good", "zero"].includes(statsMode)) {
+      assert.equal(String(node("#homeVerifiedGradeCount").textContent), statsMode === "zero" ? "0" : "3");
+      assert.notEqual(read("catalogLayerStats"), null);
+    } else {
+      assert.equal(read("catalogLayerStats"), null, statsMode);
+      assert.equal(node("#homeVerifiedGradeCount").textContent, read('t("unavailable")'));
+    }
+  }
+  statsMode = "good"; await read("loadMaterials()");
+  let releaseStats;
+  const pendingStats = new Promise((resolve) => { releaseStats = resolve; });
+  fetchHandler = async (url) => ({ ok: true, json: async () => url === "/api/catalog-stats"
+    ? pendingStats : url.startsWith("/api/materials") ? page : url === "/api/polymer-families" ? [] : { target: 0 } });
+  await read("loadMaterials()");
+  assert.equal(read("materials[0].id"), "AD08-BROWSE", "Delayed stats never block core loading");
+  assert.equal(read("catalogLayerStats"), null);
+  read("renderCatalogStats()");
+  assert.equal(node("#homeVerifiedGradeCount").textContent, read('t("unavailable")'));
+  releaseStats(aggregate);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(String(node("#homeVerifiedGradeCount").textContent), "3", "Late matching stats can render");
+  fixedResponse({ ...page, generation: null });
+  await read("loadPublicMaterialPage(1)");
+  assert.equal(read("catalogLayerStats"), null, "Invalid page generation clears old stats");
+  for (const newerGeneration of [null, { ...generation, datasetDigest: "d".repeat(64) }]) {
+    let release;
+    const pending = new Promise((resolve) => { release = resolve; });
+    fetchHandler = async (url) => ({ ok: true, json: async () => url === "/api/catalog-stats"
+      ? pending : url.startsWith("/api/materials") ? page : url === "/api/polymer-families" ? [] : { target: 0 } });
+    await read("loadMaterials()");
+    fixedResponse({ ...page, generation: newerGeneration });
+    await read("loadPublicMaterialPage(1)");
+    release(aggregate);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(read("catalogLayerStats"), null, "Late old stats cannot overwrite newer null/different page G");
+    read("renderCatalogStats()");
+    assert.equal(node("#homeVerifiedGradeCount").textContent, read('t("unavailable")'));
+  }
+  statsMode = "good";
+  fetchHandler = async (url) => url === "/api/catalog-stats"
+    ? { ok: false, status: 503 } : { ok: false, status: 500 };
+  await assert.rejects(read("loadMaterials()"), /Failed to load/, "Core loader failures remain fatal");
+  console.log("AD-08 frontend stats degradation, real zeroes and generation mismatch regressions passed.");
 }
 
 function recommendationGrade(id, tensile = 40) {

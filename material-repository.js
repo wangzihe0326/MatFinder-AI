@@ -313,6 +313,7 @@ class MaterialRepository {
       );
     }
     this.databasePath = databasePath;
+    this.databaseFileState = require("./catalog-stats-artifact").fileState(databasePath);
     this.metrics = {
       queries: 0,
       rowsReturned: 0,
@@ -324,6 +325,8 @@ class MaterialRepository {
       maximumRecommendationBatchSize: 0
     };
     this.readinessCache = null;
+    this.catalogGeneration = null;
+    this.ad08Statements = new Set();
     this.database = new DatabaseSync(databasePath, {
       readOnly: true
     });
@@ -479,52 +482,58 @@ class MaterialRepository {
     return Number(row?.count || 0);
   }
 
+  async initializeCatalogStats() {
+    if (this.catalogStatsInitialized) return this.getCatalogGeneration();
+    this.catalogStatsInitialized = true;
+    const { verifyRuntimeArtifact } = require("./catalog-stats-artifact");
+    let executedPolicy;
+    try { executedPolicy = require("./catalog-policy").loadedPolicyDigest(module); }
+    catch { return null; } // Unbound/preloaded code cannot claim a verified generation.
+    this.catalogGeneration = await verifyRuntimeArtifact(this.databasePath, this.database, this.databaseFileState, executedPolicy);
+    return this.getCatalogGeneration();
+  }
+
+  getCatalogGeneration() {
+    return this.catalogGeneration?.current() || null;
+  }
+
   getCatalogStats() {
-    const familyCount = this.getPolymerFamilyCount();
-    const gradeRows = this._all(
-      `
-        SELECT m.material_id, ${qualityLevelSql()} AS quality_level
-          FROM materials m
-          JOIN real_material_identities identity_row
-            ON identity_row.material_id = m.material_id
-         WHERE ${PUBLIC_BOUNDARY}
-      `,
-      [],
-      "catalog_stats"
-    );
-    const verifiedIds = gradeRows
-      .filter((row) => ["high", "medium"].includes(row.quality_level))
-      .map((row) => row.material_id);
-    let verifiedPropertyDataPoints = 0;
-    for (const idBatch of chunks(verifiedIds, 500)) {
-      verifiedPropertyDataPoints += Number(
-        this._get(
-          `
-            SELECT COUNT(*) AS count
-              FROM material_property_evidence
-             WHERE material_id IN (${placeholders(idBatch.length)})
-               AND confidence_level IN ('high', 'medium')
-               AND verification_status IN ('verified', 'partially_verified')
-               AND source_type IN (
-                 'manufacturer', 'official_datasheet', 'academic', 'distributor'
-               )
-               AND NULLIF(TRIM(source_title), '') IS NOT NULL
-               AND (
-                 source_url LIKE 'http://%'
-                 OR source_url LIKE 'https://%'
-               )
-          `,
-          idBatch,
-          "count"
-        )?.count || 0
-      );
+    const generation = this.getCatalogGeneration();
+    if (!generation) return null;
+    return { ...this.catalogGeneration.artifact.aggregates,
+      generation };
+  }
+
+  // Offline only: bounded keyset traversal, no retained catalog/eligible-ID array.
+  buildCanonicalCatalogAggregates() {
+    const aggregates = { polymerFamilies: this.getPolymerFamilyCount(),
+      verifiedCommercialGrades: 0, verifiedPropertyDataPoints: 0,
+      materialsAwaitingVerification: 0 };
+    let lastId = null;
+    let publicMaterialTotal = 0;
+    for (;;) {
+      const rows = this._readAd08Rows(`SELECT ${LIST_COLUMNS}, NULL AS quality_level
+        FROM materials m ${CATALOG_JOINS}
+        WHERE ${PUBLIC_BOUNDARY} AND (? IS NULL OR m.material_id > ?)
+        ORDER BY m.material_id LIMIT ?`, [lastId, lastId, DETAIL_BATCH_SIZE], "ad08_batch");
+      if (!rows.length) break;
+      const materials = this._hydrateDetailedRows(rows, this._readAd08Rows.bind(this));
+      publicMaterialTotal += materials.length;
+      const eligibleIds = materials.filter((item) => item.data_quality.recommendation_eligible)
+        .map((item) => item.id);
+      aggregates.verifiedCommercialGrades += eligibleIds.length;
+      aggregates.materialsAwaitingVerification += materials.length - eligibleIds.length;
+      if (eligibleIds.length) aggregates.verifiedPropertyDataPoints += Number(this._get(`
+        SELECT COUNT(*) AS count FROM material_property_evidence
+        WHERE material_id IN (${placeholders(eligibleIds.length)})
+          AND confidence_level IN ('high', 'medium')
+          AND verification_status IN ('verified', 'partially_verified')
+          AND source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor')
+          AND NULLIF(TRIM(source_title), '') IS NOT NULL
+          AND (source_url LIKE 'http://%' OR source_url LIKE 'https://%')`, eligibleIds, "count").count);
+      lastId = rows[rows.length - 1].material_id;
     }
-    return {
-      polymerFamilies: familyCount,
-      verifiedCommercialGrades: verifiedIds.length,
-      verifiedPropertyDataPoints,
-      materialsAwaitingVerification: gradeRows.length - verifiedIds.length
-    };
+    return { aggregates, publicMaterialTotal };
   }
 
   getAuditStats() {
@@ -595,6 +604,20 @@ class MaterialRepository {
 
   listMaterials(options = {}) {
     if (options.audit === true) return this._listAuditMaterials(options);
+    const generation = this.getCatalogGeneration();
+    this.database.exec("BEGIN");
+    try {
+      const result = this._listPublicMaterials(options);
+      this.database.exec("COMMIT");
+      result.generation = generation && this.getCatalogGeneration() ? generation : null;
+      return result;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  _listPublicMaterials(options) {
     const limit = options.limit ?? DEFAULT_PAGE_SIZE;
     const offset = options.offset ?? 0;
     const predicate = buildPublicCatalogPredicate(options);
@@ -607,15 +630,22 @@ class MaterialRepository {
     const facets = this._catalogFacets(options);
     const order = buildCatalogOrder(options);
     const rows = this._all(
-      `SELECT ${LIST_COLUMNS}, ${qualityLevelSql()} AS quality_level
+      `SELECT ${LIST_COLUMNS}, NULL AS quality_level
          FROM materials m ${CATALOG_JOINS}
         WHERE ${predicate.sql}
         ORDER BY ${order.sql}
         LIMIT ? OFFSET ?`,
       [...predicate.params, ...order.params, limit, offset], "material_list"
     );
-    const items = rows.map(materialFromListRow);
-    this._attachTagsAndUses(items);
+    const hydrated = this._hydrateDetailedRows(rows, this._readAd08Rows.bind(this));
+    const items = rows.map((row, index) => {
+      const canonical = hydrated[index];
+      const item = materialFromListRow({ ...row, quality_level: canonical.data_quality.level });
+      item.data_quality = canonical.data_quality;
+      for (const field of ["tags", "uses", "tags_en", "tags_zh", "applications_en", "applications_zh"])
+        item[field] = canonical[field];
+      return item;
+    });
     return { items, total, limit, offset, hasMore: offset + limit < total, facets };
   }
 
@@ -859,14 +889,14 @@ class MaterialRepository {
     this.database.close();
   }
 
-  _hydrateDetailedRows(rows) {
+  _hydrateDetailedRows(rows, read = this._all.bind(this)) {
     const hydrated = [];
     for (const rowBatch of chunks(rows, DETAIL_BATCH_SIZE)) {
       const materials = rowBatch.map(materialFromListRow);
       const byId = new Map(materials.map((material) => [material.id, material]));
-      this._attachTagsAndUses(materials);
-      this._attachLegacySources(byId);
-      this._attachEvidence(byId);
+      this._attachTagsAndUses(materials, read);
+      this._attachLegacySources(byId, read);
+      this._attachEvidence(byId, read);
       for (const material of materials) {
         if (!material.evidence) material.evidence = buildLegacyEvidence(material);
         hydrated.push(annotateMaterialQuality(material));
@@ -875,11 +905,11 @@ class MaterialRepository {
     return hydrated;
   }
 
-  _attachTagsAndUses(materials) {
+  _attachTagsAndUses(materials, read = this._all.bind(this)) {
     if (!materials.length) return;
     const byId = new Map(materials.map((material) => [material.id, material]));
     for (const idBatch of chunks([...byId.keys()], 100)) {
-      const tags = this._all(
+      const tags = read(
         `
           SELECT material_id, tag
             FROM material_tags
@@ -890,7 +920,7 @@ class MaterialRepository {
         "material_tags"
       );
       for (const row of tags) byId.get(row.material_id)?.tags.push(row.tag);
-      const uses = this._all(
+      const uses = read(
         `
           SELECT material_id, use
             FROM material_uses
@@ -910,10 +940,10 @@ class MaterialRepository {
     }
   }
 
-  _attachLegacySources(byId) {
+  _attachLegacySources(byId, read = this._all.bind(this)) {
     if (!byId.size) return;
     const ids = [...byId.keys()];
-    const rows = this._all(
+    const rows = read(
       `
         SELECT material_id, source_title, source_url, source_type, notes
           FROM material_sources
@@ -933,7 +963,7 @@ class MaterialRepository {
     }
   }
 
-  _attachEvidence(byId) {
+  _attachEvidence(byId, read = this._all.bind(this)) {
     if (!byId.size) return;
     for (const material of byId.values()) {
       material.evidence = {
@@ -962,7 +992,7 @@ class MaterialRepository {
       COALESCE(normalized_source.commercial_grade, evidence_row.commercial_grade) AS commercial_grade,
       COALESCE(normalized_source.material_family, evidence_row.material_family) AS material_family
     `;
-    const identityRows = this._all(
+    const identityRows = read(
       `
         SELECT
           evidence_row.material_id,
@@ -1007,7 +1037,7 @@ class MaterialRepository {
       identity.sources.push(normalized);
     }
 
-    const propertyRows = this._all(
+    const propertyRows = read(
       `
         SELECT
           evidence_row.material_id,
@@ -1045,7 +1075,7 @@ class MaterialRepository {
       material.evidence.properties[claim.propertyKey].push(claim);
     }
 
-    const certificationRows = this._all(
+    const certificationRows = read(
       `
         SELECT
           evidence_row.material_id,
@@ -1099,6 +1129,29 @@ class MaterialRepository {
           sourceDate: nullableText(row.source_date)
         }
       });
+    }
+  }
+
+  _readAd08Rows(sql, params, tag, limit = 1000) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+      throw new Error("Invalid AD-08 row limit");
+    const statement = this.database.prepare(sql);
+    this.ad08Statements.add(statement);
+    let iterator;
+    const rows = [];
+    this.metrics.queries += 1;
+    try {
+      iterator = statement.iterate(...params);
+      for (const row of iterator) {
+        if (rows.length === limit) throw new Error("AD-08 bounded evidence read exceeded row limit");
+        rows.push(row);
+      }
+      this.metrics.rowsReturned += rows.length;
+      this.metrics.maximumRowsInSingleQuery = Math.max(this.metrics.maximumRowsInSingleQuery, rows.length);
+      if (tag === "property_evidence") this.metrics.propertyEvidenceRowsRead += rows.length;
+      return rows;
+    } finally {
+      try { iterator?.return?.(); } finally { this.ad08Statements.delete(statement); }
     }
   }
 

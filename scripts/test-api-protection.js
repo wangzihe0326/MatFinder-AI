@@ -16,7 +16,7 @@ const {
   clientIdentity,
   createApiProtection
 } = require("../api-protection");
-const { MaterialRepository } = require("../material-repository");
+const { MaterialRepository } = require("../catalog-policy").loadCanonicalPolicy().repository;
 
 const root = path.resolve(__dirname, "..");
 const adminFixture = "AD02_TEST_ADMIN_TOKEN_ONLY";
@@ -105,6 +105,7 @@ async function main() {
   try {
     fs.copyFileSync(path.join(root, "matfinder.db"), testDatabasePath);
     addPublicTestMaterials(testDatabasePath);
+    await require("./build-catalog-stats").buildCatalogStats(testDatabasePath);
     const repository = new MaterialRepository(testDatabasePath);
     const publicMaterials = repository.getRecommendationCandidates({ limit: 20 });
     assert.ok(publicMaterials.length >= 8, "Need public material fixtures for distinct AI cache keys.");
@@ -223,6 +224,8 @@ async function testFrontendStartupContract() {
     materialCatalogTotal: 0,
     catalogFacets: { categories: { all: 0, options: [] }, performance: { all: 0, groups: [], options: [] }, domains: { all: 0, options: [] } },
     t: () => "Loading",
+    // The production render is tested in the complete browser harness.
+    renderCatalogStats() {},
     apiUrl: (value) => value,
     fetch: async (requestPath) => {
       requestedPaths.push(requestPath);
@@ -235,7 +238,9 @@ async function testFrontendStartupContract() {
       return { ok: true, json: async () => payload };
     }
   };
-  const run = vm.runInNewContext(`${loadMaterials}\nloadMaterials`, context);
+  const generationHelpers = app.slice(app.indexOf("function sameCatalogGeneration("),
+    app.indexOf("function renderCatalogStats("));
+  const run = vm.runInNewContext(`${generationHelpers}\n${loadMaterials}\nloadMaterials`, context);
   await run();
   assert.equal(context.materials.length, 1, "Public startup loader succeeds without admin token.");
   assert.equal(requestedPaths.length, 4);

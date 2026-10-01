@@ -9,7 +9,7 @@ const { DatabaseSync } = require("node:sqlite");
 const {
   DOMAIN_IDS, MaterialRepository, PERFORMANCE_ALIASES, PERFORMANCE_IDS,
   buildPublicCatalogPredicate
-} = require("../material-repository");
+} = require("../catalog-policy").loadCanonicalPolicy().repository;
 const catalogSearch = require("../public/catalog-search");
 
 const root = path.resolve(__dirname, "..");

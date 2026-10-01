@@ -32,13 +32,15 @@
     "import:real-materials": "python -B scripts/import-real-materials.py",
     "rollback:real-materials": "python -B scripts/import-real-materials.py --rollback",
     "test:real-material-importer": "python -B scripts/test-real-material-importer.py",
-    "test:acceptance": "npm run test:evidence && npm run test:real-material-importer && npm run test:catalog-search && npm run test:catalog-layer && npm run test:material-query && npm run test:catalog-frontend && npm run test:recommendation-recall && npm run test:startup-memory && npm run test:readiness && npm run test:static-security && npm run test:api-protection",
+    "test:acceptance": "npm run test:catalog-stats && npm run test:evidence && npm run test:real-material-importer && npm run test:catalog-search && npm run test:catalog-layer && npm run test:material-query && npm run test:catalog-frontend && npm run test:recommendation-recall && npm run test:startup-memory && npm run test:readiness && npm run test:static-security && npm run test:api-protection",
     "audit:database": "python -B scripts/analyze-database-storage.py",
     "optimize:database-indexes": "python -B scripts/optimize-database-indexes.py",
     "validate:real-material-import": "node scripts/validate-real-material-import.js",
     "summary:materials": "node scripts/generate-database-summary.js",
     "pilot:status": "node scripts/report-pilot-status.js",
-    "smoke:openai": "node scripts/smoke-openai-analysis.js"
+    "smoke:openai": "node scripts/smoke-openai-analysis.js",
+    "build:catalog-stats": "node scripts/build-catalog-stats.js",
+    "test:catalog-stats": "node scripts/test-catalog-stats-artifact.js"
   },
   "dependencies": {}
 }
