@@ -30,8 +30,33 @@ class Element {
   replaceChildren(...nodes) {
     this.children = nodes.flatMap((node) => node.tag === "fragment" ? node.children : [node]);
   }
-  querySelector() { return new Element("button"); }
-  querySelectorAll() { return []; }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || new Element("button"); }
+  querySelectorAll(selector) {
+    if (this.queryMarkup !== this.innerHTML) {
+      this.queryMarkup = this.innerHTML;
+      this.queryNodes = new Map();
+    }
+    if (this.queryNodes.has(selector)) return this.queryNodes.get(selector);
+    const buttons = [...this.innerHTML.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)]
+      .filter(([, attributes]) => selector.startsWith(".")
+        ? (attributes.match(/class="([^"]*)"/)?.[1] || "").split(/\s+/).includes(selector.slice(1))
+        : selector.startsWith("[") && attributes.includes(selector.slice(1, -1) + "="))
+      .map(([, attributes, text]) => {
+        const button = new Element("button");
+        button.textContent = text;
+        for (const [, key, value] of attributes.matchAll(/data-([\w-]+)="([^"]*)"/g)) {
+          button.dataset[key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = value;
+        }
+        return button;
+      });
+    this.queryNodes.set(selector, buttons);
+    return buttons;
+  }
+  showModal() { this.open = true; }
+  close() {
+    this.open = false;
+    if (this.listeners.has("close")) this.emit("close");
+  }
   setAttribute(name, value) { this[name] = value; }
   removeAttribute(name) { delete this[name]; }
   closest() { return this; }
@@ -40,6 +65,7 @@ class Element {
 const nodes = new Map();
 const document = {
   body: new Element("body"),
+  documentElement: new Element("html"),
   querySelector(selector) {
     if (!nodes.has(selector)) nodes.set(selector, new Element(selector));
     return nodes.get(selector);
@@ -53,7 +79,7 @@ let fetchHandler = () => { throw new Error("Unexpected fetch"); };
 const paths = [];
 const context = vm.createContext({
   document, URLSearchParams,
-  fetch: (url) => { paths.push(url); return fetchHandler(url); },
+  fetch: (url, options) => { paths.push(url); return fetchHandler(url, options); },
   window: {
     MatFinderConfig: { apiBaseUrl: "" },
     MatFinderPolymerFamilies: families,
@@ -391,6 +417,7 @@ async function main() {
   assert.equal(state.materialsPage, 3);
 
   await recommendationFrontendChecks();
+  await entityFrontendChecks();
   process.stdout.write("AD-04 frontend catalog regressions 34–49 passed.\n");
 }
 
@@ -652,6 +679,415 @@ async function recommendationFrontendChecks() {
     assert.equal(state.recommendationCache.size, 0);
     process.stdout.write("AD-05 frontend integration passed: canonical complete 201, unchanged evidence-rules-v3, malformed rejection, E/L/Q counts, safe retry, complete empty, cache and stale/clear safety.\n");
   } finally { engine.createRecommendationService = factory; }
+}
+
+async function entityFrontendChecks() {
+  const state = read("state");
+  let passed = 0;
+  const selectedIds = () => Array.from(read("getSelectedMaterials()"), (item) => item.id);
+  const analysis = (id, language) => ({
+    overview: `ANALYSIS-${id}-${language}`, advantages: [], limitations: [], recommendedApplications: []
+  });
+  const full = (id, tensile = 80) => {
+    for (const language of ["en", "zh"]) state.analysisCache.set(`${language}:${id}`, analysis(id, language));
+    return {
+      ...recommendationGrade(id, tensile), name: `FULL-${id}`, name_en: `FULL-${id}`, name_zh: `FULL-${id}-ZH`,
+      notes: `FULL-NOTES-${id}`, manufacturer: "ENTITY TEST FIXTURE ONLY",
+      evidence: { ...recommendationGrade(id, tensile).evidence, identity: { sources: [] } }
+    };
+  };
+  const reset = () => {
+    run("closeDetail(); materialDetailCache.clear(); selectedMaterialEntities.clear(); compareSelectionIntents.clear()");
+    assert.equal(read("materialDetailRequests.size"), 0, "Every prior request must finish before reset.");
+    state.selected.clear(); state.compareErrors.clear(); state.analysisCache.clear();
+    state.selectedMaterialId = null; state.activeMaterial = null; state.activeMaterialError = null;
+    state.recommendations = []; state.recommendationResult = null; state.recommendationCache.clear();
+    state.recommendationCriteria = []; state.recommendationLoading = false; state.recommendationLoadError = false;
+    state.route = "home"; state.language = "en";
+    node("#requirementInput").value = "";
+    paths.length = 0;
+    fetchHandler = () => { throw new Error("Unexpected entity-test request"); };
+  };
+  const check = async (name, action) => {
+    reset();
+    await action();
+    passed++;
+    process.stdout.write(`AD-06 PASS ${passed}: ${name}\n`);
+  };
+  const page = async (items, pageNumber = 1, total = 96) => {
+    fixedResponse(payload(items, total));
+    await read(`loadPublicMaterialPage(${pageNumber})`);
+  };
+  const respondDetails = (entries) => {
+    fetchHandler = async (url, options) => {
+      assert.equal(options, undefined, "Entity tests must never invoke an AI POST.");
+      const id = decodeURIComponent(url.slice("/api/materials/".length));
+      assert.ok(url.startsWith("/api/materials/") && entries.has(id), `Unexpected detail request ${url}`);
+      return ok(entries.get(id));
+    };
+  };
+  const deferredDetails = () => {
+    const pending = new Map();
+    fetchHandler = (url, options) => {
+      assert.equal(options, undefined, "Only mocked detail GETs are allowed.");
+      assert.ok(url.startsWith("/api/materials/"));
+      assert.equal(pending.has(url), false, `Concurrent request was not deduplicated: ${url}`);
+      return new Promise((resolve, reject) => pending.set(url, { resolve, reject }));
+    };
+    return pending;
+  };
+  const complete = (pending, id, item) => pending.get(`/api/materials/${encodeURIComponent(id)}`).resolve(ok(item));
+  const recommendB = async () => {
+    const A = recommendationGrade("A", 40), B = recommendationGrade("B", 80);
+    await page([A]);
+    state.route = "home";
+    node("#requirementInput").value = "tensile strength at least 50 MPa";
+    fixedResponse({ items: [A, B], total: 2, eligibleTotal: 2, referenceTotal: 0, complete: true, bounded: false });
+    await read("runRecommendation()");
+    assert.equal(state.recommendations[0].material.id, "B");
+    return { A, B };
+  };
+  const recommendationAction = (attribute, id) => {
+    const button = node("#recommendationResults").querySelectorAll(`[data-${attribute}]`)
+      .find((entry) => entry.dataset[attribute.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] === id);
+    assert.ok(button, `Missing real recommendation ${attribute} action for ${id}`);
+    return button.emit("click");
+  };
+
+  await check("cross-page recommendation detail uses full entity without mutating either snapshot", async () => {
+    const { A, B } = await recommendB();
+    const snapshots = [JSON.stringify(A), JSON.stringify(B)];
+    const detailB = full("B"); respondDetails(new Map([["B", detailB]])); paths.length = 0;
+    await recommendationAction("detail-id", "B");
+    assert.deepEqual(paths, ["/api/materials/B"]);
+    assert.equal(state.selectedMaterialId, "B"); assert.equal(state.activeMaterial, detailB);
+    assert.ok(node("#detailContent").innerHTML.includes("FULL-B"));
+    assert.equal(node("#detailDialog").open, true);
+    assert.deepEqual(Array.from(read("materials"), (item) => item.id), ["A"]);
+    assert.deepEqual([JSON.stringify(A), JSON.stringify(B)], snapshots);
+  });
+
+  await check("recommendation compare and cross-page A/B pair follow selection order", async () => {
+    await recommendB();
+    respondDetails(new Map([["A", full("A")], ["B", full("B")]]));
+    await recommendationAction("compare-id", "B"); await read('toggleCompare("A")');
+    read('setRoute("compare")');
+    assert.deepEqual(selectedIds(), ["B", "A"]);
+    assert.deepEqual(Array.from(read("getAiComparePair()"), (item) => item.id), ["B", "A"]);
+    const table = node("#compareTableWrap").children[0].innerHTML;
+    assert.ok(table.indexOf("FULL-B") < table.indexOf("FULL-A"));
+    assert.equal(Number(node("#selectedCount").textContent), 2);
+    assert.ok(node("#recommendationResults").innerHTML.includes('aria-pressed="true"'));
+  });
+
+  await check("pagination and zero-result filtering preserve selected entity and removal", async () => {
+    respondDetails(new Map([["A", full("A")]])); await read('toggleCompare("A")');
+    state.route = "compare"; await page([recommendationGrade("C")], 2);
+    assert.deepEqual(selectedIds(), ["A"]);
+    assert.ok(node("#compareTableWrap").children[0].innerHTML.includes("FULL-A"));
+    await page([], 1, 0);
+    assert.deepEqual([...state.selected], ["A"]); assert.deepEqual(selectedIds(), ["A"]);
+    assert.equal(Number(node("#selectedCount").textContent), 1);
+    fetchHandler = () => { throw new Error("Removal must not fetch"); };
+    const remove = node("#compareSelection").querySelectorAll("[data-remove-compare]")[0];
+    await remove.emit("click");
+    assert.equal(state.selected.size, 0); assert.equal(Number(node("#selectedCount").textContent), 0);
+  });
+
+  await check("active entity survives page replacement, language rerender and cache eviction", async () => {
+    const detailA = full("A"); respondDetails(new Map([["A", detailA]]));
+    await read('showDetail("A")'); await read('toggleCompare("A")');
+    state.recommendations = [{ material: recommendationGrade("B"), score: 90 }];
+    await page([recommendationGrade("C")], 2);
+    node("#languageSelect").value = "zh"; node("#languageSelect").emit("change");
+    assert.equal(state.activeMaterial, detailA); assert.equal(read("getCopilotContext().item.id"), "A");
+    assert.ok(node("#analysisTitle").textContent.includes("FULL-A-ZH"));
+    assert.ok(node("#analysisContent").innerHTML.includes("ANALYSIS-A-zh"));
+    const entries = new Map(Array.from({ length: 31 }, (_, index) => [`E${index}`, full(`E${index}`)]));
+    respondDetails(entries);
+    for (const id of entries.keys()) await read(`resolveMaterialById(${JSON.stringify(id)})`);
+    assert.equal(read("materialDetailCache.size"), 30); assert.equal(read('materialDetailCache.has("A")'), false);
+    assert.equal(state.activeMaterial, detailA); assert.equal(read("getSelectedMaterials()[0]"), detailA);
+    read("rerenderActiveAnalysis(); renderCompare()");
+    assert.equal(read("getCopilotContext().item.id"), "A"); assert.deepEqual(selectedIds(), ["A"]);
+  });
+
+  await check("existing catalog buttons still open full detail and add/remove compare", async () => {
+    const compactA = recommendationGrade("A"); state.route = "materials"; await page([compactA]);
+    respondDetails(new Map([["A", full("A")]]));
+    const card = node("#materialsGrid").children.find((item) => item.tag === "article");
+    await card.querySelector(".detail-button").emit("click");
+    await card.querySelector(".compare-button").emit("click");
+    assert.deepEqual(selectedIds(), ["A"]); assert.ok(node("#detailContent").innerHTML.includes("FULL-A"));
+    await read('toggleCompare("A")'); assert.equal(state.selected.size, 0);
+    assert.equal(compactA.name, "A"); assert.equal(compactA.notes, null);
+    assert.equal(read("materials[0]"), compactA);
+  });
+
+  await check("same-ID page replacement keeps full resolver entity independent", async () => {
+    const detailA = full("A"); const firstA = recommendationGrade("A");
+    await page([firstA]); respondDetails(new Map([["A", detailA]])); await read('showDetail("A")');
+    const nextA = recommendationGrade("A"); await page([nextA]);
+    fetchHandler = () => { throw new Error("Full entity should be cached"); };
+    await read('showDetail("A")');
+    assert.equal(await read('resolveMaterialById("A")'), detailA);
+    assert.equal(state.activeMaterial, detailA); assert.notEqual(state.activeMaterial, nextA);
+    assert.equal(firstA.notes, null); assert.equal(nextA.notes, null);
+    assert.ok(node("#detailContent").innerHTML.includes("FULL-A"));
+  });
+
+  await check("same-ID detail/compare deduplicate and pending dedup survives cache pressure", async () => {
+    const detailB = full("B"); const pending = deferredDetails();
+    const detail = read('showDetail("B")'), compare = read('toggleCompare("B")');
+    assert.deepEqual(paths, ["/api/materials/B"]);
+    complete(pending, "B", detailB); await Promise.all([detail, compare]);
+    assert.equal(state.activeMaterial, read("getSelectedMaterials()[0]"));
+    const delayed = read('resolveMaterialById("DELAYED")');
+    const delayedEntity = full("DELAYED");
+    const requests = Array.from({ length: 31 }, (_, index) => ({ id: `P${index}`, entity: full(`P${index}`) }));
+    const resolutions = requests.map(({ id }) => read(`resolveMaterialById(${JSON.stringify(id)})`));
+    for (const { id, entity } of requests) complete(pending, id, entity);
+    await Promise.all(resolutions);
+    const again = read('resolveMaterialById("DELAYED")');
+    assert.equal(paths.filter((url) => url === "/api/materials/DELAYED").length, 1);
+    complete(pending, "DELAYED", delayedEntity);
+    assert.equal(await delayed, delayedEntity); assert.equal(await again, delayedEntity);
+    assert.ok(read("materialDetailCache.size") <= 30);
+  });
+
+  await check("detail A/B reverse response order cannot overwrite B", async () => {
+    const A = full("A"), B = full("B"); const pending = deferredDetails();
+    const first = read('showDetail("A")'), second = read('showDetail("B")');
+    complete(pending, "B", B); await second;
+    const visibleB = node("#detailContent").innerHTML;
+    complete(pending, "A", A); await first;
+    assert.equal(state.activeMaterial, B); assert.equal(state.selectedMaterialId, "B");
+    assert.equal(node("#detailContent").innerHTML, visibleB);
+    assert.ok(node("#analysisContent").innerHTML.includes("ANALYSIS-B-en"));
+    read('materialDetailCache.delete("A")');
+    const failing = deferredDetails(), staleFailure = read('showDetail("A")');
+    await read('showDetail("B")');
+    const currentContent = node("#detailContent").innerHTML;
+    failing.get("/api/materials/A").reject(new Error("STALE-DETAIL-FAILURE"));
+    await staleFailure;
+    assert.equal(state.activeMaterial, B); assert.equal(state.activeMaterialError, null);
+    assert.equal(node("#detailContent").innerHTML, currentContent);
+  });
+
+  await check("button, backdrop, Escape and native close invalidate pending detail", async () => {
+    for (const [index, close] of [
+      () => node("#closeDialogButton").emit("click"),
+      () => node("#detailDialog").emit("click"),
+      () => node("#detailDialog").emit("cancel"),
+      () => node("#detailDialog").close()
+    ].entries()) {
+      const id = `CLOSE${index}`, entity = full(id), pending = deferredDetails();
+      const opening = read(`showDetail(${JSON.stringify(id)})`); close();
+      const closedContent = node("#detailContent").innerHTML;
+      complete(pending, id, entity); await opening;
+      assert.equal(node("#detailDialog").open, false); assert.equal(state.activeMaterial, null);
+      assert.equal(state.selectedMaterialId, null); assert.equal(node("#detailContent").innerHTML, closedContent);
+    }
+    const B = full("REOPEN"), pending = deferredDetails(), opening = read('showDetail("REOPEN")');
+    node("#detailDialog").emit("close"); // Old browser close event, queued before this session opened.
+    complete(pending, "REOPEN", B); await opening;
+    assert.equal(state.activeMaterial, B); assert.equal(node("#detailDialog").open, true);
+  });
+
+  await check("pending compare cancellation is per ID and does not cancel C", async () => {
+    const B = full("B"), C = full("C"), pending = deferredDetails();
+    const addB = read('toggleCompare("B")'), addC = read('toggleCompare("C")');
+    await read('toggleCompare("B")');
+    complete(pending, "B", B); complete(pending, "C", C); await Promise.all([addB, addC]);
+    assert.deepEqual([...state.selected], ["C"]); assert.deepEqual(selectedIds(), ["C"]);
+  });
+
+  await check("clear cancels all pending adds without cancelling later new intent", async () => {
+    const B = full("B"), C = full("C"), pending = deferredDetails();
+    const oldB = read('toggleCompare("B")'), oldC = read('toggleCompare("C")');
+    node("#clearCompareButton").emit("click");
+    complete(pending, "B", B); complete(pending, "C", C); await Promise.all([oldB, oldC]);
+    assert.equal(state.selected.size, 0); assert.equal(read("selectedMaterialEntities.size"), 0);
+    read('materialDetailCache.delete("B")'); const freshPending = deferredDetails();
+    const cancelled = read('toggleCompare("B")'); node("#clearCompareButton").emit("click");
+    const current = read('toggleCompare("B")'); complete(freshPending, "B", B);
+    await Promise.all([cancelled, current]); assert.deepEqual(selectedIds(), ["B"]);
+  });
+
+  await check("concurrent completion preserves intent order and maximum three", async () => {
+    const entries = new Map(["A", "B", "C", "D"].map((id) => [id, full(id)]));
+    const pending = deferredDetails();
+    const adds = [...entries.keys()].map((id) => read(`toggleCompare(${JSON.stringify(id)})`));
+    for (const id of ["D", "C", "B", "A"]) { complete(pending, id, entries.get(id)); await Promise.resolve(); }
+    await Promise.all(adds);
+    assert.deepEqual([...state.selected], ["B", "C", "D"]); assert.deepEqual(selectedIds(), ["B", "C", "D"]);
+    assert.equal(read("selectedMaterialEntities.size"), 3); assert.equal(read("compareSelectionIntents.size"), 3);
+  });
+
+  await check("404, network failure and mismatched ID are visible and retryable", async () => {
+    const good = full("GOOD"); respondDetails(new Map([["GOOD", good]])); await read('showDetail("GOOD")');
+    state.recommendations = [{ material: recommendationGrade("FALLBACK"), score: 90 }];
+    for (const [id, failure, message] of [
+      ["MISSING", async () => ({ ok: false, status: 404, json: async () => ({ error: "Material not found" }) }), "Material not found"],
+      ["NETWORK", async () => { throw new Error("NETWORK-FAIL"); }, "NETWORK-FAIL"],
+      ["MISMATCH", async () => ok(full("OTHER")), "Invalid material detail response."]
+    ]) {
+      fetchHandler = failure; await read(`showDetail(${JSON.stringify(id)})`);
+      assert.equal(state.activeMaterial, null); assert.equal(read("getCopilotContext().item"), null);
+      assert.ok(node("#detailContent").innerHTML.includes(message));
+      assert.ok(!node("#detailContent").innerHTML.includes("FULL-GOOD"));
+      assert.equal(read(`materialDetailCache.has(${JSON.stringify(id)})`), false);
+      assert.equal(read("materialDetailRequests.size"), 0);
+      await read(`toggleCompare(${JSON.stringify(id)})`);
+      assert.equal(state.selected.size, 0); assert.equal(state.compareErrors.get(id), message);
+      read('setRoute("compare")'); assert.ok(node("#compareSelection").innerHTML.includes(message));
+      respondDetails(new Map([[id, full(id)]])); await read(`toggleCompare(${JSON.stringify(id)})`);
+      assert.deepEqual(selectedIds(), [id]); assert.equal(state.compareErrors.has(id), false);
+      await read(`toggleCompare(${JSON.stringify(id)})`);
+      await read(`showDetail(${JSON.stringify(id)})`); assert.equal(state.activeMaterial.id, id);
+    }
+  });
+
+  await check("malformed nested detail fails visibly, then corrected retry fetches and caches full entity", async () => {
+    const { A, B } = await recommendB();
+    const snapshots = [JSON.stringify(A), JSON.stringify(B)];
+    const malformed = full("B"); malformed.evidence.identity.sources = [null];
+    const corrected = full("B");
+    corrected.evidence.identity.sources = [{
+      sourceTitle: "RETRY TEST SOURCE", sourceUrl: "https://example.invalid/retry-fixture"
+    }];
+    paths.length = 0; let attempts = 0;
+    fetchHandler = async (url, options) => {
+      assert.equal(url, "/api/materials/B"); assert.equal(options, undefined);
+      return ok(++attempts === 1 ? malformed : corrected);
+    };
+    await recommendationAction("detail-id", "B");
+    assert.ok(node("#detailContent").innerHTML.includes("Failed to load the complete material record"));
+    assert.ok(node("#detailContent").innerHTML.includes("Invalid material detail response."));
+    assert.equal(state.activeMaterial, null); assert.equal(state.selectedMaterialId, "B");
+    assert.equal(read("getCopilotContext().item"), null);
+    assert.equal(read('materialDetailCache.has("B")'), false);
+    assert.equal(read("materialDetailRequests.size"), 0);
+    assert.deepEqual([JSON.stringify(A), JSON.stringify(B)], snapshots);
+    assert.deepEqual(Array.from(read("materials"), (item) => item.id), ["A"]);
+    await recommendationAction("detail-id", "B");
+    assert.deepEqual(paths, ["/api/materials/B", "/api/materials/B"]);
+    assert.equal(state.activeMaterial, corrected); assert.equal(state.selectedMaterialId, "B");
+    assert.equal(read('materialDetailCache.get("B")'), corrected);
+    assert.ok(node("#detailContent").innerHTML.includes("FULL-B"));
+    assert.ok(node("#detailContent").innerHTML.includes("RETRY TEST SOURCE"));
+    await recommendationAction("detail-id", "B");
+    assert.equal(attempts, 2); assert.equal(state.activeMaterial, corrected);
+    assert.deepEqual([JSON.stringify(A), JSON.stringify(B)], snapshots);
+  });
+
+  await check("unexpected cached-detail render failure evicts the entity before active publication and permits retry", async () => {
+    const cached = full("B"), corrected = full("B");
+    respondDetails(new Map([["B", cached]]));
+    await read('resolveMaterialById("B")');
+    // Fault injection: an already cached object becomes unusable after validation.
+    cached.evidence.identity.sources = [null];
+    await read('showDetail("B")');
+    assert.equal(state.activeMaterial, null);
+    assert.equal(read('materialDetailCache.has("B")'), false);
+    assert.ok(node("#detailContent").innerHTML.includes("Failed to load the complete material record"));
+    assert.ok(state.activeMaterialError.includes("sourceTitle"));
+    assert.ok(!node("#analysisContent").innerHTML.includes("ANALYSIS-B-en"));
+    respondDetails(new Map([["B", corrected]]));
+    await read('showDetail("B")');
+    assert.deepEqual(paths, ["/api/materials/B", "/api/materials/B"]);
+    assert.equal(state.activeMaterial, corrected);
+    assert.ok(node("#detailContent").innerHTML.includes("FULL-B"));
+  });
+
+  await check("optional detail metadata stays optional and malformed compare detail cannot replace retained selection", async () => {
+    const A = full("A");
+    delete A.evidence; delete A.data_quality.issues;
+    A.processing_methods = null; A.notes = null;
+    respondDetails(new Map([["A", A]]));
+    await read('showDetail("A")'); await read('toggleCompare("A")');
+    assert.equal(state.activeMaterial, A); assert.deepEqual(selectedIds(), ["A"]);
+    const badA = full("A"); badA.evidence.certifications = [null];
+    const badB = full("B"); badB.data_quality.issues = [null];
+    read('materialDetailCache.delete("A")');
+    respondDetails(new Map([["A", badA], ["B", badB]]));
+    await read('showDetail("A")');
+    assert.equal(state.activeMaterial, null); assert.equal(read("getSelectedMaterials()[0]"), A);
+    assert.equal(read('materialDetailCache.has("A")'), false);
+    await read('toggleCompare("B")');
+    assert.deepEqual(selectedIds(), ["A"]); assert.equal(read("getSelectedMaterials()[0]"), A);
+    assert.equal(read('materialDetailCache.has("B")'), false);
+    assert.equal(state.compareErrors.get("B"), "Invalid material detail response.");
+    assert.equal(read("materialDetailRequests.size"), 0);
+  });
+
+  await check("authoritative quarantine blocks compare, existing low/reference comparison remains allowed", async () => {
+    const Q = full("Q"), L = full("L");
+    Q.data_quality = { ...Q.data_quality, level: "quarantined", recommendation_eligible: false };
+    L.data_quality = { ...L.data_quality, level: "low", recommendation_eligible: false, reference_only: true };
+    respondDetails(new Map([["Q", Q], ["L", L]]));
+    await read('toggleCompare("Q")'); assert.equal(state.selected.has("Q"), false);
+    assert.ok(state.compareErrors.get("Q").includes("quarantined"));
+    await read('toggleCompare("L")'); assert.deepEqual(selectedIds(), ["L"]);
+    await read('showDetail("Q")'); assert.equal(state.activeMaterial, Q);
+    assert.ok(node("#analysisContent").innerHTML.includes("Untrusted record"));
+    read("rerenderActiveAnalysis()");
+    assert.ok(node("#analysisContent").innerHTML.includes("Untrusted record"));
+  });
+
+  await check("compare table renders changed retained entity without stale derived HTML", async () => {
+    const A = full("A"); respondDetails(new Map([["A", A]])); await read('toggleCompare("A")');
+    read('setRoute("compare")'); const first = node("#compareTableWrap").children[0].innerHTML;
+    A.name_en = "UPDATED-RETAINED-A"; A.density = 1.8; read("renderCompare()");
+    const second = node("#compareTableWrap").children[0].innerHTML;
+    assert.notEqual(second, first); assert.ok(second.includes("UPDATED-RETAINED-A"));
+    assert.ok(second.includes("1.8 g/cm3"));
+  });
+
+  await check("late mocked analysis response cannot change the new active material", async () => {
+    const A = full("A"), B = full("B"), pendingAnalysis = new Map();
+    state.analysisCache.delete("en:A"); state.analysisCache.delete("en:B");
+    fetchHandler = async (url, options) => {
+      if (url === "/api/material-analysis") {
+        assert.equal(options.method, "POST");
+        const id = JSON.parse(options.body).materialId;
+        return new Promise((resolve) => pendingAnalysis.set(id, resolve));
+      }
+      assert.equal(options, undefined);
+      assert.ok(["/api/materials/A", "/api/materials/B"].includes(url));
+      return ok(url.endsWith("/A") ? A : B);
+    };
+    await read('showDetail("A")'); await read('showDetail("B")');
+    assert.deepEqual([...pendingAnalysis.keys()], ["A", "B"]);
+    pendingAnalysis.get("B")(ok({ analysis: analysis("B", "en") }));
+    await new Promise((resolve) => setImmediate(resolve));
+    const visible = node("#analysisContent").innerHTML;
+    pendingAnalysis.get("A")(ok({ analysis: analysis("A", "en") }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.activeMaterial, B); assert.equal(node("#analysisContent").innerHTML, visible);
+    assert.ok(visible.includes("ANALYSIS-B-en"));
+  });
+
+  await check("closing resolved detail retains active analysis without reopening modal", async () => {
+    const A = full("A"); state.analysisCache.delete("en:A");
+    let finishAnalysis;
+    fetchHandler = async (url, options) => {
+      if (url === "/api/materials/A") { assert.equal(options, undefined); return ok(A); }
+      assert.equal(url, "/api/material-analysis"); assert.equal(options.method, "POST");
+      return new Promise((resolve) => { finishAnalysis = resolve; });
+    };
+    await read('showDetail("A")'); node("#closeDialogButton").emit("click");
+    assert.equal(state.activeMaterial, A);
+    const closedDetail = node("#detailContent").innerHTML;
+    finishAnalysis(ok({ analysis: analysis("A", "en") }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(node("#detailDialog").open, false); assert.equal(state.activeMaterial, A);
+    assert.equal(node("#detailContent").innerHTML, closedDetail);
+    assert.ok(node("#analysisContent").innerHTML.includes("ANALYSIS-A-en"));
+  });
+
+  reset();
+  process.stdout.write(`AD-06 frontend entity regressions: ${passed}/${passed} PASS; all network/AI calls mocked.\n`);
 }
 
 function assertReportCompatibility(detailed, compact) {
