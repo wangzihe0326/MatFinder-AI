@@ -32,6 +32,7 @@ const compareSelectionIntents = new Map();
 let compareIntentId = 0;
 let detailRequestId = 0;
 let activeAnalysisRequestId = 0;
+const aiComparisonInteraction = { key: null, generation: 0, pending: null, error: null };
 let materialSearchTimer = null;
 const apiBaseUrl = String(window.MatFinderConfig?.apiBaseUrl || "").replace(/\/$/, "");
 const DEFAULT_MIN_TEMP = -200;
@@ -2058,6 +2059,7 @@ function bindEvents() {
 
   elements.languageSelect.addEventListener("change", (event) => {
     state.language = event.target.value;
+    syncAiComparisonContext();
     document.documentElement.lang = state.language === "zh" ? "zh-CN" : "en";
     applyLanguage();
     renderRecommendations();
@@ -2207,6 +2209,7 @@ function bindEvents() {
     selectedMaterialEntities.clear();
     compareSelectionIntents.clear();
     state.compareErrors.clear();
+    syncAiComparisonContext(true);
     render();
     renderRecommendations();
   });
@@ -4153,6 +4156,7 @@ async function toggleCompare(id) {
     state.selected.delete(id);
     selectedMaterialEntities.delete(id);
     compareSelectionIntents.delete(id);
+    syncAiComparisonContext();
     render();
     renderRecommendations();
     return;
@@ -4180,6 +4184,7 @@ async function toggleCompare(id) {
     compareSelectionIntents.delete(id);
     setBoundedCache(state.compareErrors, id, error.message, 3);
   }
+  syncAiComparisonContext();
   render();
   renderRecommendations();
 }
@@ -4298,11 +4303,30 @@ function getAiComparePair() {
   return getSelectedMaterials().slice(0, 2);
 }
 
-function getAiCompareCacheKey(pair) {
-  return `${state.language}:${pair.map((item) => item.id).sort().join("::")}`;
+function getAiCompareCacheKey(pair, language = state.language) {
+  return JSON.stringify([language, pair.map((item) => item.id)]);
+}
+
+function syncAiComparisonContext(force = false) {
+  const pair = getAiComparePair();
+  const key = pair.length === 2 ? getAiCompareCacheKey(pair) : JSON.stringify([state.language, null]);
+  if (force || key !== aiComparisonInteraction.key) {
+    aiComparisonInteraction.key = key;
+    aiComparisonInteraction.generation += 1;
+    aiComparisonInteraction.pending = null;
+    aiComparisonInteraction.error = null;
+  }
+}
+
+function ownsAiComparisonRequest(request) {
+  const pair = getAiComparePair();
+  return aiComparisonInteraction.pending === request &&
+    aiComparisonInteraction.generation === request.generation &&
+    pair.length === 2 && getAiCompareCacheKey(pair) === request.key;
 }
 
 function renderAiComparePanel() {
+  syncAiComparisonContext();
   const selectedItems = getSelectedMaterials();
   const pair = selectedItems.slice(0, 2);
   const hasPair = pair.length === 2;
@@ -4318,9 +4342,19 @@ function renderAiComparePanel() {
 
   elements.aiCompareTitle.textContent = `${pair[0].abbr} vs ${pair[1].abbr}`;
 
+  if (aiComparisonInteraction.pending) {
+    renderAiComparisonLoading(pair);
+    return;
+  }
+
   const cacheKey = getAiCompareCacheKey(pair);
   if (state.aiCompareCache.has(cacheKey)) {
     renderAiComparison(pair, state.aiCompareCache.get(cacheKey), t("cachedComparison"));
+    return;
+  }
+
+  if (aiComparisonInteraction.error) {
+    renderAiComparisonError(pair, aiComparisonInteraction.error);
     return;
   }
 
@@ -4331,34 +4365,58 @@ function renderAiComparePanel() {
 }
 
 async function runAiComparison() {
+  syncAiComparisonContext();
   const pair = getAiComparePair();
   if (pair.length !== 2) return;
 
+  if (aiComparisonInteraction.pending) return aiComparisonInteraction.pending.promise;
+
   const cacheKey = getAiCompareCacheKey(pair);
   if (state.aiCompareCache.has(cacheKey)) {
-    renderAiComparison(pair, state.aiCompareCache.get(cacheKey), t("cachedComparison"));
+    aiComparisonInteraction.error = null;
+    renderAiComparePanel();
     return;
   }
 
-  renderAiComparisonLoading(pair);
+  const request = {
+    key: cacheKey, generation: aiComparisonInteraction.generation,
+    pair, materialIds: pair.map((item) => item.id), language: state.language, promise: null
+  };
+  aiComparisonInteraction.pending = request;
+  aiComparisonInteraction.error = null;
+  renderAiComparePanel();
 
-  try {
-    const response = await fetch(apiUrl("/api/material-comparison"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ materialIds: pair.map((item) => item.id), language: state.language })
-    });
-    const payload = await response.json();
+  request.promise = (async () => {
+    try {
+      const response = await fetch(apiUrl("/api/material-comparison"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ materialIds: request.materialIds, language: request.language })
+      });
+      if (!ownsAiComparisonRequest(request)) return;
+      const payload = await response.json();
+      if (!ownsAiComparisonRequest(request)) return;
 
-    if (!response.ok) {
-      throw new Error(payload.error || payload.detail || "AI comparison failed");
+      if (!response.ok) {
+        throw new Error(payload.error || payload.detail || "AI comparison failed");
+      }
+      if (!Array.isArray(payload?.materialIds) || payload.materialIds.length !== 2 ||
+          payload.materialIds.some((id, index) => id !== request.materialIds[index])) {
+        throw new Error("Invalid AI comparison material identity.");
+      }
+
+      renderAiComparison(request.pair, payload.comparison, t("generatedByGpt"));
+      state.aiCompareCache.set(cacheKey, payload.comparison);
+    } catch (error) {
+      if (!ownsAiComparisonRequest(request)) return;
+      aiComparisonInteraction.error = error;
+      renderAiComparisonError(request.pair, error);
+    } finally {
+      // An obsolete completion must not release a newer interaction's pending request.
+      if (ownsAiComparisonRequest(request)) aiComparisonInteraction.pending = null;
     }
-
-    state.aiCompareCache.set(cacheKey, payload.comparison);
-    renderAiComparison(pair, payload.comparison, t("generatedByGpt"));
-  } catch (error) {
-    renderAiComparisonError(pair, error);
-  }
+  })();
+  return request.promise;
 }
 
 function renderAiComparisonLoading(pair) {

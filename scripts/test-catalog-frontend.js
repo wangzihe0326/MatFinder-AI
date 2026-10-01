@@ -418,6 +418,7 @@ async function main() {
 
   await recommendationFrontendChecks();
   await entityFrontendChecks();
+  await comparisonFrontendChecks();
   process.stdout.write("AD-04 frontend catalog regressions 34–49 passed.\n");
 }
 
@@ -1088,6 +1089,276 @@ async function entityFrontendChecks() {
 
   reset();
   process.stdout.write(`AD-06 frontend entity regressions: ${passed}/${passed} PASS; all network/AI calls mocked.\n`);
+}
+
+async function comparisonFrontendChecks() {
+  const state = read("state");
+  let passed = 0;
+  let posts;
+  let fixtures;
+  const key = (ids, language = "en") => JSON.stringify([language, ids]);
+  const deferred = () => {
+    let resolve, reject;
+    const promise = new Promise((success, failure) => { resolve = success; reject = failure; });
+    return { promise, resolve, reject };
+  };
+  const comparison = (marker) => ({
+    selectionAdvice: marker, keyDifferences: [marker + " difference"],
+    strengthsAndWeaknesses: [], recommendedUseCases: []
+  });
+  const reply = (post, marker, ids = post.body.materialIds) => post.resolve(ok({
+    materialIds: ids, comparison: comparison(marker)
+  }));
+  const invoke = () => node("#runAiCompareButton").emit("click");
+  const select = (id) => read(`toggleCompare(${JSON.stringify(id)})`);
+  const selected = () => Array.from(read("getSelectedMaterials()"), (item) => item.id);
+  const panel = () => ({
+    title: node("#aiCompareTitle").textContent,
+    status: node("#aiCompareStatus").textContent,
+    html: node("#aiCompareContent").innerHTML
+  });
+  const language = (value) => node("#languageSelect").emit("change", { value });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  const setup = async (ids = ["A", "B"]) => {
+    node("#clearCompareButton").emit("click");
+    state.aiCompareCache.clear();
+    run("materialDetailCache.clear()");
+    state.selectedMaterialId = null; state.activeMaterial = null; state.activeMaterialError = null;
+    language("en");
+    read('setRoute("compare")');
+    fixtures = new Map(["A", "B", "C", "D"].map((id) => [id, {
+      ...recommendationGrade(id), abbr: id,
+      evidence: { ...recommendationGrade(id).evidence, identity: { sources: [] } }
+    }]));
+    for (const id of fixtures.keys()) {
+      for (const lang of ["en", "zh"]) state.analysisCache.set(`${lang}:${id}`, {
+        overview: `ANALYSIS-${id}-${lang}`, advantages: [], limitations: [], recommendedApplications: []
+      });
+    }
+    posts = [];
+    fetchHandler = (url, options) => {
+      if (url.startsWith("/api/materials/")) {
+        assert.equal(options, undefined);
+        const id = decodeURIComponent(url.slice("/api/materials/".length));
+        assert.ok(fixtures.has(id), `Unexpected comparison fixture detail ${id}`);
+        return Promise.resolve(ok(fixtures.get(id)));
+      }
+      if (url.startsWith("/api/materials?")) {
+        assert.equal(options, undefined);
+        return Promise.resolve(ok(payload([fixtures.get("D")], 96)));
+      }
+      assert.equal(url, "/api/material-comparison", "Only mocked comparison POSTs are allowed.");
+      assert.equal(options.method, "POST");
+      const post = { ...deferred(), body: JSON.parse(options.body) };
+      posts.push(post);
+      return post.promise;
+    };
+    for (const id of ids) await select(id);
+  };
+  const check = async (name, action) => {
+    await setup();
+    await action();
+    passed++;
+    process.stdout.write(`AD-07 PASS ${passed}: ${name}\n`);
+  };
+  const changeToAC = async () => {
+    await select("B"); await select("C");
+    assert.deepEqual(selected(), ["A", "C"]);
+  };
+
+  await check("A normal success and same-context cache reuse", async () => {
+    const request = invoke();
+    assert.deepEqual(posts[0].body, { materialIds: ["A", "B"], language: "en" });
+    reply(posts[0], "CURRENT-AB"); await request;
+    assert.equal(panel().title, "A vs B");
+    assert.ok(panel().html.includes("CURRENT-AB"));
+    assert.equal(state.aiCompareCache.get(key(["A", "B"])).selectionAdvice, "CURRENT-AB");
+    await invoke();
+    assert.equal(posts.length, 1);
+    assert.equal(panel().status, read('t("cachedComparison")'));
+  });
+
+  await check("B obsolete AB success cannot overwrite current AC", async () => {
+    const old = invoke(); await changeToAC();
+    const current = invoke(); reply(posts[1], "CURRENT-AC"); await current;
+    const visible = panel();
+    reply(posts[0], "OBSOLETE-AB"); await old;
+    assert.deepEqual(panel(), visible);
+    assert.equal(panel().title, "A vs C");
+    assert.equal(state.aiCompareCache.has(key(["A", "B"])), false);
+    assert.equal(state.aiCompareCache.get(key(["A", "C"])).selectionAdvice, "CURRENT-AC");
+  });
+
+  await check("C obsolete AB failure cannot overwrite successful AC", async () => {
+    const old = invoke(); await changeToAC();
+    const current = invoke(); reply(posts[1], "CURRENT-AC"); await current;
+    const visible = panel();
+    posts[0].reject(new Error("OBSOLETE-AB-ERROR")); await old;
+    assert.deepEqual(panel(), visible);
+    assert.equal(state.aiCompareCache.has(key(["A", "B"])), false);
+  });
+
+  for (const fails of [false, true]) {
+    await check(`D delayed obsolete response body ${fails ? "failure" : "success"}`, async () => {
+      const old = invoke(), body = deferred();
+      let reads = 0;
+      posts[0].resolve({ ok: true, status: 200, json() { reads++; return body.promise; } });
+      await settle(); assert.equal(reads, 1, "The old request must enter real response.json().");
+      await changeToAC();
+      const current = invoke(); reply(posts[1], "CURRENT-AC"); await current;
+      const visible = panel();
+      if (fails) body.reject(new Error("OBSOLETE-BODY-ERROR"));
+      else body.resolve({ materialIds: ["A", "B"], comparison: comparison("OBSOLETE-BODY") });
+      await old;
+      assert.deepEqual(panel(), visible);
+      assert.equal(state.aiCompareCache.has(key(["A", "B"])), false);
+    });
+  }
+
+  for (const fails of [false, true]) {
+    await check(`E real clear invalidates pending ${fails ? "failure" : "success"}`, async () => {
+      const old = invoke(); node("#clearCompareButton").emit("click");
+      const visible = panel();
+      if (fails) posts[0].reject(new Error("OBSOLETE-CLEAR-ERROR"));
+      else reply(posts[0], "OBSOLETE-CLEARED-AB");
+      await old;
+      assert.deepEqual(selected(), []); assert.deepEqual(panel(), visible);
+      assert.equal(node("#runAiCompareButton").disabled, true);
+      assert.equal(state.aiCompareCache.size, 0);
+    });
+    await check(`F fewer than two invalidates pending ${fails ? "failure" : "success"}`, async () => {
+      const old = invoke(); await select("B");
+      const visible = panel();
+      if (fails) posts[0].reject(new Error("OBSOLETE-NO-PAIR-ERROR"));
+      else reply(posts[0], "OBSOLETE-NO-PAIR-AB");
+      await old;
+      assert.deepEqual(selected(), ["A"]); assert.deepEqual(panel(), visible);
+      assert.equal(state.aiCompareCache.size, 0);
+    });
+    await check(`G real language change invalidates EN ${fails ? "failure" : "success"}`, async () => {
+      const old = invoke(); language("zh");
+      const current = invoke();
+      assert.equal(posts[1].body.language, "zh");
+      reply(posts[1], "CURRENT-ZH-AB"); await current;
+      const visible = panel();
+      if (fails) posts[0].reject(new Error("OBSOLETE-EN-ERROR"));
+      else reply(posts[0], "OBSOLETE-EN-AB");
+      await old;
+      assert.equal(state.language, "zh"); assert.deepEqual(panel(), visible);
+      assert.equal(state.aiCompareCache.has(key(["A", "B"], "en")), false);
+      assert.equal(state.aiCompareCache.get(key(["A", "B"], "zh")).selectionAdvice, "CURRENT-ZH-AB");
+    });
+  }
+
+  for (const transition of ["clear", "pair", "language"]) {
+    await check(`H same tuple cannot restore ownership after ${transition}`, async () => {
+      const old = invoke();
+      // Exercise invalidation even when no comparison-route render observes intermediate states.
+      read('setRoute("home")');
+      if (transition === "clear") {
+        node("#clearCompareButton").emit("click"); await select("A"); await select("B");
+      } else if (transition === "pair") {
+        await changeToAC(); await select("C"); await select("B");
+      } else {
+        language("zh"); language("en");
+      }
+      read('setRoute("compare")');
+      const current = invoke();
+      assert.equal(posts.length, 2, "A restored tuple must own a new request.");
+      reply(posts[1], "NEW-LIFECYCLE-AB"); await current;
+      await invoke(); // A cache hit belongs to the new lifecycle, not the old request.
+      const visible = panel();
+      reply(posts[0], "OLD-LIFECYCLE-AB"); await old;
+      assert.deepEqual(panel(), visible); assert.equal(posts.length, 2);
+      assert.equal(state.aiCompareCache.get(key(["A", "B"])).selectionAdvice, "NEW-LIFECYCLE-AB");
+    });
+  }
+
+  await check("I ordered AB and BA caches remain independent", async () => {
+    const ab = invoke(); reply(posts[0], "ORDER-AB"); await ab;
+    await select("A"); await select("A");
+    assert.deepEqual(selected(), ["B", "A"]);
+    const ba = invoke(); assert.equal(posts.length, 2);
+    assert.deepEqual(posts[1].body.materialIds, ["B", "A"]);
+    reply(posts[1], "ORDER-BA"); await ba; await invoke();
+    assert.equal(panel().title, "B vs A"); assert.ok(panel().html.includes("ORDER-BA"));
+    assert.equal(posts.length, 2);
+    assert.equal(state.aiCompareCache.get(key(["A", "B"])).selectionAdvice, "ORDER-AB");
+    assert.equal(state.aiCompareCache.get(key(["B", "A"])).selectionAdvice, "ORDER-BA");
+  });
+
+  await check("J pending deduplicates and failure permits a fresh retry", async () => {
+    const first = invoke(), duplicate = invoke();
+    assert.equal(posts.length, 1);
+    posts[0].resolve({ ok: false, status: 503, json: async () => ({ error: "CURRENT-FAILURE" }) });
+    await Promise.all([first, duplicate]);
+    assert.ok(panel().html.includes("CURRENT-FAILURE")); assert.equal(state.aiCompareCache.size, 0);
+    const error = panel(); read("render()"); assert.deepEqual(panel(), error);
+    const retry = invoke(); assert.equal(posts.length, 2);
+    assert.equal(panel().status, read('t("generating")'));
+    reply(posts[1], "RETRIED-AB"); await retry;
+    assert.ok(panel().html.includes("RETRIED-AB"));
+  });
+
+  await check("K render, catalog page, detail and unchanged third item preserve AB pending", async () => {
+    const request = invoke(); const loading = panel();
+    read("render()"); assert.deepEqual(panel(), loading);
+    await read("loadPublicMaterialPage(2)"); assert.deepEqual(panel(), loading);
+    await read('showDetail("D")'); await settle();
+    assert.deepEqual(panel(), loading);
+    await select("C"); assert.deepEqual(selected(), ["A", "B", "C"]);
+    assert.deepEqual(panel(), loading);
+    const duplicate = invoke(); assert.equal(posts.length, 1);
+    reply(posts[0], "STILL-CURRENT-AB"); await Promise.all([request, duplicate]);
+    assert.ok(panel().html.includes("STILL-CURRENT-AB"));
+    assert.equal(state.aiCompareCache.get(key(["A", "B"])).selectionAdvice, "STILL-CURRENT-AB");
+  });
+
+  await check("L max-three eviction actually changes AB to BC and invalidates AB", async () => {
+    const old = invoke(); await select("C"); await select("D");
+    assert.deepEqual(selected(), ["B", "C", "D"]);
+    const current = invoke(); assert.deepEqual(posts[1].body.materialIds, ["B", "C"]);
+    reply(posts[1], "CURRENT-BC"); await current;
+    const visible = panel(); reply(posts[0], "OBSOLETE-EVICTED-AB"); await old;
+    assert.deepEqual(panel(), visible); assert.equal(state.aiCompareCache.has(key(["A", "B"])), false);
+  });
+
+  for (const ids of [["B", "A"], ["A", "C"], undefined]) {
+    await check(`M invalid response IDs ${JSON.stringify(ids)} fail safely and retry`, async () => {
+      const invalid = invoke();
+      posts[0].resolve(ok({ materialIds: ids, comparison: comparison("INVALID-IDENTITY") }));
+      await invalid;
+      assert.equal(panel().status, read('t("unavailable")'));
+      assert.ok(!panel().html.includes("INVALID-IDENTITY")); assert.equal(state.aiCompareCache.size, 0);
+      const retry = invoke(); assert.equal(posts.length, 2);
+      reply(posts[1], "VALID-RETRY-AB"); await retry;
+      assert.ok(panel().html.includes("VALID-RETRY-AB"));
+    });
+  }
+
+  for (const fails of [false, true]) {
+    await check(`N obsolete ${fails ? "failure" : "success"} cannot release newer pending request`, async () => {
+      const old = invoke(); await changeToAC();
+      const current = invoke(); const loading = panel();
+      if (fails) posts[0].reject(new Error("OBSOLETE-PENDING-ERROR"));
+      else reply(posts[0], "OBSOLETE-PENDING-AB");
+      await old;
+      assert.deepEqual(panel(), loading); assert.equal(state.aiCompareCache.size, 0);
+      const duplicate = invoke(); assert.equal(posts.length, 2, "Old cleanup must not release current pending.");
+      reply(posts[1], "CURRENT-PENDING-AC"); await Promise.all([current, duplicate]);
+      assert.ok(panel().html.includes("CURRENT-PENDING-AC"));
+    });
+  }
+
+  await check("O tuple encoding avoids delimiter collisions", async () => {
+    assert.notEqual(read('getAiCompareCacheKey([{id:"A::B"},{id:"C"}], "en")'),
+      read('getAiCompareCacheKey([{id:"A"},{id:"B::C"}], "en")'));
+    assert.notEqual(read('getAiCompareCacheKey([{id:"A"},{id:"B"}], "en")'),
+      read('getAiCompareCacheKey([{id:"A"},{id:"B"}], "zh")'));
+  });
+
+  node("#clearCompareButton").emit("click");
+  process.stdout.write(`AD-07 comparison regressions: ${passed}/${passed} PASS; all network/AI calls mocked.\n`);
 }
 
 function assertReportCompatibility(detailed, compact) {
