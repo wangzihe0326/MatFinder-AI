@@ -828,7 +828,15 @@ async function httpChecks(server) {
   assert.equal(audit.status, 200);
   assert.ok(audit.json.total > baseline.json.total,
     "Admin audit behavior must remain independent of public filters.");
-  assert.equal((await request(server, "/api/recommendation-candidates?limit=1")).status, 200);
+  const recommendationCandidates = await request(server, "/api/recommendation-candidates");
+  assert.equal(recommendationCandidates.status, 200);
+  assert.equal(recommendationCandidates.json.complete, true);
+  assert.equal(recommendationCandidates.json.bounded, false);
+  assert.equal(recommendationCandidates.json.total, recommendationCandidates.json.items.length);
+  assert.equal(recommendationCandidates.json.eligibleTotal,
+    recommendationCandidates.json.items.filter((item) => item.data_quality.recommendation_eligible).length);
+  assert.equal(recommendationCandidates.json.referenceTotal,
+    recommendationCandidates.json.items.filter((item) => item.data_quality.reference_only).length);
 }
 
 function frontendCardChecks() {

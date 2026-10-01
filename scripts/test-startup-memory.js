@@ -51,6 +51,8 @@ async function main() {
     );
     assert.equal(startupDiagnostics.repository.propertyEvidenceRowsRead, 0);
     assert.equal(startupDiagnostics.repository.fullEvidenceTableReads, 0);
+    assert.equal(startupDiagnostics.repository.recommendationRecallCalls, 0);
+    assert.equal(startupDiagnostics.repository.recommendationBatches, 0);
 
     const home = await fetch(`${base}/`);
     assert.equal(home.status, 200);
@@ -77,11 +79,18 @@ async function main() {
     assert.equal(detail.id, auditId);
     assert.ok(detail.evidence?.properties);
 
+    const beforeRecall = await requestDiagnostics(child);
+    assert.equal(beforeRecall.repository.recommendationRecallCalls, 0);
     const candidates = await requestJson(
-      `${base}/api/recommendation-candidates?limit=200`
+      `${base}/api/recommendation-candidates`
     );
     assert.ok(Array.isArray(candidates.items));
-    assert.ok(candidates.items.length <= 200);
+    assert.equal(candidates.total, candidates.items.length);
+    assert.equal(candidates.complete, true);
+    assert.equal(candidates.bounded, false);
+    const afterRecall = await requestDiagnostics(child);
+    assert.equal(afterRecall.repository.recommendationRecallCalls, 1);
+    assert.ok(afterRecall.repository.maximumRecommendationBatchSize <= 30);
 
     const beforeRepeatedReads = await requestDiagnostics(child);
     for (let index = 0; index < 25; index += 1) {
@@ -100,7 +109,8 @@ async function main() {
 
     assert.equal(afterRepeatedReads.repository.fullEvidenceTableReads, 0);
     assert.ok(
-      afterRepeatedReads.repository.propertyEvidenceRowsRead < 1_000,
+      afterRepeatedReads.repository.propertyEvidenceRowsRead -
+        beforeRepeatedReads.repository.propertyEvidenceRowsRead < 1_000,
       "Repeated detail reads must remain bounded and never read the full property table."
     );
     assert.ok(

@@ -23,6 +23,7 @@ let catalogRequestId = 0;
 let catalogLoadError = false;
 let catalogQueryResetPending = false;
 let recommendationService = null;
+let recommendationRequestId = 0;
 const materialDetailCache = new Map();
 const MATERIAL_DETAIL_CACHE_LIMIT = 30;
 let materialSearchTimer = null;
@@ -1028,6 +1029,8 @@ const state = {
   recommendationCriteria: [],
   recommendationQuery: "",
   recommendationResult: null,
+  recommendationLoading: false,
+  recommendationLoadError: false,
   selectedMaterialId: null,
   copilotMessages: [],
   analysisCache: new Map(),
@@ -2010,6 +2013,9 @@ function bindEvents() {
 
   elements.clearRecommendationButton.addEventListener("click", () => {
     elements.requirementInput.value = "";
+    recommendationRequestId += 1;
+    state.recommendationLoading = false;
+    state.recommendationLoadError = false;
     state.recommendations = [];
     state.recommendationCriteria = [];
     state.recommendationQuery = "";
@@ -2147,25 +2153,81 @@ function bindEvents() {
   });
 }
 
-async function runRecommendation() {
-  state.recommendationQuery = elements.requirementInput.value.trim();
-  const cacheKey = state.recommendationQuery;
-  let result = state.recommendationCache.get(cacheKey);
-  if (!result) {
-    const response = await fetch(apiUrl("/api/recommendation-candidates?limit=200"));
-    if (!response.ok) throw new Error("Failed to load bounded recommendation candidates.");
-    const payload = await response.json();
-    recommendationService = window.MatFinderAI.createRecommendationService({
-      materials: payload.items || []
-    });
-    result = await recommendationService.recommend(elements.requirementInput.value, { limit: 5 });
-    setBoundedCache(state.recommendationCache, cacheKey, result, 20);
+function validateRecommendationEnvelope(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+      !Array.isArray(payload.items) || payload.complete !== true || payload.bounded !== false ||
+      ![payload.total, payload.eligibleTotal, payload.referenceTotal].every((count) =>
+        Number.isSafeInteger(count) && count >= 0) ||
+      payload.total !== payload.items.length ||
+      payload.eligibleTotal + payload.referenceTotal > payload.total) {
+    throw new Error("Invalid complete recommendation candidate response.");
   }
-  state.recommendations = result.recommendations;
-  state.recommendationCriteria = result.criteria;
-  state.recommendationResult = result;
-  renderRecommendations(result);
-  render();
+  const ids = new Set();
+  let eligible = 0;
+  let reference = 0;
+  for (const item of payload.items) {
+    const quality = item?.data_quality;
+    if (!item || typeof item !== "object" || Array.isArray(item) ||
+        typeof item.id !== "string" || !item.id || ids.has(item.id) ||
+        typeof item.name !== "string" ||
+        typeof quality?.recommendation_eligible !== "boolean" ||
+        typeof quality?.reference_only !== "boolean" ||
+        (quality.recommendation_eligible && quality.reference_only) ||
+        !item.evidence?.properties || typeof item.evidence.properties !== "object" ||
+        Array.isArray(item.evidence.properties) ||
+        !Object.values(item.evidence.properties).every((claims) => Array.isArray(claims) &&
+          claims.every((claim) => claim && typeof claim === "object" && !Array.isArray(claim))) ||
+        !Array.isArray(item.evidence.certifications) ||
+        !item.evidence.certifications.every((claim) => claim && typeof claim === "object" && !Array.isArray(claim))) {
+      throw new Error("Invalid recommendation candidate.");
+    }
+    ids.add(item.id);
+    eligible += Number(quality.recommendation_eligible);
+    reference += Number(quality.reference_only);
+  }
+  if (eligible !== payload.eligibleTotal || reference !== payload.referenceTotal) {
+    throw new Error("Invalid recommendation candidate counts.");
+  }
+}
+
+async function runRecommendation() {
+  const query = elements.requirementInput.value.trim();
+  if (state.recommendationLoading && state.recommendationQuery === query) return;
+  const requestId = ++recommendationRequestId;
+  state.recommendationQuery = query;
+  state.recommendations = [];
+  state.recommendationCriteria = [];
+  state.recommendationResult = null;
+  state.recommendationLoadError = false;
+  state.recommendationLoading = true;
+  renderRecommendations();
+  try {
+    let result = state.recommendationCache.get(query);
+    if (!result) {
+      const response = await fetch(apiUrl("/api/recommendation-candidates"));
+      if (requestId !== recommendationRequestId) return;
+      if (!response.ok || response.status !== 200) throw new Error("Recommendation candidate recall failed.");
+      const payload = await response.json();
+      if (requestId !== recommendationRequestId) return;
+      validateRecommendationEnvelope(payload);
+      const service = window.MatFinderAI.createRecommendationService({ materials: payload.items });
+      result = await service.recommend(query, { limit: 5 });
+      if (requestId !== recommendationRequestId) return;
+      recommendationService = service;
+      setBoundedCache(state.recommendationCache, query, result, 20);
+    }
+    state.recommendations = result.recommendations;
+    state.recommendationCriteria = result.criteria;
+    state.recommendationResult = result;
+  } catch {
+    if (requestId === recommendationRequestId) state.recommendationLoadError = true;
+  } finally {
+    if (requestId === recommendationRequestId) {
+      state.recommendationLoading = false;
+      renderRecommendations();
+      render();
+    }
+  }
 }
 
 function syncControls() {
@@ -3399,6 +3461,17 @@ function render() {
 }
 
 function renderRecommendations(result = state.recommendationResult) {
+  elements.recommendationResults.setAttribute("aria-busy", String(state.recommendationLoading));
+  if (state.recommendationLoading) {
+    elements.recommendationResults.innerHTML = `<p class="recommendation-empty" role="status">${escapeHtml(t("generating"))}</p>`;
+    return;
+  }
+  if (state.recommendationLoadError) {
+    elements.recommendationResults.innerHTML = `<p class="recommendation-empty" role="alert">${state.language === "zh"
+      ? "\u65e0\u6cd5\u52a0\u8f7d\u6216\u8bc4\u4f30\u63a8\u8350\u6570\u636e\uff0c\u8bf7\u91cd\u8bd5\u3002"
+      : "Recommendation data could not be loaded or evaluated. Please try again."}</p>`;
+    return;
+  }
   const groups = result?.groups || {
     verifiedMatches: state.recommendations,
     potentialMatches: [],

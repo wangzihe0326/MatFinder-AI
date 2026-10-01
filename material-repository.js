@@ -318,7 +318,10 @@ class MaterialRepository {
       rowsReturned: 0,
       propertyEvidenceRowsRead: 0,
       maximumRowsInSingleQuery: 0,
-      fullEvidenceTableReads: 0
+      fullEvidenceTableReads: 0,
+      recommendationRecallCalls: 0,
+      recommendationBatches: 0,
+      maximumRecommendationBatchSize: 0
     };
     this.readinessCache = null;
     this.database = new DatabaseSync(databasePath, {
@@ -770,11 +773,19 @@ class MaterialRepository {
     return this._hydrateDetailedRows([row])[0] || null;
   }
 
-  getRecommendationCandidates(options = {}) {
-    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(options.limit) || 100));
-    const rows = this._all(
-      `
-        SELECT ${LIST_COLUMNS}, ${qualityLevelSql()} AS quality_level
+  getRecommendationCandidates() {
+    this.metrics.recommendationRecallCalls += 1;
+    // One explicit read transaction covers enumeration and every evidence read.
+    // Keep only the compact universe; detailed objects live for one batch.
+    this.database.exec("BEGIN");
+    let iterator;
+    // Node 22.13 iterators do not retain their StatementSync. Keep an explicit
+    // strong owner until cursor cleanup and COMMIT/ROLLBACK have finished.
+    const statementReferences = new Set();
+    try {
+      this.metrics.queries += 1;
+      const statement = this.database.prepare(`
+        SELECT m.material_id
           FROM materials m
           JOIN real_material_identities identity_row
             ON identity_row.material_id = m.material_id
@@ -787,12 +798,57 @@ class MaterialRepository {
              ELSE 2
            END,
            m.material_id
-         LIMIT ?
-      `,
-      [limit],
-      "recommendation_candidates"
+      `);
+      statementReferences.add(statement);
+      iterator = statement.iterate();
+      const candidates = [];
+      let ids = [];
+      for (const row of iterator) {
+        this.metrics.rowsReturned += 1;
+        this.metrics.maximumRowsInSingleQuery = Math.max(this.metrics.maximumRowsInSingleQuery, 1);
+        ids.push(row.material_id);
+        if (ids.length === DETAIL_BATCH_SIZE) {
+          this._appendRecommendationBatch(ids, candidates);
+          ids = [];
+        }
+      }
+      if (ids.length) this._appendRecommendationBatch(ids, candidates);
+      iterator.return();
+      iterator = null;
+      this.database.exec("COMMIT");
+      return candidates;
+    } catch (error) {
+      // Close the cursor before releasing its transaction, including failures
+      // after earlier batches have already produced compact candidates.
+      try { iterator?.return(); } catch {}
+      try { this.database.exec("ROLLBACK"); } catch {}
+      throw error;
+    } finally {
+      statementReferences.clear();
+    }
+  }
+
+  _appendRecommendationBatch(ids, candidates) {
+    this.metrics.recommendationBatches += 1;
+    this.metrics.maximumRecommendationBatchSize = Math.max(
+      this.metrics.maximumRecommendationBatchSize, ids.length
     );
-    return this._hydrateDetailedRows(rows);
+    const rows = this._all(`
+      SELECT ${LIST_COLUMNS}
+        FROM materials m
+        JOIN real_material_identities identity_row
+          ON identity_row.material_id = m.material_id
+         AND identity_row.active = 1
+       WHERE m.material_id IN (${placeholders(ids.length)})
+    `, ids, "recommendation_materials");
+    const byId = new Map(this._hydrateDetailedRows(rows).map((item) => [item.id, item]));
+    if (byId.size !== ids.length) throw new Error("Incomplete recommendation batch");
+    // IN queries need not preserve order. The cursor is the ordering authority.
+    for (const id of ids) {
+      const material = byId.get(id);
+      if (!material) throw new Error("Missing recommendation material");
+      candidates.push(recommendationCandidateFromMaterial(material));
+    }
   }
 
   getMetrics() {
@@ -1180,6 +1236,78 @@ function materialFromListRow(row) {
   };
   material.features = material.tags;
   return material;
+}
+
+// These are the property keys used by evidence-rules-v3. Quality is assessed
+// BEFORE projection using ALL hydrated claims, including other property keys.
+const RECOMMENDATION_PROPERTY_KEYS = Object.freeze([
+  "continuous_use_temperature", "hdt", "tensile_strength", "impact_strength",
+  "density", "transparency", "chemical_resistance", "flexibility",
+  "flame_rating", "dielectric_constant", "water_absorption"
+]);
+
+function recommendationCandidateFromMaterial(material) {
+  const candidate = {};
+  // description_en/zh are the current recommendation card's text; retain them
+  // without truncation. Other detail descriptions and import metadata are omitted.
+  for (const field of [
+    "id", "name", "name_en", "name_zh", "abbr", "category", "category_en",
+    "category_zh", "summary", "description_en", "description_zh",
+    "continuous_use_temperature", "record_type", "entityType",
+    // Existing export limitations/fallbacks and alternative-material scores.
+    // notes is the rendered selection note; import source_note remains excluded.
+    "recyclable", "maxTemp", "tensile", "elongation", "density", "tg", "tm", "dielectric", "notes"
+  ]) candidate[field] = material[field];
+  for (const field of ["uses", "applications_en", "applications_zh", "disadvantages", "tags"])
+    candidate[field] = [...material[field]];
+  const quality = material.data_quality;
+  candidate.data_quality = {
+    level: quality.level,
+    confidence_level: quality.confidence_level,
+    verification_status: quality.verification_status,
+    recommendation_eligible: quality.recommendation_eligible,
+    reference_only: quality.reference_only,
+    // Keep runtime rejection diagnostics without retaining the detailed evidence.
+    issues: quality.issues.map((entry) => ({ ...entry }))
+  };
+  const properties = {};
+  for (const key of RECOMMENDATION_PROPERTY_KEYS) {
+    const claims = material.evidence.properties[key];
+    if (!claims) continue;
+    properties[key] = claims.map((claim) => ({
+      propertyKey: claim.propertyKey,
+      value: claim.value,
+      unit: claim.unit,
+      testStandard: claim.testStandard,
+      testCondition: claim.testCondition,
+      valueType: claim.valueType,
+      verificationStatus: claim.verificationStatus,
+      confidenceLevel: claim.confidenceLevel,
+      conflictStatus: claim.conflictStatus,
+      source: recommendationSource(claim.source)
+    }));
+  }
+  candidate.evidence = {
+    properties,
+    certifications: material.evidence.certifications.map((claim) => ({
+      certificationName: claim.certificationName,
+      certificationStatus: claim.certificationStatus,
+      scope: claim.scope,
+      verificationStatus: claim.verificationStatus,
+      confidenceLevel: claim.confidenceLevel,
+      source: recommendationSource(claim.source)
+    }))
+  };
+  return candidate;
+}
+
+function recommendationSource(source) {
+  return {
+    sourceType: source.sourceType,
+    sourceTitle: source.sourceTitle,
+    sourceUrl: source.sourceUrl,
+    sourceDate: source.sourceDate
+  };
 }
 
 function dataQualityFromLevel(level) {

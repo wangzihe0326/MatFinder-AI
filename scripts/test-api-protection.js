@@ -386,7 +386,7 @@ async function testPublicAndAuditRoutes(publicIds, auditOnlyId) {
   await withServer({}, async (server) => {
     for (const requestPath of [
       "/", "/api/health", "/api/materials?limit=1", "/api/polymer-families",
-      "/api/catalog-stats", "/api/pilot-status", "/api/recommendation-candidates?limit=1",
+      "/api/catalog-stats", "/api/pilot-status", "/api/recommendation-candidates",
       `/api/materials/${encodeURIComponent(publicIds[0])}`
     ]) {
       assert.equal((await send(server, requestPath)).status, 200, `${requestPath} stays public.`);
@@ -439,11 +439,11 @@ async function testPublicAndAuditRoutes(publicIds, auditOnlyId) {
 
     const publicRateIp = "198.51.100.110";
     for (let i = 0; i < 6; i++) {
-      assert.equal((await send(server, "/api/recommendation-candidates?limit=1", {
+      assert.equal((await send(server, "/api/recommendation-candidates", {
         ip: publicRateIp
       })).status, 200);
     }
-    assertRateLimit(await send(server, "/api/recommendation-candidates?limit=1", {
+    assertRateLimit(await send(server, "/api/recommendation-candidates", {
       ip: publicRateIp
     }));
 
