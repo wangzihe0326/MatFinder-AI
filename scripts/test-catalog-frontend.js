@@ -69,6 +69,7 @@ const context = vm.createContext({
     history: { replaceState() {}, pushState() {} }
   }
 });
+vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "public", "recommendation-engine.js"), "utf8"), context);
 vm.runInContext(app.slice(0, startup), context, { filename: "public/app.js" });
 const read = (expression) => vm.runInContext(expression, context);
 const run = (expression) => vm.runInContext(expression, context);
@@ -86,7 +87,7 @@ const grade = (id, temperature, maxTemp, quality = "high") => ({
   data_quality: { level: quality }
 });
 const payload = (items, total = items.length, facets = facetPayload) => ({ items, total, facets });
-const ok = (body) => ({ ok: true, json: async () => body });
+const ok = (body) => ({ ok: true, status: 200, json: async () => body });
 const fixedResponse = (body) => { fetchHandler = async () => ok(body); };
 
 async function main() {
@@ -389,10 +390,316 @@ async function main() {
   assert.equal(new URL(paths.at(-1), "http://test").searchParams.get("offset"), "96");
   assert.equal(state.materialsPage, 3);
 
+  await recommendationFrontendChecks();
   process.stdout.write("AD-04 frontend catalog regressions 34–49 passed.\n");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+function recommendationGrade(id, tensile = 40) {
+  const claim = (key, value, unit) => ({
+    propertyKey: key, value, unit, testStandard: "ASTM D638", testCondition: "23 C",
+    valueType: "typical", verificationStatus: "verified", confidenceLevel: "high",
+    conflictStatus: "none", source: {
+      sourceType: "manufacturer", sourceTitle: "FRONTEND TEST FIXTURE ONLY",
+      sourceUrl: "https://example.invalid/frontend-fixture", sourceDate: "2026-01-01"
+    }
+  });
+  return {
+    id, name: id, name_en: id, name_zh: id, abbr: "PC", category: "Plastics",
+    category_en: "Plastics", category_zh: "Plastics", summary: "Frontend fixture",
+    description_en: "Frontend fixture", description_zh: "Frontend fixture",
+    record_type: "commercial_grade", entityType: "commercial_grade", uses: [],
+    applications_en: [], applications_zh: [], tags: [], disadvantages: [], recyclable: true,
+    maxTemp: 110, continuous_use_temperature: 110, tensile, density: 1.2,
+    elongation: null, tg: null, tm: null, dielectric: null, notes: null,
+    data_quality: {
+      level: "high", recommendation_eligible: true, reference_only: false,
+      verification_status: "verified", confidence_level: "high", issues: []
+    },
+    evidence: { properties: {
+      tensile_strength: [claim("tensile_strength", tensile, "MPa")],
+      density: [claim("density", 1.2, "g/cm3")],
+      hdt: [claim("hdt", 125, "degC")],
+      continuous_use_temperature: [claim("continuous_use_temperature", 110, "degC")]
+    }, certifications: [] }
+  };
+}
+
+async function recommendationFrontendChecks() {
+  const state = read("state");
+  state.route = "home";
+  state.language = "en";
+  const query = "tensile strength at least 50 MPa";
+  const items = [...Array.from({ length: 200 }, (_, index) => recommendationGrade("A" + index)),
+    recommendationGrade("Z999-BEST", 80)];
+  const envelope = (entries = items) => ({
+    items: entries, total: entries.length,
+    eligibleTotal: entries.filter((item) => item.data_quality.recommendation_eligible).length,
+    referenceTotal: entries.filter((item) => item.data_quality.reference_only).length,
+    complete: true, bounded: false
+  });
+  const engine = context.window.MatFinderAI;
+  const factory = engine.createRecommendationService;
+  let ranked = 0;
+  let supplied;
+  engine.createRecommendationService = function (options) {
+    supplied = options.materials;
+    const service = factory(options);
+    return { async recommend(description, options) { ranked += 1; return service.recommend(description, options); } };
+  };
+  try {
+    state.recommendationCache.clear();
+    node("#requirementInput").value = query;
+    fixedResponse(envelope());
+    await read("runRecommendation()");
+    assert.equal(paths.at(-1), "/api/recommendation-candidates");
+    assert.strictEqual(supplied, items, "Pass the full array directly to the existing engine.");
+    assert.equal(ranked, 1);
+    assert.equal(state.recommendationResult.provider, "evidence-rules-v3");
+    assert.equal(state.recommendationResult.groups.verifiedMatches[0].material.id, "Z999-BEST");
+    assert.ok(node("#recommendationResults").innerHTML.includes("Z999-BEST"));
+    const cachedFetches = paths.length;
+    node("#requirementInput").value = "  " + query + "  ";
+    await read("runRecommendation()");
+    assert.equal(paths.length, cachedFetches);
+    assert.equal(ranked, 1);
+
+    // Isolate total/items completeness: every other envelope constraint is valid.
+    state.recommendationCache.clear();
+    const mismatchedTotal = { ...envelope(), total: items.length + 1 };
+    assert.equal(mismatchedTotal.total, 202);
+    assert.equal(mismatchedTotal.items.length, 201);
+    assert.equal(new Set(mismatchedTotal.items.map((item) => item.id)).size, 201);
+    assert.equal(mismatchedTotal.eligibleTotal + mismatchedTotal.referenceTotal, 201);
+    const beforeTotalMismatch = ranked;
+    const mismatchFetches = paths.length;
+    fixedResponse(mismatchedTotal);
+    await read("runRecommendation()");
+    assert.equal(ranked, beforeTotalMismatch, "An otherwise valid total mismatch must not reach the engine.");
+    assert.equal(state.recommendationResult, null);
+    assert.equal(state.recommendations.length, 0);
+    assert.equal(state.recommendationLoadError, true);
+    assert.equal(state.recommendationLoading, false);
+    assert.equal(state.recommendationCache.size, 0);
+    assert.ok(node("#recommendationResults").innerHTML.includes('role="alert"'));
+    fixedResponse(envelope());
+    await read("runRecommendation()");
+    assert.equal(paths.length, mismatchFetches + 2, "The same requirement must fetch again after total mismatch.");
+    assert.equal(ranked, beforeTotalMismatch + 1);
+    assert.equal(state.recommendationLoadError, false);
+    assert.equal(state.recommendationResult.provider, "evidence-rules-v3");
+    assert.equal(state.recommendationCache.size, 1);
+
+    const malformed = [null, [], "invalid", { ...envelope(), complete: false },
+      { ...envelope(), bounded: true }, { ...envelope(), total: 200 },
+      { ...envelope(), items: undefined }, { ...envelope(), items: {} },
+      ...["total", "eligibleTotal", "referenceTotal"].flatMap((key) =>
+        [-1, 0.5, "201", null].map((value) => ({ ...envelope(), [key]: value }))),
+      { ...envelope(), eligibleTotal: 202 }, { ...envelope(), referenceTotal: 202 },
+      { ...envelope(), referenceTotal: 1 }, { ...envelope(), eligibleTotal: 200 },
+      envelope([items[0], items[0]]), { ...envelope([]), items: [null], total: 1 },
+      { ...envelope([]), items: [{}], total: 1 }];
+    for (const body of malformed) {
+      state.recommendationCache.clear();
+      fixedResponse(body);
+      const before = ranked;
+      await read("runRecommendation()");
+      assert.equal(ranked, before, "Malformed/incomplete candidates must not be ranked.");
+      assert.equal(state.recommendationResult, null);
+      assert.equal(state.recommendationLoadError, true);
+      assert.equal(state.recommendationLoading, false);
+      assert.equal(state.recommendationCache.size, 0);
+      assert.ok(node("#recommendationResults").innerHTML.includes('role="alert"'));
+      assert.ok(!node("#recommendationResults").innerHTML.includes("No trustworthy candidate"));
+    }
+
+    const reference = recommendationGrade("L-REFERENCE");
+    reference.data_quality = { ...reference.data_quality, level: "low", recommendation_eligible: false, reference_only: true };
+    const quarantined = recommendationGrade("Q-NONRANKING");
+    quarantined.data_quality = { ...quarantined.data_quality, level: "quarantined", recommendation_eligible: false, reference_only: false };
+    fixedResponse(envelope([items.at(-1), reference, quarantined]));
+    const beforeQ = ranked;
+    await read("runRecommendation()");
+    assert.equal(ranked, beforeQ + 1, "E + L may be less than total because Q exists.");
+
+    for (const failure of [
+      async () => ({ ok: false, status: 500, json: async () => { throw new Error("PRIVATE_SQL_PATH_STACK"); } }),
+      async () => { throw new Error("PRIVATE_SQL_PATH_STACK"); },
+      async () => ({ ok: true, status: 200, json: async () => { throw new Error("PRIVATE_SQL_PATH_STACK"); } }),
+      async () => ({ ok: true, status: 206, json: async () => envelope() })
+    ]) {
+      state.recommendationCache.clear();
+      fetchHandler = failure;
+      const before = ranked;
+      await read("runRecommendation()");
+      assert.equal(ranked, before);
+      assert.equal(state.recommendationResult, null);
+      assert.equal(state.recommendationCache.size, 0);
+      assert.equal(state.recommendationLoadError, true);
+      assert.equal(node("#recommendationResults")["aria-busy"], "false");
+      assert.ok(!node("#recommendationResults").innerHTML.includes("PRIVATE_SQL_PATH_STACK"));
+      state.language = "zh";
+      read("renderRecommendations()");
+      assert.ok(node("#recommendationResults").innerHTML.includes("\u8bf7\u91cd\u8bd5"));
+      state.language = "en";
+      fixedResponse(envelope());
+      await read("runRecommendation()");
+      assert.equal(ranked, before + 1, "The same requirement must be retryable after failure.");
+      assert.equal(state.recommendationLoadError, false);
+    }
+
+    state.recommendationCache.clear();
+    fixedResponse(envelope([]));
+    const beforeEmpty = ranked;
+    await read("runRecommendation()");
+    assert.equal(ranked, beforeEmpty + 1);
+    assert.equal(state.recommendationResult.status, "no_safe_match");
+    assert.equal(state.recommendationLoadError, false);
+    assert.ok(!node("#recommendationResults").innerHTML.includes('role="alert"'));
+    assert.equal(state.recommendationCache.size, 1, "Complete empty success is cacheable.");
+
+    // Latest request wins; duplicate clicks do not create another evaluation.
+    for (const staleFails of [true, false]) {
+      state.recommendationCache.clear();
+      const pending = [];
+      fetchHandler = () => new Promise((resolve, reject) => pending.push({ resolve, reject }));
+      node("#requirementInput").value = query + " old";
+      const old = read("runRecommendation()");
+      const duplicate = read("runRecommendation()");
+      const requests = [old, duplicate];
+      let duplicateChecksCompleted = false;
+      try {
+        // Inspect synchronously before awaiting a potentially unsuppressed fetch.
+        assert.equal(pending.length, 1, "A duplicate trigger must not queue a second fetch.");
+        assert.equal(node("#recommendationResults")["aria-busy"], "true");
+        node("#requirementInput").value = query + " new";
+        const latest = read("runRecommendation()");
+        requests.push(latest);
+        assert.equal(pending.length, 2);
+        pending[1].resolve(ok(envelope()));
+        await latest;
+        const result = state.recommendationResult;
+        const afterLatest = ranked;
+        if (staleFails) pending[0].reject(new Error("PRIVATE_STALE_FAILURE"));
+        else pending[0].resolve(ok(envelope([])));
+        await Promise.all([old, duplicate]);
+        assert.strictEqual(state.recommendationResult, result);
+        assert.equal(state.recommendationQuery, query + " new");
+        assert.equal(ranked, afterLatest);
+        assert.equal(state.recommendationLoadError, false);
+        assert.equal(state.recommendationLoading, false);
+        assert.equal(state.recommendationCache.has(query + " old"), false);
+        duplicateChecksCompleted = true;
+      } finally {
+        // Drain even when the queue assertion fails under a negative control.
+        for (const request of pending) request.resolve(ok(envelope([])));
+        await Promise.allSettled(requests);
+      }
+      assert.equal(duplicateChecksCompleted, true, "Duplicate-trigger assertions must complete.");
+    }
+
+    // Also reject stale results/failures after a request has reached evaluation.
+    for (const evaluationFails of [true, false]) {
+      state.recommendationCache.clear();
+      let releaseEvaluation;
+      engine.createRecommendationService = function (options) {
+        const service = factory(options);
+        return { async recommend(description, options) {
+          ranked += 1;
+          const result = await service.recommend(description, options);
+          if (description.endsWith(" old evaluation")) {
+            return new Promise((resolve, reject) => { releaseEvaluation = { resolve, reject, result }; });
+          }
+          return result;
+        } };
+      };
+      fixedResponse(envelope());
+      node("#requirementInput").value = query + " old evaluation";
+      const oldEvaluation = read("runRecommendation()");
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.ok(releaseEvaluation);
+      node("#requirementInput").value = query + " new evaluation";
+      await read("runRecommendation()");
+      const newest = state.recommendationResult;
+      if (evaluationFails) releaseEvaluation.reject(new Error("PRIVATE_EVALUATION_FAILURE"));
+      else releaseEvaluation.resolve(releaseEvaluation.result);
+      await oldEvaluation;
+      assert.strictEqual(state.recommendationResult, newest);
+      assert.equal(state.recommendationLoadError, false);
+      assert.equal(state.recommendationLoading, false);
+      assert.equal(state.recommendationCache.has(query + " old evaluation"), false);
+    }
+    state.recommendationCache.clear();
+    engine.createRecommendationService = () => ({ recommend: async () => { throw new Error("PRIVATE_EVALUATION_FAILURE"); } });
+    fixedResponse(envelope());
+    await read("runRecommendation()");
+    assert.equal(state.recommendationResult, null);
+    assert.equal(state.recommendationLoadError, true);
+    assert.equal(state.recommendationCache.size, 0);
+    assert.ok(!node("#recommendationResults").innerHTML.includes("PRIVATE_EVALUATION_FAILURE"));
+    engine.createRecommendationService = factory;
+
+    state.recommendationCache.clear();
+    let release;
+    fetchHandler = () => new Promise((resolve) => { release = resolve; });
+    const cleared = read("runRecommendation()");
+    node("#clearRecommendationButton").emit("click");
+    release(ok(envelope()));
+    await cleared;
+    assert.equal(state.recommendationResult, null);
+    assert.equal(state.recommendationQuery, "");
+    assert.equal(state.recommendationLoading, false);
+    assert.equal(state.recommendationLoadError, false);
+    assert.equal(state.recommendationCache.size, 0);
+    process.stdout.write("AD-05 frontend integration passed: canonical complete 201, unchanged evidence-rules-v3, malformed rejection, E/L/Q counts, safe retry, complete empty, cache and stale/clear safety.\n");
+  } finally { engine.createRecommendationService = factory; }
+}
+
+function assertReportCompatibility(detailed, compact) {
+  const state = read("state");
+  const priorLanguage = state.language;
+  const priorMaterials = read("materials");
+  context.reportMaterials = detailed;
+  read("materials = reportMaterials");
+  const output = {};
+  try {
+    assert.equal(compact.length, detailed.length);
+    for (const language of ["en", "zh"]) {
+      state.language = language;
+      for (let index = 0; index < detailed.length; index += 1) {
+        context.reportDetailed = detailed[index];
+        context.reportCompact = compact[index];
+        const disadvantages = read("JSON.stringify(materialDisadvantageList(reportDetailed))");
+        assert.equal(read("JSON.stringify(materialDisadvantageList(reportCompact))"), disadvantages,
+          language + ": disadvantage fallbacks must match for " + detailed[index].id);
+        context.reportCandidate = { material: detailed[index], score: 90, reasons: [], warnings: [] };
+        const fullHtml = read("renderReportMaterial(reportCandidate, 0)");
+        context.reportCandidate = { material: compact[index], score: 90, reasons: [], warnings: [] };
+        const compactHtml = read("renderReportMaterial(reportCandidate, 0)");
+        assert.equal(compactHtml, fullHtml, language + ": exact existing report HTML for " + detailed[index].id);
+        output[language + ":" + detailed[index].id] = compactHtml;
+      }
+    }
+    return output;
+  } finally {
+    state.language = priorLanguage;
+    context.reportMaterials = priorMaterials;
+    read("materials = reportMaterials");
+    for (const key of ["reportMaterials", "reportDetailed", "reportCompact", "reportCandidate"]) delete context[key];
+  }
+}
+
+module.exports = { assertReportCompatibility };
+if (require.main === module) {
+  let completed = false;
+  let watchdog;
+  const timeout = new Promise((_, reject) => {
+    watchdog = setTimeout(() => reject(new Error("Frontend test watchdog: async assertions did not complete within 10 seconds.")), 10_000);
+  });
+  Promise.race([main().then(() => { completed = true; }), timeout]).then(() => {
+    assert.equal(completed, true, "The complete frontend regression must finish before success.");
+    process.stdout.write("Frontend regression TEST COMPLETED.\n");
+  }).catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  }).finally(() => clearTimeout(watchdog));
+}

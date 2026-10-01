@@ -296,14 +296,24 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/recommendation-candidates") {
-      const candidates = repository.getRecommendationCandidates({
-        limit: requestUrl.searchParams.get("limit")
-      });
-      sendJson(response, 200, {
-        items: candidates,
-        total: candidates.length,
-        bounded: true
-      });
+      response.setHeader("Cache-Control", "no-store");
+      if (requestUrl.searchParams.size > 0) {
+        sendJson(response, 400, { error: "Invalid recommendation candidate query" });
+        return;
+      }
+      try {
+        const candidates = repository.getRecommendationCandidates();
+        sendJson(response, 200, {
+          items: candidates,
+          total: candidates.length,
+          eligibleTotal: candidates.filter((item) => item.data_quality.recommendation_eligible).length,
+          referenceTotal: candidates.filter((item) => item.data_quality.reference_only).length,
+          complete: true,
+          bounded: false
+        });
+      } catch {
+        sendJson(response, 500, { error: "Recommendation candidate recall failed" });
+      }
       return;
     }
 
