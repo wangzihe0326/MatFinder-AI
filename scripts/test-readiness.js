@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { DatabaseSync } = require("node:sqlite");
-const { MaterialRepository } = require("../material-repository");
+const { MaterialRepository } = require("../catalog-policy").loadCanonicalPolicy().repository;
 
 const root = path.resolve(__dirname, "..");
 const privateFailureMarker = "INTERNAL_SQL_OR_PATH_DO_NOT_EXPOSE";
@@ -347,6 +347,7 @@ function addFixture(databasePath, options) {
 }
 
 async function withServer(databasePath, options, callback) {
+  await require("./build-catalog-stats").buildCatalogStats(databasePath);
   const port = await freePort();
   const env = {
     ...process.env,

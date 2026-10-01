@@ -1,11 +1,7 @@
 let materials = [];
 let polymerFamilies = [];
-let catalogLayerStats = {
-  polymerFamilies: 0,
-  verifiedCommercialGrades: 0,
-  verifiedPropertyDataPoints: 0,
-  materialsAwaitingVerification: 0
-};
+let catalogLayerStats = null;
+let catalogPageGeneration = null;
 let pilotStatus = { target: 0, families: [], counts: {}, slots: [] };
 let auditSummary = {};
 let auditMaterials = [];
@@ -1651,15 +1647,9 @@ async function init() {
   categories = catalogFacets.categories.options.map(({ value }) => value);
   renderCategoryOptions();
 
-  elements.totalCount.textContent = catalogLayerStats.verifiedCommercialGrades;
   const totalCountUnit = elements.totalCount.nextElementSibling;
   if (totalCountUnit) totalCountUnit.textContent = t("verifiedGradesUnit");
-  elements.homeFamilyCount.textContent = catalogLayerStats.polymerFamilies;
-  elements.homeVerifiedGradeCount.textContent = catalogLayerStats.verifiedCommercialGrades;
-  elements.homeVerifiedPropertyCount.textContent = catalogLayerStats.verifiedPropertyDataPoints;
-  elements.homeAwaitingCount.textContent = catalogLayerStats.materialsAwaitingVerification;
-  elements.aboutMaterialCount.textContent = catalogLayerStats.verifiedCommercialGrades;
-  elements.aboutCategoryCount.textContent = catalogLayerStats.polymerFamilies;
+  renderCatalogStats();
   if (elements.aboutMaterialCount.nextElementSibling) {
     elements.aboutMaterialCount.nextElementSibling.textContent = t("verifiedGradesUnit");
   }
@@ -1765,27 +1755,30 @@ function renderRoute() {
 async function loadMaterials() {
   elements.materialsGrid.innerHTML = `<p class="recommendation-empty">${t("generating")}</p>`;
   elements.emptyState.hidden = true;
+  const statsRequest = fetch(apiUrl("/api/catalog-stats"))
+    .then((response) => response.ok ? response.json() : null).catch(() => null);
   const responses = await Promise.all([
     fetch(apiUrl(`/api/materials?limit=${state.materialsPageSize}&offset=0&sort=match`)),
     fetch(apiUrl("/api/polymer-families")),
-    fetch(apiUrl("/api/catalog-stats")),
     fetch(apiUrl("/api/pilot-status"))
   ]);
   if (responses.some((response) => !response.ok)) {
     throw new Error("Failed to load the layered material catalog.");
   }
-  const [
-    materialPayload,
-    familyPayload,
-    statsPayload,
-    pilotPayload
-  ] = await Promise.all(responses.map((response) => response.json()));
+  const [materialPayload, familyPayload, pilotPayload] = await Promise.all(
+    responses.map((response) => response.json()));
   materials = materialPayload.items || [];
   materialCatalogTotal = Number(materialPayload.total) || 0;
   catalogFacets = materialPayload.facets || catalogFacets;
   polymerFamilies = familyPayload;
-  catalogLayerStats = statsPayload;
   pilotStatus = pilotPayload;
+  catalogPageGeneration = materialPayload.generation || null;
+  catalogLayerStats = null;
+  statsRequest.then((stats) => {
+    catalogLayerStats = stats;
+    reconcileCatalogStats();
+    renderCatalogStats();
+  });
 }
 
 function catalogQueryParams(page) {
@@ -1820,6 +1813,8 @@ async function loadPublicMaterialPage(page = 1) {
       await loadPublicMaterialPage(totalPages);
       return;
     }
+    catalogPageGeneration = payload.generation || null;
+    reconcileCatalogStats();
     materials = payload.items;
     materialCatalogTotal = payload.total;
     catalogFacets = payload.facets;
@@ -1831,6 +1826,8 @@ async function loadPublicMaterialPage(page = 1) {
     render();
   } catch {
     if (requestId !== catalogRequestId) return;
+    catalogPageGeneration = null;
+    catalogLayerStats = null;
     materials = [];
     materialCatalogTotal = 0;
     catalogFacets = emptyCatalogFacets();
@@ -3481,26 +3478,33 @@ function renderAuditSummary() {
   `).join("");
 }
 
+function sameCatalogGeneration(left, right) {
+  return left && right && left.formatVersion === 1 && right.formatVersion === 1 &&
+    /^[a-f0-9]{64}$/.test(left.datasetDigest) && /^[a-f0-9]{64}$/.test(left.policyDigest) &&
+    left.datasetDigest === right.datasetDigest && left.policyDigest === right.policyDigest;
+}
+
+function reconcileCatalogStats() {
+  const fields = ["polymerFamilies", "verifiedCommercialGrades", "verifiedPropertyDataPoints",
+    "materialsAwaitingVerification"];
+  if (!catalogLayerStats || !sameCatalogGeneration(catalogPageGeneration, catalogLayerStats.generation) ||
+      !fields.every((key) => Number.isSafeInteger(catalogLayerStats[key]) && catalogLayerStats[key] >= 0))
+    catalogLayerStats = null;
+}
+
 function renderCatalogStats() {
+  const display = (key) => catalogLayerStats ? catalogLayerStats[key] : t("unavailable");
+  for (const [element, key] of [
+    ["totalCount", "verifiedCommercialGrades"], ["homeFamilyCount", "polymerFamilies"],
+    ["homeVerifiedGradeCount", "verifiedCommercialGrades"], ["homeVerifiedPropertyCount", "verifiedPropertyDataPoints"],
+    ["homeAwaitingCount", "materialsAwaitingVerification"], ["aboutMaterialCount", "verifiedCommercialGrades"],
+    ["aboutCategoryCount", "polymerFamilies"]
+  ]) if (elements[element]) elements[element].textContent = display(key);
   if (!elements.catalogStats) return;
-  elements.catalogStats.innerHTML = `
-    <div class="catalog-stat">
-      <span>${t("statPolymerFamilies")}</span>
-      <strong>${catalogLayerStats.polymerFamilies}</strong>
-    </div>
-    <div class="catalog-stat">
-      <span>${t("statVerifiedGrades")}</span>
-      <strong>${catalogLayerStats.verifiedCommercialGrades}</strong>
-    </div>
-    <div class="catalog-stat">
-      <span>${t("statVerifiedProperties")}</span>
-      <strong>${catalogLayerStats.verifiedPropertyDataPoints}</strong>
-    </div>
-    <div class="catalog-stat">
-      <span>${t("statAwaitingVerification")}</span>
-      <strong>${catalogLayerStats.materialsAwaitingVerification}</strong>
-    </div>
-  `;
+  elements.catalogStats.innerHTML = [
+    ["statPolymerFamilies", "polymerFamilies"], ["statVerifiedGrades", "verifiedCommercialGrades"],
+    ["statVerifiedProperties", "verifiedPropertyDataPoints"], ["statAwaitingVerification", "materialsAwaitingVerification"]
+  ].map(([label, key]) => `<div class="catalog-stat"><span>${t(label)}</span><strong>${display(key)}</strong></div>`).join("");
 }
 
 function render() {

@@ -2,5 +2,7 @@
 .env
 .env.local
 node_modules
+*.catalog-stats.json
+*.catalog-stats.json.tmp-*
 npm-debug.log
 deployment-url.txt

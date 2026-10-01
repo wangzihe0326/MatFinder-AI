@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
 const net = require("node:net");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -11,6 +13,15 @@ const auditHeaders = (clientNumber) => ({
 });
 
 async function main() {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "matfinder-startup-generation-"));
+  try { await runFinalizedDatabase(directory); }
+  finally { fs.rmSync(directory, { recursive: true, force: true }); }
+}
+
+async function runFinalizedDatabase(directory) {
+  const databasePath = path.join(directory, "fixture.db");
+  fs.copyFileSync(path.join(root, "matfinder.db"), databasePath);
+  await require("./build-catalog-stats").buildCatalogStats(databasePath);
   const port = await freePort();
   const child = spawn(process.execPath, ["server.js"], {
     cwd: root,
@@ -18,7 +29,7 @@ async function main() {
       ...process.env,
       NODE_ENV: "test",
       PORT: String(port),
-      MATFINDER_DB_PATH: path.join(root, "matfinder.db"),
+      MATFINDER_DB_PATH: databasePath,
       MATFINDER_ADMIN_TOKEN: adminFixture,
       MATFINDER_TRUST_PROXY: "render"
     },
@@ -53,6 +64,13 @@ async function main() {
     assert.equal(startupDiagnostics.repository.fullEvidenceTableReads, 0);
     assert.equal(startupDiagnostics.repository.recommendationRecallCalls, 0);
     assert.equal(startupDiagnostics.repository.recommendationBatches, 0);
+    const beforeStats = await requestDiagnostics(child);
+    const stats = await requestJson(`${base}/api/catalog-stats`);
+    assert.equal(stats.verifiedCommercialGrades, 0);
+    assert.ok(stats.generation?.datasetDigest);
+    const afterStats = await requestDiagnostics(child);
+    assert.deepEqual(afterStats.repository, beforeStats.repository,
+      "A verified stats request must not scan/evaluate materials.");
 
     const home = await fetch(`${base}/`);
     assert.equal(home.status, 200);

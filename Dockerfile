@@ -10,6 +10,7 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 COPY . .
+RUN node scripts/build-catalog-stats.js /app/matfinder.db
 
 EXPOSE 3000
 

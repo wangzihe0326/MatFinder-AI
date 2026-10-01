@@ -4,7 +4,7 @@
 
 Render uses the Docker service in `render.yaml`.
 
-- Build: Docker copies `package*.json`, runs `npm install --omit=dev`, then copies the application.
+- Build: Docker copies `package*.json`, runs `npm install --omit=dev`, copies the finalized database/application, then runs the offline catalog-stats builder. Builder failure fails the image build.
 - Start: the Docker `CMD` is `node server.js`.
 - Health check: `GET /api/health`.
 - `scripts/start-production.js` is only a thin wrapper around `server.js`; it does not run migrations.
@@ -40,23 +40,29 @@ This explains the Render failure around the 251–259 MB V8 heap limit. Raising
 
 `npm start` now performs only:
 
-1. environment configuration;
+1. bounded semantic-policy capture/load verification and environment configuration;
 2. one read-only SQLite connection;
 3. a required-table/schema version check;
 4. a check that required SQLite indexes already exist;
-5. HTTP listener startup.
+5. strict catalog-stats artifact validation (at most 8 KiB), streamed database and fixed-policy digest verification;
+6. HTTP listener startup, with unavailable stats if verification fails.
 
 It does not run migrations, evidence audits, data imports, index rebuilds, or
-full database reads. Those remain explicit commands:
+full material/evidence-table hydration. A valid artifact requires one sequential
+database-file hash at startup, with a 64 KiB buffer: time is linear in file size,
+while allocation is bounded. Ordinary stats requests read only the verified small
+aggregate and constant-size data-version/file-state tripwires. Offline aggregate
+construction remains an explicit command:
 
 ```text
 npm run migrate
 npm run audit:evidence
 npm run import:real-materials -- --file <path>
+npm run build:catalog-stats -- <absolute-finalized-database-path>
 npm start
 ```
 
-Current production-database startup measurements:
+Historical production-database startup measurements before AD-08 file-digest verification:
 
 | Phase | heapUsed | RSS |
 | --- | ---: | ---: |
@@ -75,18 +81,20 @@ The schema phase records `migrationExecuted: false`, and the index phase records
 - Public and audit lists use SQL filtering with `LIMIT` and `OFFSET`; the default
   page size is 48 and the hard limit is 200.
 - Polymer Family count is calculated by a SQL `GROUP BY`.
-- Trusted and audit statistics are SQL aggregate queries.
+- Trusted catalog statistics are precomputed offline with the canonical evaluator;
+  HTTP requests return the verified small artifact. Audit inventory statistics use SQL.
 - List responses contain list fields, tags, uses, identity summary, and quality
   summary, but not property evidence.
-- Property evidence is loaded only for one detail or for the bounded set of
-  recommendation candidates requested by a user.
+- Property evidence is loaded for the SQL-selected catalog page, one detail, or
+  bounded recommendation candidate batches. Catalog page hydration does not change
+  SQL membership, ordering, totals or facets.
 - Detailed candidate hydration uses batches of 30 materials; no JavaScript
   query result may exceed 1,000 rows.
 - The browser detail cache is limited to 30 entries and recommendation results
   to 20 entries.
 - No server-side full-material or full-evidence cache exists.
 
-`npm run test:startup-memory` starts the real production database, checks the
+`npm run test:startup-memory` starts a finalized temporary copy of the repository database, checks the
 home page, SQL search, detail, and recommendation candidate endpoints, then
 repeats search and detail access 25 times. The regression test fails if:
 
@@ -96,10 +104,17 @@ repeats search and detail access 25 times. The regression test fails if:
 - a JavaScript query batch exceeds 1,000 rows;
 - repeated access shows more than 32 MB heap or 64 MB RSS growth.
 
-The latest regression result was 5.40 MB startup heap / 59.27 MB startup RSS
+The historical pre-AD-08 regression at the earlier startup investigation measured
+5.40 MB startup heap / 59.27 MB startup RSS
 and 7.04 MB heap / 66.39 MB RSS after repeated access. It read 416 requested
 property rows, with a maximum single query result of 152 rows and zero full
 property-table reads.
+
+AD-08 Phase 2 measured a finalized temporary database copy on 2026-10-02 with
+Node v24.14.1: startup peak heapUsed 7.43 MB / RSS 78.37 MB; after repeated access
+7.93 MB / 63.66 MB. These are dated local measurements, not the latest deployment
+or Node 22.13 compatibility proof. Subsequent regression runs report their own
+measurements. Policy execution binding/publication limits are defined in DEPLOYMENT.md.
 
 `NODE_OPTIONS=--max-old-space-size=384` is not configured. It may be used only
 as a temporary diagnostic guard after confirming the instance memory limit; it

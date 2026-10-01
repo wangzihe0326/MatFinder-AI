@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { MaterialRepository } = require("../material-repository");
+const { MaterialRepository } = require("../catalog-policy").loadCanonicalPolicy().repository;
 const { families, matchesFamily } = require("../public/polymer-families");
 const {
   isPolymerFamily,
@@ -10,7 +10,15 @@ const {
 } = require("../public/catalog-layer");
 
 const root = path.resolve(__dirname, "..");
-const repository = new MaterialRepository(path.join(root, "matfinder.db"));
+const os = require("node:os");
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), "matfinder-catalog-layer-"));
+const databasePath = path.join(directory, "fixture.db");
+fs.copyFileSync(path.join(root, "matfinder.db"), databasePath);
+let repository;
+(async () => {
+await require("./build-catalog-stats").buildCatalogStats(databasePath);
+repository = new MaterialRepository(databasePath);
+await repository.initializeCatalogStats();
 const absFamily = families.find((family) => family.abbreviations.includes("ABS"));
 
 assert.ok(absFamily, "ABS polymer family must exist.");
@@ -57,6 +65,7 @@ assert.equal(
 );
 assert.equal(repository.getMetrics().propertyEvidenceRowsRead, 0);
 repository.close();
+repository = null;
 
 const browserContext = { window: {} };
 vm.createContext(browserContext);
@@ -100,7 +109,6 @@ const fakeFamilyForBoundaryTest = {
   }
 };
 
-(async () => {
   const service = browserContext.window.MatFinderAI.createRecommendationService({
     materials: [fakeFamilyForBoundaryTest]
   });
@@ -132,7 +140,10 @@ const fakeFamilyForBoundaryTest = {
   process.stdout.write(
     "Catalog layering, family separation, trusted statistics, and recommendation boundary tests passed.\n"
   );
-})().catch((error) => {
+})().finally(() => {
+  try { repository?.close(); }
+  finally { fs.rmSync(directory, { recursive: true, force: true }); }
+}).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

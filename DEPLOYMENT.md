@@ -29,7 +29,7 @@ The server exposes three separate operational signals:
 ```txt
 GET /api/live    -> process can serve HTTP; no database or OpenAI query
 GET /api/health  -> read-only SQLite technical health; Render/Docker health path
-GET /api/ready   -> an eligible public engineering commercial grade exists
+GET /api/ready   -> verified catalog-stats generation AND an eligible public engineering commercial grade exists
 ```
 
 Successful responses, respectively:
@@ -53,6 +53,59 @@ The product-grade existence result is cached for at most five seconds per
 process; the technical SQLite read still runs on every health/readiness probe.
 
 ## SQLite Deployment Notes
+
+After all maintenance writers have finished, seal the database in DELETE journal
+mode and run `npm run build:catalog-stats -- <absolute-database-path>`. The default
+path is the repository's `matfinder.db`. This offline command reserves the SQLite
+writer, reads public materials in keyset batches of 30, evaluates complete evidence,
+streams the database bytes with a 64 KiB buffer, and atomically publishes
+`<database-path>.catalog-stats.json`. It does not change material data. WAL, SHM
+and journal side files are rejected; checkpoint/seal during maintenance before
+finalization. Maintenance success alone does not establish stats readiness.
+
+Publish the finalized DB, its sidecar and the exact application sources together.
+The fixed semantic policy manifest is `material-quality.js`, `evidence-model.js`,
+and `material-repository.js`: evaluator rules, evidence interpretation, public
+membership and aggregate count semantics. Artifact parsing, hashing, publication
+and bootstrap mechanics are governed by the artifact format rather than included
+in P. `catalog-policy.js` synchronously captures bounded source bytes before
+loading these modules, verifies them after load, and retains the loaded identity
+for the process. Each source file is capped at 256 KiB. A preloaded module without
+this binding is rejected; an in-process builder must use this bootstrap and rejects
+source changes since load. Runtime compares the artifact against its loaded P,
+never labels cached P1 with later disk P2, and does not hash source on requests.
+Identity includes line endings. A Git commit ID is not a substitute. Source-checkout sidecars are ignored;
+Docker generates a fresh artifact after `COPY` and fails its build on errors.
+
+Finalization holds a database read descriptor plus the SQLite writer reservation.
+After asynchronous checks and temporary-file validation, the builder synchronously
+rehashes held-file bytes and compares descriptor/path state (device, file ID where
+available, size and modification/change times), policy bytes and sealing. It repeats
+validation after atomic replacement and guard release before reporting success.
+A post-replace failure restores the previous sidecar; without a predecessor it
+removes the new sidecar. If restoration fails, it removes the new sidecar and reports
+failure. No builder correctness claim depends on later runtime rejection.
+Supported maintenance keeps source and DB stable while finalizing; persistent
+replacement/content changes observed through the final check fail closed. This is
+not cryptographic atomicity against hostile filesystem mutate-and-restore races or
+a promise that a different process cannot write after the builder's final check.
+
+Admin audit SQL quality summaries are DEFERRED / OUT OF AD-08 PUBLIC PARITY SCOPE.
+They are authenticated, separate from public material quality, canonical detail,
+recommendation eligibility, readiness and catalog aggregates. AD-08 does not rewrite
+that diagnostic approximation. Public canonical ownership applies to those public
+and runtime surfaces, not audit inventory summaries.
+
+Startup verifies the small artifact and streams the actual database once before
+listening. Missing, malformed, mismatched or unsupported generations permit a
+degraded server: catalog browsing remains available, stats return 503 without fake
+zeroes, and ready returns `catalog_stats_unavailable`. Health remains technical.
+The two catalog endpoints share same-connection data-version and file-state checks.
+Detected live writes/replacement invalidate the process for its remaining lifetime:
+pages no longer claim the old generation, stats/ready fail closed. Stop the process,
+finish maintenance, regenerate/publish the matching artifact, then restart. An old
+matching DB/artifact/code pair can be restored only through restart/revalidation.
+No online rebuilding or general cache-freshness mechanism is provided.
 
 - The Docker image uses the `matfinder.db` file shipped in the repository.
 - The deployed server reads SQLite directly from Node.js at startup; Python is not required for production runtime or Docker build.
