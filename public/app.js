@@ -26,6 +26,12 @@ let recommendationService = null;
 let recommendationRequestId = 0;
 const materialDetailCache = new Map();
 const MATERIAL_DETAIL_CACHE_LIMIT = 30;
+const materialDetailRequests = new Map();
+const selectedMaterialEntities = new Map();
+const compareSelectionIntents = new Map();
+let compareIntentId = 0;
+let detailRequestId = 0;
+let activeAnalysisRequestId = 0;
 let materialSearchTimer = null;
 const apiBaseUrl = String(window.MatFinderConfig?.apiBaseUrl || "").replace(/\/$/, "");
 const DEFAULT_MIN_TEMP = -200;
@@ -1023,8 +1029,8 @@ const state = {
   materialsPageSize: 48,
   materialsGridRendered: false,
   recommendationCache: new Map(),
-  compareTableCache: new Map(),
   selected: new Set(),
+  compareErrors: new Map(),
   recommendations: [],
   recommendationCriteria: [],
   recommendationQuery: "",
@@ -1032,6 +1038,8 @@ const state = {
   recommendationLoading: false,
   recommendationLoadError: false,
   selectedMaterialId: null,
+  activeMaterial: null,
+  activeMaterialError: null,
   copilotMessages: [],
   analysisCache: new Map(),
   aiCompareCache: new Map()
@@ -1420,7 +1428,12 @@ function applyLanguage() {
 
 function rerenderActiveAnalysis() {
   if (state.selectedMaterialId) {
-    const item = materials.find((material) => material.id === state.selectedMaterialId);
+    const item = state.activeMaterial;
+    if (item?.data_quality?.recommendation_eligible === false) {
+      elements.analysisTitle.textContent = `${materialName(item)} (${item.abbr})`;
+      renderAnalysisQualityBlocked(item);
+      return;
+    }
     const analysis = state.analysisCache.get(getLanguageCacheKey(item?.id));
     if (item && analysis) {
       elements.analysisTitle.textContent = `${materialName(item)} (${item.abbr})`;
@@ -1429,6 +1442,10 @@ function rerenderActiveAnalysis() {
       elements.analysisTitle.textContent = `${materialName(item)} (${item.abbr})`;
       elements.analysisStatus.textContent = t("gptExplanation");
       elements.analysisContent.innerHTML = `<p class="recommendation-empty">${t("analysisEmpty")}</p>`;
+    } else {
+      elements.analysisTitle.textContent = t("selectMaterial");
+      elements.analysisStatus.textContent = state.activeMaterialError ? t("unavailable") : t("generating");
+      elements.analysisContent.innerHTML = `<p class="recommendation-empty">${escapeHtml(state.activeMaterialError || t("generating"))}</p>`;
     }
   } else {
     elements.analysisTitle.textContent = t("selectMaterial");
@@ -1921,24 +1938,71 @@ function renderAuditRecords() {
   `).join("");
 }
 
-async function loadMaterialDetail(item) {
-  if (materialDetailCache.has(item.id)) return materialDetailCache.get(item.id);
-  const detailPromise = fetch(apiUrl(`/api/materials/${encodeURIComponent(item.id)}`))
-    .then(async (response) => {
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Failed to load material detail.");
-      Object.assign(item, payload);
-      delete item.__catalogSearchIndex;
-      delete item.__signalText;
-      delete item.__applicationSignalText;
-      return item;
-    })
-    .catch((error) => {
-      materialDetailCache.delete(item.id);
-      throw error;
-    });
-  setBoundedCache(materialDetailCache, item.id, detailPromise, MATERIAL_DETAIL_CACHE_LIMIT);
-  return detailPromise;
+function validateMaterialDetail(item, id) {
+  const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+  const optionalStrings = (value, keys) => keys.every((key) => value[key] == null || typeof value[key] === "string");
+  const stringList = (value) => Array.isArray(value) && value.every((entry) => typeof entry === "string");
+  const optionalList = (value, member) => value == null || (Array.isArray(value) && value.every(member));
+  const source = (value) => record(value) && optionalStrings(value,
+    ["sourceTitle", "sourceUrl", "sourceType", "verificationStatus", "confidenceLevel"]);
+  const evidence = item?.evidence;
+  const identity = evidence?.identity;
+  const properties = evidence?.properties;
+  // Missing/empty optional evidence is supported by the detail renderer. Supplied
+  // list members must be usable records before any consumer dereferences them.
+  if (!record(item) || item.id !== id || typeof item.name !== "string" ||
+      !stringList(item.tags) || !stringList(item.uses) ||
+      !record(item.data_quality) ||
+      !["high", "medium", "low", "quarantined"].includes(item.data_quality.level) ||
+      typeof item.data_quality.recommendation_eligible !== "boolean" ||
+      !optionalStrings(item, ["notes"]) ||
+      !["processing_methods", "advantages", "disadvantages", "applications_en", "applications_zh"]
+        .every((key) => item[key] == null || stringList(item[key])) ||
+      !optionalList(item.data_quality.issues, (issue) => record(issue) && optionalStrings(issue, ["code", "en", "zh"])) ||
+      (evidence != null && !record(evidence)) || (identity != null && !record(identity)) ||
+      !optionalList(identity?.sources, source) ||
+      (properties != null && (!record(properties) || !propertyEvidenceDefinitions.every(([key]) =>
+        optionalList(properties[key], (claim) => record(claim) && (claim.source == null || source(claim.source)))))) ||
+      !optionalList(evidence?.certifications, (certification) => record(certification) &&
+        optionalStrings(certification, ["certificationName", "certificationStatus", "scope", "verificationStatus", "confidenceLevel"]) &&
+        (certification.source == null ? source(certification) : source(certification.source)))) {
+    throw new Error("Invalid material detail response.");
+  }
+}
+
+async function resolveMaterialById(id) {
+  if (typeof id !== "string" || !id) throw new Error("Invalid material ID.");
+  if (materialDetailCache.has(id)) return materialDetailCache.get(id);
+  if (materialDetailRequests.has(id)) return materialDetailRequests.get(id);
+  const request = (async () => {
+    const response = await fetch(apiUrl(`/api/materials/${encodeURIComponent(id)}`));
+    const item = await response.json();
+    if (!response.ok) throw new Error(item?.error || "Failed to load material detail.");
+    validateMaterialDetail(item, id);
+    setBoundedCache(materialDetailCache, id, item, MATERIAL_DETAIL_CACHE_LIMIT);
+    return item;
+  })();
+  materialDetailRequests.set(id, request);
+  try {
+    return await request;
+  } finally {
+    if (materialDetailRequests.get(id) === request) materialDetailRequests.delete(id);
+  }
+}
+
+function invalidateDetailInteraction() {
+  detailRequestId += 1;
+  if (!state.activeMaterial) {
+    state.selectedMaterialId = null;
+    state.activeMaterialError = null;
+    rerenderActiveAnalysis();
+    updateCopilotContext();
+  }
+}
+
+function closeDetail() {
+  invalidateDetailInteraction();
+  elements.detailDialog.close();
 }
 
 function setBoundedCache(cache, key, value, limit) {
@@ -2140,16 +2204,28 @@ function bindEvents() {
 
   elements.clearCompareButton.addEventListener("click", () => {
     state.selected.clear();
+    selectedMaterialEntities.clear();
+    compareSelectionIntents.clear();
+    state.compareErrors.clear();
     render();
+    renderRecommendations();
   });
 
   elements.runAiCompareButton.addEventListener("click", runAiComparison);
 
-  elements.closeDialogButton.addEventListener("click", () => elements.detailDialog.close());
+  elements.closeDialogButton.addEventListener("click", closeDetail);
   elements.detailDialog.addEventListener("click", (event) => {
     if (event.target === elements.detailDialog) {
-      elements.detailDialog.close();
+      closeDetail();
     }
+  });
+  elements.detailDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeDetail();
+  });
+  elements.detailDialog.addEventListener("close", () => {
+    // A queued close event from an earlier session must not cancel a newly opened one.
+    if (!elements.detailDialog.open) invalidateDetailInteraction();
   });
 }
 
@@ -2901,7 +2977,8 @@ function renderRankedAlternatives(item) {
 }
 
 function getCopilotContext() {
-  const selectedItem = state.selectedMaterialId ? materials.find((material) => material.id === state.selectedMaterialId) : null;
+  if (state.selectedMaterialId && !state.activeMaterial) return { item: null, candidate: null };
+  const selectedItem = state.activeMaterial;
   const recommendedItem = state.recommendations[0]?.material || null;
   const item = selectedItem || recommendedItem;
   if (!item) return { item: null, candidate: null };
@@ -3272,7 +3349,7 @@ function renderRecommendationDetail(item) {
     button.addEventListener("click", () => showDetail(button.dataset.profileId));
   });
   elements.detailContent.querySelector("[data-ask-copilot]")?.addEventListener("click", () => {
-    elements.detailDialog.close();
+    closeDetail();
     setRoute("copilot");
   });
 
@@ -3518,8 +3595,7 @@ function renderRecommendations(result = state.recommendationResult) {
   });
   elements.recommendationResults.querySelectorAll("[data-compare-id]").forEach((button) => {
     button.addEventListener("click", () => {
-      toggleCompare(button.dataset.compareId);
-      renderRecommendations();
+      return toggleCompare(button.dataset.compareId);
     });
   });
   elements.recommendationResults.querySelector("[data-export-report]")?.addEventListener("click", exportMaterialSelectionReport);
@@ -3738,6 +3814,7 @@ function renderRecommendationCard(candidate, index, bucket = candidate.bucket ||
               ${state.selected.has(item.id) ? t("added") : t("compare")}
             </button>`
           : `<span class="recommendation-action-blocked">${state.language === "zh" ? "已禁止比较和 AI 分析" : "Comparison and AI analysis blocked"}</span>`}
+        ${state.compareErrors?.get(item.id) ? `<p class="recommendation-empty" role="alert">${escapeHtml(state.compareErrors.get(item.id))}</p>` : ""}
       </div>
     </article>
   `;
@@ -3999,6 +4076,7 @@ function renderCards(items) {
           : `<button class="compare-button" type="button" data-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
               ${state.selected.has(item.id) ? t("added") : t("compare")}
             </button>`}
+        ${state.compareErrors?.get(item.id) ? `<p class="recommendation-empty" role="alert">${escapeHtml(state.compareErrors.get(item.id))}</p>` : ""}
       </div>
     `;
 
@@ -4069,27 +4147,52 @@ function renderMaterialsPagination(totalItems, totalPages) {
   elements.materialsPagination.replaceChildren(label, previous, select, next);
 }
 
-function toggleCompare(id) {
-  const item = materials.find((material) => material.id === id);
-  if (!item || item.data_quality?.level === "quarantined") return;
-  if (state.selected.has(id)) {
+async function toggleCompare(id) {
+  state.compareErrors.delete(id);
+  if (state.selected.has(id) || compareSelectionIntents.has(id)) {
     state.selected.delete(id);
-  } else {
-    if (state.selected.size >= 3) {
+    selectedMaterialEntities.delete(id);
+    compareSelectionIntents.delete(id);
+    render();
+    renderRecommendations();
+    return;
+  }
+  const intent = ++compareIntentId;
+  compareSelectionIntents.set(id, intent);
+  try {
+    const item = await resolveMaterialById(id);
+    if (compareSelectionIntents.get(id) !== intent) return;
+    if (item.data_quality.level === "quarantined") throw new Error(state.language === "zh"
+      ? "该材料已隔离，禁止比较。" : "This material is quarantined; comparison is blocked.");
+    selectedMaterialEntities.set(id, item);
+    state.selected.add(id);
+    // Response completion order must not replace the user's selection order.
+    state.selected = new Set([...state.selected].sort((a, b) =>
+      compareSelectionIntents.get(a) - compareSelectionIntents.get(b)));
+    while (state.selected.size > 3) {
       const first = state.selected.values().next().value;
       state.selected.delete(first);
+      selectedMaterialEntities.delete(first);
+      compareSelectionIntents.delete(first);
     }
-    state.selected.add(id);
+  } catch (error) {
+    if (compareSelectionIntents.get(id) !== intent) return;
+    compareSelectionIntents.delete(id);
+    setBoundedCache(state.compareErrors, id, error.message, 3);
   }
   render();
+  renderRecommendations();
 }
 
 function renderCompareSelection(selectedItems) {
   if (!elements.compareSelection) return;
+  const errors = [...state.compareErrors.values()].map((message) =>
+    `<p class="recommendation-empty" role="alert">${escapeHtml(message)}</p>`).join("");
 
   if (!selectedItems.length) {
     elements.compareSelection.innerHTML = `
       <div class="compare-empty-card">
+        ${errors}
         <p class="result-label">${t("selectedMaterials")}</p>
         <h3>${t("compareEmptyTitle")}</h3>
         <p>${t("compareEmptyBody")}</p>
@@ -4099,6 +4202,7 @@ function renderCompareSelection(selectedItems) {
   }
 
   elements.compareSelection.innerHTML = `
+    ${errors}
     <div class="compare-selection-header">
       <p class="result-label">${t("selectedMaterials")}</p>
       <strong>${selectedItems.length} / 3</strong>
@@ -4134,7 +4238,7 @@ function renderCompareSelection(selectedItems) {
 }
 
 function renderCompare() {
-  const selectedItems = materials.filter((item) => state.selected.has(item.id));
+  const selectedItems = getSelectedMaterials();
   renderCompareSelection(selectedItems);
   elements.comparePanel.hidden = false;
 
@@ -4145,12 +4249,6 @@ function renderCompare() {
         <p>${t("compareGuidance")}</p>
       </div>
     `;
-    return;
-  }
-
-  const cacheKey = `${state.language}:${selectedItems.map((item) => item.id).join("|")}`;
-  if (state.compareTableCache.has(cacheKey)) {
-    elements.compareTableWrap.innerHTML = state.compareTableCache.get(cacheKey);
     return;
   }
 
@@ -4190,11 +4288,10 @@ function renderCompare() {
   `;
 
   elements.compareTableWrap.replaceChildren(table);
-  state.compareTableCache.set(cacheKey, table.outerHTML);
 }
 
 function getSelectedMaterials() {
-  return [...state.selected].map((id) => materials.find((item) => item.id === id)).filter(Boolean);
+  return [...state.selected].map((id) => selectedMaterialEntities.get(id)).filter(Boolean);
 }
 
 function getAiComparePair() {
@@ -4338,14 +4435,17 @@ function legacyShowDetail(id) {
 }
 
 async function showDetail(id) {
-  const item = materials.find((material) => material.id === id);
-  if (!item) return;
+  const requestId = ++detailRequestId;
+  state.selectedMaterialId = id;
+  state.activeMaterial = null;
+  state.activeMaterialError = null;
+  rerenderActiveAnalysis();
+  updateCopilotContext();
 
   elements.detailContent.innerHTML = `
     <div class="profile-hero">
       <div>
         <p class="result-label">${state.language === "zh" ? "正在加载完整证据" : "Loading complete evidence"}</p>
-        <h2>${escapeHtml(materialName(item))} (${escapeHtml(item.abbr)})</h2>
         <p class="summary">${state.language === "zh" ? "正在读取来源、测试条件与质量问题……" : "Retrieving sources, test conditions, and quality issues\u2026"}</p>
       </div>
     </div>
@@ -4354,9 +4454,18 @@ async function showDetail(id) {
     elements.detailDialog.showModal();
   }
 
+  let item;
   try {
-    await loadMaterialDetail(item);
+    item = await resolveMaterialById(id);
+    if (requestId !== detailRequestId || !elements.detailDialog.open) return;
+    renderRecommendationDetail(item);
   } catch (error) {
+    if (requestId !== detailRequestId || !elements.detailDialog.open) return;
+    if (materialDetailCache.get(id) === item) materialDetailCache.delete(id);
+    state.activeMaterial = null;
+    state.activeMaterialError = error.message;
+    rerenderActiveAnalysis();
+    updateCopilotContext();
     elements.detailContent.innerHTML = `
       <section class="profile-section data-quality-section is-rejected">
         <h2>${state.language === "zh" ? "完整材料记录加载失败" : "Failed to load the complete material record"}</h2>
@@ -4366,9 +4475,7 @@ async function showDetail(id) {
     return;
   }
 
-  selectMaterialForAnalysis(item);
-
-  renderRecommendationDetail(item);
+  selectMaterialForAnalysis(item, requestId);
   return;
 
   elements.detailContent.innerHTML = `
@@ -4449,8 +4556,12 @@ async function showDetail(id) {
   }
 }
 
-async function selectMaterialForAnalysis(item) {
+async function selectMaterialForAnalysis(item, requestId = detailRequestId) {
+  if (requestId !== detailRequestId) return;
+  const analysisRequestId = ++activeAnalysisRequestId;
   state.selectedMaterialId = item.id;
+  state.activeMaterial = item;
+  state.activeMaterialError = null;
   elements.analysisTitle.textContent = `${materialName(item)} (${item.abbr})`;
   if (state.route === "copilot") {
     updateCopilotContext();
@@ -4482,11 +4593,11 @@ async function selectMaterialForAnalysis(item) {
     }
 
     state.analysisCache.set(cacheKey, payload.analysis);
-    if (state.selectedMaterialId === item.id) {
+    if (analysisRequestId === activeAnalysisRequestId && state.activeMaterial?.id === item.id && getLanguageCacheKey(item.id) === cacheKey) {
       renderAnalysis(item, payload.analysis, t("generatedByGpt"));
     }
   } catch (error) {
-    if (state.selectedMaterialId === item.id) {
+    if (analysisRequestId === activeAnalysisRequestId && state.activeMaterial?.id === item.id && getLanguageCacheKey(item.id) === cacheKey) {
       renderAnalysisError(item, error);
     }
   }
