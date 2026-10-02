@@ -212,6 +212,7 @@ async function main() {
     await independentTripwireCases(file, directory);
     await boundedCases(directory);
     await policyCases(directory);
+    await finalizationBindingCases(file, directory);
     await latePublicationCases(file, directory);
     await executedPolicyCases(file, directory);
     console.log("AD-08 artifact/generation, eight-ID cross-path membership, bounded hydration and publication regressions passed.");
@@ -473,6 +474,102 @@ async function independentTripwireCases(file, directory) {
   await assert.rejects(buildCatalogStats(testFile), /sealed/);
   assert.equal(await digestFile(testFile), before, "Reject side files before opening any recovery-capable writer");
   fs.rmSync(testFile + "-journal");
+}
+
+async function finalizationBindingCases(file, directory) {
+  const sourceDigest = await digestFile(file);
+  for (const stage of ["before-initialization", "reservation-metadata"]) {
+    const target = path.join(directory, `benign-${stage}.db`);
+    fs.copyFileSync(file, target);
+    const before = fs.statSync(target, { bigint: true });
+    const replacement = target + ".replacement";
+    if (stage === "before-initialization") fs.copyFileSync(target, replacement);
+    const open = fs.openSync, exec = DatabaseSync.prototype.exec;
+    let transitioned = false;
+    fs.openSync = function (filename, flags, ...args) {
+      if (stage === "before-initialization" && filename === target && flags === "r+" && !transitioned) {
+        fs.renameSync(replacement, target); transitioned = true;
+        assert.notEqual(fs.statSync(target, { bigint: true }).ino, before.ino,
+          "Positive control: identical bytes really acquired a different file identity");
+      }
+      return open.call(this, filename, flags, ...args);
+    };
+    DatabaseSync.prototype.exec = function (sql) {
+      const result = exec.call(this, sql);
+      if (stage === "reservation-metadata" && sql.includes("BEGIN IMMEDIATE") && !transitioned) {
+        const stat = fs.statSync(target);
+        fs.utimesSync(target, stat.atime, new Date(stat.mtimeMs + 2000));
+        transitioned = true;
+        assert.notEqual(fs.statSync(target, { bigint: true }).mtimeNs, before.mtimeNs);
+      }
+      return result;
+    };
+    let artifact;
+    try { artifact = await buildCatalogStats(target); }
+    finally { fs.openSync = open; DatabaseSync.prototype.exec = exec; }
+    assert.ok(transitioned, stage);
+    assert.equal(await digestFile(target), sourceDigest, "Benign initialization never changes DB bytes");
+    assert.equal(artifact.datasetDigest, sourceDigest);
+    const accepted = await runtime(target);
+    try {
+      assert.ok(accepted.getCatalogGeneration(), "Artifact validates after pre-baseline identity transition");
+      assert.equal(accepted.getCatalogStats().verifiedCommercialGrades, artifact.aggregates.verifiedCommercialGrades);
+    } finally { accepted.close(); }
+  }
+  const different = path.join(directory, "binding-different.db"); fs.copyFileSync(file, different);
+  const writer = new DatabaseSync(different);
+  try { writer.exec("UPDATE materials SET name='changed before binding' WHERE material_id='H'"); }
+  finally { writer.close(); }
+  for (const stage of ["after-initialization-replacement", "reservation-content", "descriptor-path-disagreement"]) {
+    const target = path.join(directory, `hostile-binding-${stage}.db`);
+    fs.copyFileSync(file, target); await buildCatalogStats(target);
+    const previous = fs.readFileSync(artifactPath(target));
+    const replacement = target + ".replacement";
+    if (stage === "after-initialization-replacement") fs.copyFileSync(target, replacement);
+    const open = fs.openSync, close = fs.closeSync, exec = DatabaseSync.prototype.exec, stat = fs.statSync;
+    let initializationFd, changed = false;
+    fs.openSync = function (filename, flags, ...args) {
+      const fd = open.call(this, filename, flags, ...args);
+      if (filename === target && flags === "r+") initializationFd = fd;
+      return fd;
+    };
+    fs.closeSync = function (fd) {
+      const result = close.call(this, fd);
+      if (stage === "after-initialization-replacement" && fd === initializationFd && !changed) {
+        changed = true; fs.renameSync(replacement, target);
+      }
+      return result;
+    };
+    DatabaseSync.prototype.exec = function (sql) {
+      const result = exec.call(this, sql);
+      if (sql.includes("BEGIN IMMEDIATE") && !changed && stage !== "after-initialization-replacement") {
+        changed = true;
+        if (stage === "reservation-content") fs.copyFileSync(different, target);
+      }
+      return result;
+    };
+    fs.statSync = function (filename, options) {
+      const value = stat.call(this, filename, options);
+      // Portable binding-level injection: simulate path DB-B while descriptor remains DB-A.
+      if (stage === "descriptor-path-disagreement" && changed && filename === target && options?.bigint)
+        return Object.assign(Object.create(Object.getPrototypeOf(value)), value, { ino: value.ino + 1n });
+      return value;
+    };
+    try { await assert.rejects(buildCatalogStats(target), /Finalization database identity changed/, stage); }
+    finally { fs.openSync = open; fs.closeSync = close; DatabaseSync.prototype.exec = exec; fs.statSync = stat; }
+    assert.ok(changed, stage);
+    assert.deepEqual(fs.readFileSync(artifactPath(target)), previous, "Binding failure preserves predecessor");
+    if (stage === "reservation-content") {
+      const rejected = await runtime(target);
+      try { assert.equal(rejected.getCatalogGeneration(), null); } finally { rejected.close(); }
+    }
+    await buildCatalogStats(target);
+    const clean = await runtime(target);
+    try { assert.ok(clean.getCatalogGeneration(), "Clean rebuild after binding failure works"); }
+    finally { clean.close(); }
+    assert.equal(fs.readdirSync(directory).some((name) => name.includes(".tmp-")), false);
+  }
+  console.log("AD08-G2 binding: benign byte-identical pre-baseline transitions accepted; inode/content/descriptor binding failures reject.");
 }
 
 async function latePublicationCases(file, directory) {
