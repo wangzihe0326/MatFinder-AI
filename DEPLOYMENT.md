@@ -77,7 +77,26 @@ never labels cached P1 with later disk P2, and does not hash source on requests.
 Identity includes line endings. A Git commit ID is not a substitute. Source-checkout sidecars are ignored;
 Docker generates a fresh artifact after `COPY` and fails its build on errors.
 
-Finalization holds a database read descriptor plus the SQLite writer reservation.
+Finalization first opens the existing database with `r+` without writing bytes, so
+container-filesystem writable copy-up completes before the SQLite open is anchored.
+It captures dev/ino and a bounded 64 KiB-buffer digest, then closes that initialization
+descriptor before acquiring SQLite locks. There is no asynchronous gap across this
+initialization, SQLite open, `BEGIN IMMEDIATE`, and binding. After reservation and
+sealed-state verification, it freezes the full dev/ino/size/mtimeNs/ctimeNs baseline
+and opens the read descriptor. Descriptor/path state must agree; dev/ino and bytes
+must still match the initialized target. A metadata-only transition during writable
+initialization/reservation is allowed; changed contents or persistent replacement
+after the initialization anchor fail. Closing the initialization descriptor before
+SQLite locking avoids releasing POSIX locks by closing another same-file descriptor.
+
+Finalization holds the bound database read descriptor plus the SQLite writer reservation.
+Both the asynchronous dataset hash and final synchronous hashes read that descriptor.
+Metadata is a replacement/change tripwire after binding, rather than a requirement
+that legitimate pre-baseline container initialization never change ctime/inode.
+Node does not expose SQLite's internal OS descriptor: guard binding relies on the
+initialized target's dev/ino/content continuity, synchronous open/reservation/binding,
+and supported stable maintenance. It is not proof against arbitrary hostile native
+open substitution, inode reuse or mutate-and-restore races.
 After asynchronous checks and temporary-file validation, the builder synchronously
 rehashes held-file bytes and compares descriptor/path state (device, file ID where
 available, size and modification/change times), policy bytes and sealing. It repeats
