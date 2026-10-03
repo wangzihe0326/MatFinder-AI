@@ -2,6 +2,8 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
+from contextlib import closing
+from material_import_schema import preflight_database, require_formal_schema
 
 
 PROPERTY_COLUMNS = [
@@ -46,10 +48,13 @@ def main():
         raise SystemExit("Usage: migrate-evidence-schema.py <database-path>")
 
     database_path = Path(sys.argv[1]).resolve()
-    with sqlite3.connect(database_path) as connection:
+    preflight_database(database_path)
+    with closing(sqlite3.connect(database_path.as_uri() + "?mode=rw", uri=True)) as connection, connection:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        create_schema(connection)
+        require_formal_schema(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        require_formal_schema(connection)
 
         existing = connection.execute(
             "SELECT COUNT(*) FROM material_property_evidence"
@@ -159,85 +164,6 @@ def main():
         "property_evidence_rows": property_count,
         "certification_rows": 0,
     }))
-
-
-def create_schema(connection):
-    connection.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS material_evidence (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          material_id TEXT NOT NULL,
-          manufacturer TEXT,
-          brand TEXT,
-          commercial_grade TEXT,
-          material_family TEXT,
-          source_type TEXT NOT NULL,
-          source_title TEXT,
-          source_url TEXT,
-          source_date TEXT,
-          verification_status TEXT NOT NULL,
-          confidence_level TEXT NOT NULL,
-          last_verified_at TEXT,
-          notes TEXT,
-          FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
-          CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
-          CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
-          CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
-        );
-
-        CREATE TABLE IF NOT EXISTS material_property_evidence (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          material_id TEXT NOT NULL,
-          property_key TEXT NOT NULL,
-          position INTEGER NOT NULL,
-          value_numeric REAL,
-          value_text TEXT,
-          unit TEXT,
-          test_standard TEXT,
-          test_condition TEXT,
-          value_type TEXT NOT NULL,
-          manufacturer TEXT,
-          brand TEXT,
-          commercial_grade TEXT,
-          material_family TEXT,
-          source_type TEXT NOT NULL,
-          source_title TEXT,
-          source_url TEXT,
-          source_date TEXT,
-          verification_status TEXT NOT NULL,
-          confidence_level TEXT NOT NULL,
-          last_verified_at TEXT,
-          FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
-          UNIQUE (material_id, property_key, position),
-          CHECK (value_type IN ('typical', 'minimum', 'maximum', 'estimated', 'unknown')),
-          CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
-          CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
-          CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
-        );
-
-        CREATE TABLE IF NOT EXISTS material_certifications (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          material_id TEXT NOT NULL,
-          certification_name TEXT,
-          certification_status TEXT NOT NULL,
-          scope TEXT,
-          source_type TEXT NOT NULL,
-          source_title TEXT,
-          source_url TEXT,
-          source_date TEXT,
-          verification_status TEXT NOT NULL,
-          confidence_level TEXT NOT NULL,
-          last_verified_at TEXT,
-          FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
-          CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
-          CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
-          CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_material_evidence_material
-          ON material_evidence(material_id);
-        """
-    )
 
 
 def normalize_source_type(value):

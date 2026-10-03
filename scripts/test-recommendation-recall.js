@@ -218,14 +218,8 @@ async function main() {
   }
 }
 
-function createSchema(destinationPath) {
-  const source = new DatabaseSync(path.join(root, "matfinder.db"), { readOnly: true });
-  const destination = new DatabaseSync(destinationPath);
-  try {
-    for (const row of source.prepare("SELECT sql FROM sqlite_master WHERE type IN ('table','index') AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY CASE WHEN type='table' THEN 0 ELSE 1 END, name").all())
-      destination.exec(row.sql);
-    destination.exec("PRAGMA user_version = " + source.prepare("PRAGMA user_version").get().user_version);
-  } finally { destination.close(); source.close(); }
+function createSchema(file) {
+  require("./schema-test-fixtures").bootstrapFixture(file);
 }
 
 function insert(database, table, row) {
@@ -684,10 +678,11 @@ async function independentQuarantineChecks(databasePath) {
 }
 
 function snapshotChecks(databasePath) {
-  // Only this disposable fixture is put in WAL mode; runtime configuration is untouched.
+  // Cross the formal sealed-v1 gate first. The disposable writer then switches
+  // journal mode solely to exercise the existing concurrent snapshot assertions.
+  const repository = new MaterialRepository(databasePath);
   const writer = new DatabaseSync(databasePath);
   writer.exec("PRAGMA journal_mode = WAL");
-  const repository = new MaterialRepository(databasePath);
   const hydrate = repository._hydrateDetailedRows;
   let changed = false;
   repository._hydrateDetailedRows = function (rows) {

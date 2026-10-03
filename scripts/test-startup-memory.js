@@ -20,7 +20,7 @@ async function main() {
 
 async function runFinalizedDatabase(directory) {
   const databasePath = path.join(directory, "fixture.db");
-  fs.copyFileSync(path.join(root, "matfinder.db"), databasePath);
+  require("./schema-test-fixtures").copyPreparedFixture(databasePath);
   await require("./build-catalog-stats").buildCatalogStats(databasePath);
   const port = await freePort();
   const child = spawn(process.execPath, ["server.js"], {

@@ -103,7 +103,7 @@ async function main() {
   const testDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "matfinder-ad02-"));
   testDatabasePath = path.join(testDirectory, "fixture.db");
   try {
-    fs.copyFileSync(path.join(root, "matfinder.db"), testDatabasePath);
+    require("./schema-test-fixtures").copyPreparedFixture(testDatabasePath);
     addPublicTestMaterials(testDatabasePath);
     await require("./build-catalog-stats").buildCatalogStats(testDatabasePath);
     const repository = new MaterialRepository(testDatabasePath);

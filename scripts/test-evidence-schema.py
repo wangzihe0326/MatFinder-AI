@@ -1,9 +1,16 @@
 import sqlite3
 from pathlib import Path
+import tempfile
+import shutil
+from migrate import prepare_database
 
 
-database_path = Path(__file__).resolve().parents[1] / "matfinder.db"
-connection = sqlite3.connect(database_path)
+directory = tempfile.TemporaryDirectory(prefix="matfinder-evidence-schema-")
+database_path = Path(directory.name) / "fixture.db"
+shutil.copy2(Path(__file__).resolve().parents[1] / "matfinder.db", database_path)
+prepare_database(database_path)
+connection = sqlite3.connect(database_path.as_uri() + "?mode=ro", uri=True)
+connection.execute("PRAGMA query_only=ON")
 
 expected_columns = {
     "materials": {
@@ -87,6 +94,7 @@ assert (
 ), "Legacy migration rows must never be upgraded by schema migration."
 
 connection.close()
+directory.cleanup()
 print(
     f"Evidence schema tests passed: {material_count} materials, "
     f"{identity_count} identity claims, {property_count} property claims."

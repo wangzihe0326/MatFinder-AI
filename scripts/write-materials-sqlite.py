@@ -2,10 +2,9 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
+from contextlib import closing
 
-from material_import_schema import ensure_import_schema
-
-from material_import_schema import ensure_import_schema
+from migrate import bootstrap_database, validate_target, load_contract
 
 
 def main():
@@ -17,190 +16,14 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
 
-    db_path = Path(sys.argv[1])
+    db_path = Path(sys.argv[1]).absolute()
     materials = clean_value(json.load(sys.stdin))
 
-    with sqlite3.connect(db_path) as connection:
+    # Exclusive bootstrap refuses every existing target, including tracked DBs.
+    contract = load_contract()
+    bootstrap_database(db_path, contract)
+    with closing(sqlite3.connect(db_path.as_uri() + "?mode=rw", uri=True)) as connection, connection:
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.executescript(
-            """
-            DROP TABLE IF EXISTS material_tags;
-            DROP TABLE IF EXISTS material_uses;
-            DROP TABLE IF EXISTS material_certifications;
-            DROP TABLE IF EXISTS material_property_evidence;
-            DROP TABLE IF EXISTS material_evidence;
-            DROP TABLE IF EXISTS material_sources;
-            DROP TABLE IF EXISTS materials;
-
-            CREATE TABLE materials (
-              material_id TEXT PRIMARY KEY,
-              name TEXT NOT NULL,
-              name_en TEXT NOT NULL,
-              name_zh TEXT NOT NULL,
-              abbreviation TEXT NOT NULL,
-              material_family TEXT,
-              grade_name TEXT,
-              supplier_or_brand TEXT,
-              category TEXT NOT NULL,
-              category_en TEXT NOT NULL,
-              category_zh TEXT NOT NULL,
-              subcategory TEXT,
-              state TEXT,
-              family TEXT,
-              manufacturer TEXT,
-              trade_name TEXT,
-              density REAL,
-              tensile_strength REAL,
-              flexural_strength REAL,
-              impact_strength REAL,
-              hardness TEXT,
-              elongation REAL,
-              glass_transition_temperature REAL,
-              melting_temperature REAL,
-              max_temperature REAL,
-              continuous_use_temperature REAL,
-              thermal_conductivity REAL,
-              dielectric_constant REAL,
-              flame_rating TEXT,
-              electrical_insulation TEXT,
-              chemical_resistance TEXT,
-              transparency TEXT,
-              flexibility TEXT,
-              waterproof_sealing TEXT,
-              water_absorption REAL,
-              flammability TEXT,
-              recyclability TEXT,
-              cost_level TEXT,
-              processing_methods TEXT NOT NULL,
-              applications TEXT NOT NULL,
-              applications_en TEXT NOT NULL,
-              applications_zh TEXT NOT NULL,
-              limitations TEXT NOT NULL,
-              alternatives TEXT NOT NULL,
-              source_note TEXT,
-              typical_applications TEXT NOT NULL,
-              advantages TEXT NOT NULL,
-              disadvantages TEXT NOT NULL,
-              tags_en TEXT NOT NULL,
-              tags_zh TEXT NOT NULL,
-              summary TEXT NOT NULL,
-              description_en TEXT NOT NULL,
-              description_zh TEXT NOT NULL,
-              translation_quality TEXT NOT NULL,
-              translation_status TEXT NOT NULL,
-              notes TEXT NOT NULL,
-              record_type TEXT NOT NULL DEFAULT 'legacy'
-                CHECK (record_type IN ('legacy', 'commercial_grade')),
-              record_origin TEXT NOT NULL DEFAULT 'legacy'
-                CHECK (record_origin IN ('legacy', 'generated', 'imported')),
-              scope_status TEXT NOT NULL DEFAULT 'in_scope'
-                CHECK (scope_status IN ('in_scope', 'out_of_scope')),
-              catalog_visibility TEXT NOT NULL DEFAULT 'admin_only'
-                CHECK (catalog_visibility IN ('public', 'review', 'admin_only'))
-            );
-
-            CREATE TABLE material_tags (
-              material_id TEXT NOT NULL,
-              tag TEXT NOT NULL,
-              position INTEGER NOT NULL,
-              PRIMARY KEY (material_id, position),
-              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE material_uses (
-              material_id TEXT NOT NULL,
-              use TEXT NOT NULL,
-              position INTEGER NOT NULL,
-              PRIMARY KEY (material_id, position),
-              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE material_sources (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              material_id TEXT NOT NULL,
-              source_title TEXT NOT NULL,
-              source_url TEXT NOT NULL,
-              source_type TEXT NOT NULL,
-              notes TEXT NOT NULL,
-              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE material_evidence (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              material_id TEXT NOT NULL,
-              manufacturer TEXT,
-              brand TEXT,
-              commercial_grade TEXT,
-              material_family TEXT,
-              source_type TEXT NOT NULL,
-              source_title TEXT,
-              source_url TEXT,
-              source_date TEXT,
-              verification_status TEXT NOT NULL,
-              confidence_level TEXT NOT NULL,
-              last_verified_at TEXT,
-              notes TEXT,
-              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
-              CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
-              CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
-              CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
-            );
-
-            CREATE TABLE material_property_evidence (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              material_id TEXT NOT NULL,
-              property_key TEXT NOT NULL,
-              position INTEGER NOT NULL,
-              value_numeric REAL,
-              value_text TEXT,
-              unit TEXT,
-              test_standard TEXT,
-              test_condition TEXT,
-              value_type TEXT NOT NULL,
-              manufacturer TEXT,
-              brand TEXT,
-              commercial_grade TEXT,
-              material_family TEXT,
-              source_type TEXT NOT NULL,
-              source_title TEXT,
-              source_url TEXT,
-              source_date TEXT,
-              verification_status TEXT NOT NULL,
-              confidence_level TEXT NOT NULL,
-              last_verified_at TEXT,
-              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
-              UNIQUE (material_id, property_key, position),
-              CHECK (value_type IN ('typical', 'minimum', 'maximum', 'estimated', 'unknown')),
-              CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
-              CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
-              CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
-            );
-
-            CREATE TABLE material_certifications (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              material_id TEXT NOT NULL,
-              certification_name TEXT,
-              certification_status TEXT NOT NULL,
-              scope TEXT,
-              source_type TEXT NOT NULL,
-              source_title TEXT,
-              source_url TEXT,
-              source_date TEXT,
-              verification_status TEXT NOT NULL,
-              confidence_level TEXT NOT NULL,
-              last_verified_at TEXT,
-              FOREIGN KEY (material_id) REFERENCES materials(material_id) ON DELETE CASCADE,
-              CHECK (source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor', 'secondary_reference', 'generated', 'unknown')),
-              CHECK (verification_status IN ('verified', 'partially_verified', 'unverified', 'quarantined')),
-              CHECK (confidence_level IN ('high', 'medium', 'low', 'quarantined'))
-            );
-
-            CREATE INDEX idx_material_evidence_material ON material_evidence(material_id);
-            """
-        )
-        ensure_import_schema(connection)
-        ensure_import_schema(connection)
-
         for item in materials:
             connection.execute(
                 """
@@ -330,6 +153,7 @@ def main():
 
             insert_evidence(connection, item)
 
+        validate_target(connection, contract)
         connection.commit()
 
     print(json.dumps({"database": str(db_path), "materials": len(materials)}))

@@ -4,7 +4,11 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const rootDir = path.join(__dirname, "..");
-const databasePath = path.join(rootDir, "matfinder.db");
+if (process.argv.length !== 3) {
+  throw new Error("Usage: node scripts/migrate-materials-to-sqlite.js <new-disposable-database-path>");
+}
+const databasePath = path.resolve(process.argv[2]);
+if (fs.existsSync(databasePath)) throw new Error("Generation target must not already exist.");
 const sourcePath = path.join(rootDir, "data", "materials.js");
 const writerPath = path.join(__dirname, "write-materials-sqlite.py");
 const summaryPath = path.join(__dirname, "generate-database-summary.js");
@@ -25,7 +29,7 @@ const materials = generateBilingualMaterials(enrichMaterials(dedupeMaterials([
   ...generatedMaterialExpansion,
   ...commercialGradeExpansion
 ])));
-const result = spawnSync(findPython(), [writerPath, databasePath], {
+const result = spawnSync(findPython(), ["-B", writerPath, databasePath], {
   cwd: rootDir,
   input: JSON.stringify(materials),
   encoding: "utf8"

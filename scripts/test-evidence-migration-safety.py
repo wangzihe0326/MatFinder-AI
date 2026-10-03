@@ -6,6 +6,7 @@ import sys
 import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
+from migrate import bootstrap_database, load_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,51 +14,14 @@ MIGRATION = ROOT / "scripts" / "migrate-evidence-schema.py"
 
 
 def create_legacy_database(path):
+    bootstrap_database(path)
     with sqlite3.connect(path) as connection:
-        connection.executescript(
-            """
-            CREATE TABLE materials (
-              material_id TEXT PRIMARY KEY,
-              manufacturer TEXT,
-              grade_name TEXT,
-              material_family TEXT,
-              family TEXT,
-              density REAL,
-              tensile_strength REAL,
-              flexural_strength REAL,
-              impact_strength TEXT,
-              elongation REAL,
-              glass_transition_temperature REAL,
-              melting_temperature REAL,
-              continuous_use_temperature REAL,
-              thermal_conductivity REAL,
-              dielectric_constant REAL,
-              water_absorption REAL,
-              flame_rating TEXT,
-              chemical_resistance TEXT,
-              transparency TEXT,
-              flexibility TEXT
-            );
-
-            CREATE TABLE material_sources (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              material_id TEXT NOT NULL,
-              source_type TEXT,
-              source_title TEXT,
-              source_url TEXT,
-              notes TEXT
-            );
-            """
-        )
-        connection.executemany(
-            """
-            INSERT INTO materials (
-              material_id, manufacturer, grade_name, material_family, family,
-              density, tensile_strength, continuous_use_temperature
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
+        required = {col["name"]: "" for table in load_contract()["structure"]["tables"]
+                    if table["name"] == "materials" for col in table["columns"]
+                    if col["notNull"] and col["default"] is None}
+        fields = ("material_id", "manufacturer", "grade_name", "material_family", "family",
+                  "density", "tensile_strength", "continuous_use_temperature")
+        for values in [
                 (
                     "LEGACY-UNSOURCED",
                     "TEST ONLY - LEGACY MANUFACTURER FIELD",
@@ -78,8 +42,11 @@ def create_legacy_database(path):
                     40,
                     80,
                 ),
-            ],
-        )
+            ]:
+            row = {**required, **dict(zip(fields, values))}
+            keys = list(row)
+            connection.execute("INSERT INTO materials (" + ",".join(keys) + ") VALUES (" +
+                               ",".join("?" for _ in keys) + ")", [row[key] for key in keys])
         connection.execute(
             """
             INSERT INTO material_sources (

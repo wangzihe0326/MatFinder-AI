@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from real_material_importer import execute_import, rollback_import
+from migrate import prepare_database
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -157,6 +158,7 @@ with tempfile.TemporaryDirectory() as directory:
     temp = Path(directory)
     database = temp / "import-test.db"
     shutil.copy2(PRODUCTION_DATABASE, database)
+    prepare_database(database)
     input_file = temp / "pilot-test-only.json"
     write_fixture(input_file, fixture())
 

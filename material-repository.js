@@ -10,6 +10,7 @@ const {
   nullableText
 } = require("./evidence-model");
 const { annotateMaterialQuality } = require("./material-quality");
+const { inspectConnection } = require("./schema-contract");
 
 const DEFAULT_PAGE_SIZE = 48;
 const MAX_PAGE_SIZE = 200;
@@ -308,12 +309,18 @@ function qualityLevelSql() {
 class MaterialRepository {
   constructor(databasePath) {
     if (!fs.existsSync(databasePath)) {
-      throw new Error(
-        `SQLite database was not found at ${databasePath}. Ensure matfinder.db is included in the deployment artifact.`
-      );
+      const error = new Error("SCHEMA_UNREADABLE: database file is missing; prepare the deployment artifact offline.");
+      error.code = "SCHEMA_UNREADABLE";
+      throw error;
     }
     this.databasePath = databasePath;
-    this.databaseFileState = require("./catalog-stats-artifact").fileState(databasePath);
+    try { this.databaseFileState = require("./catalog-stats-artifact").fileState(databasePath); }
+    catch (cause) {
+      const error = new Error("SCHEMA_UNREADABLE: database file is unreadable or unsupported; inspect it offline.");
+      error.code = "SCHEMA_UNREADABLE";
+      error.cause = cause;
+      throw error;
+    }
     this.metrics = {
       queries: 0,
       rowsReturned: 0,
@@ -327,67 +334,52 @@ class MaterialRepository {
     this.readinessCache = null;
     this.catalogGeneration = null;
     this.ad08Statements = new Set();
-    this.database = new DatabaseSync(databasePath, {
-      readOnly: true
-    });
-    this.database.exec(
-      "PRAGMA busy_timeout = 5000; PRAGMA query_only = ON; PRAGMA foreign_keys = ON;"
-    );
+    try {
+      this.database = new DatabaseSync(databasePath, { readOnly: true });
+      this.database.exec(
+        "PRAGMA busy_timeout = 5000; PRAGMA query_only = ON; PRAGMA foreign_keys = ON;"
+      );
+      // Every repository consumer crosses the gate before its first business query.
+      this.checkSchema();
+    } catch (error) {
+      if (this.database) this.database.close();
+      if (error.code?.startsWith("SCHEMA_")) throw error;
+      const failure = new Error("SCHEMA_UNREADABLE: corrupt or unreadable database; inspect it offline.");
+      failure.code = "SCHEMA_UNREADABLE";
+      failure.cause = error;
+      throw failure;
+    }
   }
 
   checkSchema() {
-    const requiredTables = [
-      "materials",
-      "material_tags",
-      "material_uses",
-      "material_sources",
-      "evidence_sources",
-      "material_evidence",
-      "material_property_evidence",
-      "material_certifications",
-      "real_material_identities"
-    ];
-    const rows = this._all(
-      `SELECT name
-         FROM sqlite_master
-        WHERE type = 'table'
-          AND name IN (${placeholders(requiredTables.length)})`,
-      requiredTables,
-      "schema"
-    );
-    const found = new Set(rows.map((row) => row.name));
-    const missing = requiredTables.filter((table) => !found.has(table));
-    if (missing.length) {
-      throw new Error(
-        `Database schema is not ready. Run npm run migrate. Missing: ${missing.join(", ")}`
-      );
+    if (this.schemaInfo) return this.schemaInfo;
+    const result = inspectConnection(this.database, this.databasePath);
+    if (!result.compatible || result.classification !== "current") {
+      const failures = {
+        blank: ["SCHEMA_OFFLINE_PREPARATION", "database requires offline lifecycle preparation"],
+        legacy_current: ["SCHEMA_OFFLINE_PREPARATION", "database requires offline lifecycle preparation"],
+        future_version: ["SCHEMA_UNSUPPORTED_VERSION", "unsupported schema version"],
+        version_mismatch: ["SCHEMA_UNSUPPORTED_VERSION", "unsupported schema version"],
+        structural_drift: ["SCHEMA_STRUCTURAL_DRIFT", "database structure differs from the canonical contract"],
+        unsupported: ["SCHEMA_UNSUPPORTED_STRUCTURE", "unsupported database structure; inspect it offline"]
+      };
+      const [code, message] = failures[result.classification] || ["SCHEMA_UNREADABLE", "corrupt or unreadable database"];
+      const error = new Error(code + ": " + message);
+      error.code = code;
+      error.classification = result.classification;
+      throw error;
     }
-    const version = Number(this._get("PRAGMA user_version", [], "schema")?.user_version || 0);
-    return { version, requiredTableCount: requiredTables.length };
+    this.schemaInfo = {
+      compatible: true, classification: result.classification, version: result.userVersion,
+      requiredTableCount: result.structure.tables.length,
+      verifiedIndexes: result.structure.indexes.map(index => index.name)
+    };
+    return this.schemaInfo;
   }
 
   checkSearchIndexes() {
-    const expected = [
-      "idx_materials_catalog_layer",
-      "idx_real_material_identity_key",
-      "idx_material_evidence_material"
-    ];
-    const rows = this._all(
-      `SELECT name
-         FROM sqlite_master
-        WHERE type = 'index'
-          AND name IN (${placeholders(expected.length)})`,
-      expected,
-      "schema"
-    );
-    const present = new Set(rows.map((row) => row.name));
-    const missing = expected.filter((name) => !present.has(name));
-    if (missing.length) {
-      throw new Error(
-        `Database search indexes are not ready. Run npm run migrate. Missing: ${missing.join(", ")}`
-      );
-    }
-    return { verified: expected };
+    // Operational metric only: definitions were already validated by the contract.
+    return { verified: [...this.checkSchema().verifiedIndexes] };
   }
 
   getDatabaseCounts() {

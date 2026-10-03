@@ -95,23 +95,8 @@ async function main() {
   }
 }
 
-function createEmptySchemaDatabase(sourcePath, destinationPath) {
-  const source = new DatabaseSync(sourcePath, { readOnly: true });
-  const destination = new DatabaseSync(destinationPath);
-  try {
-    const definitions = source.prepare(
-      "SELECT sql FROM sqlite_master WHERE type IN ('table', 'index') " +
-      "AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL " +
-      "ORDER BY CASE WHEN type = 'table' THEN 0 ELSE 1 END, name"
-    ).all();
-    for (const definition of definitions) destination.exec(definition.sql);
-    const version = Number(source.prepare("PRAGMA user_version").get().user_version);
-    destination.exec("PRAGMA user_version = " + version);
-    assert.equal(destination.prepare("SELECT COUNT(*) AS count FROM materials").get().count, 0);
-  } finally {
-    destination.close();
-    source.close();
-  }
+function createEmptySchemaDatabase(_sourcePath, destinationPath) {
+  require("./schema-test-fixtures").bootstrapFixture(destinationPath);
 }
 
 function populateFixtures(databasePath) {

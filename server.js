@@ -33,21 +33,27 @@ const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const allowedAiModels = new Set(["gpt-4.1-mini"]);
 const databasePath = path.resolve(rootDir, process.env.MATFINDER_DB_PATH || "matfinder.db");
 const allowedOrigins = parseList(process.env.MATFINDER_ALLOWED_ORIGINS);
-const apiProtection = createApiProtection({
-  adminToken: process.env.MATFINDER_ADMIN_TOKEN,
-  trustProxy: process.env.MATFINDER_TRUST_PROXY
-});
-const aiCoordinator = new AiCoordinator({ protection: apiProtection });
 
 const startupMemorySamples = [];
 logMemory("before_sqlite_connection");
-const repository = new MaterialRepository(databasePath);
+let repository;
+try { repository = new MaterialRepository(databasePath); }
+catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
 logMemory("after_sqlite_connection");
 const schemaInfo = repository.checkSchema();
 logMemory("after_schema_version_check", {
   migrationExecuted: false,
   schemaVersion: schemaInfo.version
 });
+const apiProtection = createApiProtection({
+  adminToken: process.env.MATFINDER_ADMIN_TOKEN,
+  trustProxy: process.env.MATFINDER_TRUST_PROXY
+});
+const aiCoordinator = new AiCoordinator({ protection: apiProtection });
+
 const { families: polymerFamilies } = require("./public/polymer-families");
 const polymerFamilyCount = repository.getPolymerFamilyCount();
 logMemory("after_polymer_family_initialization", { polymerFamilyCount });

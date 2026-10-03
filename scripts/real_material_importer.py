@@ -748,25 +748,9 @@ def deterministic_material_id(record):
 
 
 def require_schema(connection):
-    required_tables = {
-        "import_batches",
-        "evidence_sources",
-        "real_material_identities",
-        "import_entity_links",
-    }
-    actual_tables = {
-        row[0]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        )
-    }
-    missing = required_tables - actual_tables
-    if missing:
-        raise RuntimeError(
-            "Import schema is missing. Run npm run migrate:import-schema first. "
-            f"Missing: {', '.join(sorted(missing))}"
-        )
-
+    # Compatibility is owned by the lifecycle contract, never an importer inventory.
+    from material_import_schema import require_formal_schema
+    return require_formal_schema(connection)
 
 def load_input(file_path):
     raw_bytes = file_path.read_bytes()
@@ -1352,13 +1336,15 @@ def execute_import(
     fail_after_entities=None,
     allow_test_fixtures=False,
 ):
+    from material_import_schema import preflight_database
+    preflight_database(database_path)
     raw_bytes, records = load_input(file_path)
     input_hash = hashlib.sha256(raw_bytes).hexdigest()
     uri = f"{database_path.resolve().as_uri()}?mode=ro"
     if dry_run:
         connection = sqlite3.connect(uri, uri=True)
     else:
-        connection = sqlite3.connect(database_path)
+        connection = sqlite3.connect(database_path.resolve().as_uri() + "?mode=rw", uri=True)
     connection.row_factory = sqlite3.Row
     try:
         connection.execute("PRAGMA foreign_keys = ON")
@@ -1392,6 +1378,7 @@ def execute_import(
         imported_at = now_iso()
         batch_id = f"IMP-{uuid.uuid4()}"
         connection.execute("BEGIN IMMEDIATE")
+        require_schema(connection)
         connection.execute(
             """
             INSERT INTO import_batches (
@@ -1507,7 +1494,9 @@ def execute_import(
 
 
 def rollback_import(database_path, batch_id, operator=None):
-    connection = sqlite3.connect(database_path)
+    from material_import_schema import preflight_database
+    preflight_database(database_path)
+    connection = sqlite3.connect(database_path.resolve().as_uri() + "?mode=rw", uri=True)
     connection.row_factory = sqlite3.Row
     try:
         connection.execute("PRAGMA foreign_keys = ON")
@@ -1524,6 +1513,7 @@ def rollback_import(database_path, batch_id, operator=None):
                 f"Committed import batch not found: {batch_id}"
             )
         connection.execute("BEGIN IMMEDIATE")
+        require_schema(connection)
         links = connection.execute(
             """
             SELECT entity_type, entity_id, created_by_batch

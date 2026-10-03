@@ -13,7 +13,7 @@ const root = path.resolve(__dirname, "..");
 const os = require("node:os");
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "matfinder-catalog-layer-"));
 const databasePath = path.join(directory, "fixture.db");
-fs.copyFileSync(path.join(root, "matfinder.db"), databasePath);
+require("./schema-test-fixtures").copyPreparedFixture(databasePath);
 let repository;
 (async () => {
 await require("./build-catalog-stats").buildCatalogStats(databasePath);
