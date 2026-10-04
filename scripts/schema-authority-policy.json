@@ -22,7 +22,8 @@
     "scripts/test-schema-integration.js",
     "scripts/test-schema-integration.py",
     "scripts/schema-test-fixtures.js",
-    "scripts/schema-authority-guard.js"
+    "scripts/schema-authority-guard.js",
+    "scripts/test-schema-build.js"
   ],
   "productionFiles": [
     "api-protection.js",
