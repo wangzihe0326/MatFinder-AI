@@ -43,7 +43,12 @@
     "pilot:status": "node scripts/report-pilot-status.js",
     "smoke:openai": "node scripts/smoke-openai-analysis.js",
     "build:catalog-stats": "node scripts/build-catalog-stats.js",
-    "test:catalog-stats": "node scripts/test-catalog-stats-artifact.js"
+    "test:catalog-stats": "node scripts/test-catalog-stats-artifact.js",
+    "test:safe-rendering": "node scripts/test-safe-rendering.js",
+    "test:sec-01": "node scripts/test-schema-integration.js --authority-source-only && npm run test:catalog-frontend && npm run test:evidence-ui && npm run test:safe-rendering"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
 }

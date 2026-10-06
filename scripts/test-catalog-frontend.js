@@ -8,6 +8,8 @@ const app = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf
 const startup = app.lastIndexOf("\ninit().catch(");
 assert.ok(startup > 0, "The browser startup call must be isolated from this test.");
 
+// Serialize DOM text for existing HTML assertions, matching browser escaping.
+const htmlText = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 class Element {
   constructor(tag = "div") {
     this.tag = tag;
@@ -20,6 +22,13 @@ class Element {
     this.textContent = "";
     this.value = "";
   }
+  get innerHTML() {
+    return this.markup + this.children.map((node) => node.tag === "#text" ? htmlText(node.textContent)
+      : `<${node.tag}>${node.innerHTML}</${node.tag}>`).join("");
+  }
+  set innerHTML(value) { this.markup = value; this.text = ""; this.children = []; }
+  get textContent() { return (this.text || "") + this.children.map((node) => node.textContent).join(""); }
+  set textContent(value) { this.innerHTML = htmlText(value); this.text = String(value ?? ""); }
   addEventListener(name, handler) { this.listeners.set(name, handler); }
   emit(name, target = this) {
     const handler = this.listeners.get(name);
@@ -28,6 +37,7 @@ class Element {
   }
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) {
+    this.markup = ""; this.text = "";
     this.children = nodes.flatMap((node) => node.tag === "fragment" ? node.children : [node]);
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || new Element("button"); }
@@ -72,13 +82,14 @@ const document = {
   },
   querySelectorAll: () => [],
   createElement: (tag) => new Element(tag),
+  createTextNode: (text) => { const node = new Element("#text"); node.textContent = text; return node; },
   createDocumentFragment: () => new Element("fragment")
 };
 let queuedTimer = null;
 let fetchHandler = () => { throw new Error("Unexpected fetch"); };
 const paths = [];
 const context = vm.createContext({
-  document, URLSearchParams,
+  document, URL, URLSearchParams,
   fetch: (url, options) => { paths.push(url); return fetchHandler(url, options); },
   window: {
     MatFinderConfig: { apiBaseUrl: "" },
@@ -1067,7 +1078,7 @@ async function entityFrontendChecks() {
     assert.equal(state.activeMaterial, null);
     assert.equal(read('materialDetailCache.has("B")'), false);
     assert.ok(node("#detailContent").innerHTML.includes("Failed to load the complete material record"));
-    assert.ok(state.activeMaterialError.includes("sourceTitle"));
+    assert.ok(state.activeMaterialError.includes("sourceUrl"));
     assert.ok(!node("#analysisContent").innerHTML.includes("ANALYSIS-B-en"));
     respondDetails(new Map([["B", corrected]]));
     await read('showDetail("B")');
