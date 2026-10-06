@@ -1,0 +1,2205 @@
+{
+  "contractFormatVersion": 1,
+  "currentSchemaVersion": 1,
+  "profiles": {
+    "blank": {
+      "userVersion": 0,
+      "structureRef": "blank",
+      "sqliteSchemaMustBeEmpty": true
+    },
+    "legacy_current": {
+      "userVersion": 0,
+      "structureRef": "current"
+    },
+    "formal_current": {
+      "userVersion": 1,
+      "structureRef": "current"
+    }
+  },
+  "structure": {
+    "objects": [
+      {
+        "type": "index",
+        "name": "idx_certification_fingerprint",
+        "table": "material_certifications"
+      },
+      {
+        "type": "index",
+        "name": "idx_evidence_sources_url",
+        "table": "evidence_sources"
+      },
+      {
+        "type": "index",
+        "name": "idx_import_batches_active_hash",
+        "table": "import_batches"
+      },
+      {
+        "type": "index",
+        "name": "idx_import_links_entity",
+        "table": "import_entity_links"
+      },
+      {
+        "type": "index",
+        "name": "idx_material_certifications_name",
+        "table": "material_certifications"
+      },
+      {
+        "type": "index",
+        "name": "idx_material_evidence_fingerprint",
+        "table": "material_evidence"
+      },
+      {
+        "type": "index",
+        "name": "idx_material_evidence_material",
+        "table": "material_evidence"
+      },
+      {
+        "type": "index",
+        "name": "idx_material_evidence_source",
+        "table": "material_evidence"
+      },
+      {
+        "type": "index",
+        "name": "idx_materials_catalog_layer",
+        "table": "materials"
+      },
+      {
+        "type": "index",
+        "name": "idx_materials_identity_lookup",
+        "table": "materials"
+      },
+      {
+        "type": "index",
+        "name": "idx_property_evidence_fingerprint",
+        "table": "material_property_evidence"
+      },
+      {
+        "type": "index",
+        "name": "idx_property_evidence_source",
+        "table": "material_property_evidence"
+      },
+      {
+        "type": "index",
+        "name": "idx_real_material_identity_key",
+        "table": "real_material_identities"
+      },
+      {
+        "type": "table",
+        "name": "evidence_sources",
+        "table": "evidence_sources"
+      },
+      {
+        "type": "table",
+        "name": "import_batches",
+        "table": "import_batches"
+      },
+      {
+        "type": "table",
+        "name": "import_entity_links",
+        "table": "import_entity_links"
+      },
+      {
+        "type": "table",
+        "name": "material_certifications",
+        "table": "material_certifications"
+      },
+      {
+        "type": "table",
+        "name": "material_evidence",
+        "table": "material_evidence"
+      },
+      {
+        "type": "table",
+        "name": "material_property_evidence",
+        "table": "material_property_evidence"
+      },
+      {
+        "type": "table",
+        "name": "material_sources",
+        "table": "material_sources"
+      },
+      {
+        "type": "table",
+        "name": "material_tags",
+        "table": "material_tags"
+      },
+      {
+        "type": "table",
+        "name": "material_uses",
+        "table": "material_uses"
+      },
+      {
+        "type": "table",
+        "name": "materials",
+        "table": "materials"
+      },
+      {
+        "type": "table",
+        "name": "real_material_identities",
+        "table": "real_material_identities"
+      }
+    ],
+    "tables": [
+      {
+        "name": "evidence_sources",
+        "columns": [
+          {
+            "name": "source_id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "source_fingerprint",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_title",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_url",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_date",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "manufacturer",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "brand",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "commercial_grade",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "material_family",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "created_by_batch_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "source_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": "source_id",
+        "autoincrement": "source_id",
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [
+          [
+            {
+              "column": "source_fingerprint",
+              "collation": "binary",
+              "descending": false
+            }
+          ]
+        ],
+        "checks": [
+          "source_type in ( 'manufacturer' , 'official_datasheet' , 'academic' , 'distributor' , 'secondary_reference' , 'generated' , 'unknown' )"
+        ],
+        "foreignKeys": []
+      },
+      {
+        "name": "import_batches",
+        "columns": [
+          {
+            "name": "import_batch_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "imported_at",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "input_file_hash",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "input_file_name",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "imported_record_count",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "rejected_record_count",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "operator",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "import_source",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "rolled_back_at",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "report_json",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "import_batch_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": null,
+        "autoincrement": null,
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [
+          "status in ( 'committed' , 'rolled_back' )"
+        ],
+        "foreignKeys": []
+      },
+      {
+        "name": "import_entity_links",
+        "columns": [
+          {
+            "name": "import_batch_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "entity_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 2,
+            "collation": "binary"
+          },
+          {
+            "name": "entity_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 3,
+            "collation": "binary"
+          },
+          {
+            "name": "created_by_batch",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "import_batch_id",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "entity_type",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "entity_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": null,
+        "autoincrement": null,
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [
+          "created_by_batch in ( 0 , 1 )",
+          "entity_type in ( 'material' , 'material_identity' , 'source' , 'identity_evidence' , 'property_evidence' , 'certification' )"
+        ],
+        "foreignKeys": [
+          {
+            "columns": [
+              "import_batch_id"
+            ],
+            "table": "import_batches",
+            "references": [
+              "import_batch_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      },
+      {
+        "name": "material_certifications",
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "certification_name",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "certification_status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "scope",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_title",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_url",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_date",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "verification_status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "confidence_level",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "last_verified_at",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "evidence_fingerprint",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "import_batch_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "imported_at",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "evidence_version",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": "1",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": "id",
+        "autoincrement": "id",
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [
+          "confidence_level in ( 'high' , 'medium' , 'low' , 'quarantined' )",
+          "source_type in ( 'manufacturer' , 'official_datasheet' , 'academic' , 'distributor' , 'secondary_reference' , 'generated' , 'unknown' )",
+          "verification_status in ( 'verified' , 'partially_verified' , 'unverified' , 'quarantined' )"
+        ],
+        "foreignKeys": [
+          {
+            "columns": [
+              "material_id"
+            ],
+            "table": "materials",
+            "references": [
+              "material_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          },
+          {
+            "columns": [
+              "source_id"
+            ],
+            "table": "evidence_sources",
+            "references": [
+              "source_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "NO ACTION",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      },
+      {
+        "name": "material_evidence",
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "manufacturer",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "brand",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "commercial_grade",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "material_family",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_title",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_url",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_date",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "verification_status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "confidence_level",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "last_verified_at",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "notes",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "evidence_fingerprint",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "import_batch_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "imported_at",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "evidence_version",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": "1",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": "id",
+        "autoincrement": "id",
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [
+          "confidence_level in ( 'high' , 'medium' , 'low' , 'quarantined' )",
+          "source_type in ( 'manufacturer' , 'official_datasheet' , 'academic' , 'distributor' , 'secondary_reference' , 'generated' , 'unknown' )",
+          "verification_status in ( 'verified' , 'partially_verified' , 'unverified' , 'quarantined' )"
+        ],
+        "foreignKeys": [
+          {
+            "columns": [
+              "material_id"
+            ],
+            "table": "materials",
+            "references": [
+              "material_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          },
+          {
+            "columns": [
+              "source_id"
+            ],
+            "table": "evidence_sources",
+            "references": [
+              "source_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "NO ACTION",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      },
+      {
+        "name": "material_property_evidence",
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "property_key",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "position",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "value_numeric",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "value_text",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "unit",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "test_standard",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "test_condition",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "value_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "manufacturer",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "brand",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "commercial_grade",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "material_family",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_title",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_url",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_date",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "verification_status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "confidence_level",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "last_verified_at",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "evidence_fingerprint",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "import_batch_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "imported_at",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "evidence_version",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": "1",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "conflict_group_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "conflict_status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": "'none'",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": "id",
+        "autoincrement": "id",
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [
+          [
+            {
+              "column": "material_id",
+              "collation": "binary",
+              "descending": false
+            },
+            {
+              "column": "property_key",
+              "collation": "binary",
+              "descending": false
+            },
+            {
+              "column": "position",
+              "collation": "binary",
+              "descending": false
+            }
+          ]
+        ],
+        "checks": [
+          "confidence_level in ( 'high' , 'medium' , 'low' , 'quarantined' )",
+          "source_type in ( 'manufacturer' , 'official_datasheet' , 'academic' , 'distributor' , 'secondary_reference' , 'generated' , 'unknown' )",
+          "value_type in ( 'typical' , 'minimum' , 'maximum' , 'estimated' , 'unknown' )",
+          "verification_status in ( 'verified' , 'partially_verified' , 'unverified' , 'quarantined' )"
+        ],
+        "foreignKeys": [
+          {
+            "columns": [
+              "material_id"
+            ],
+            "table": "materials",
+            "references": [
+              "material_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          },
+          {
+            "columns": [
+              "source_id"
+            ],
+            "table": "evidence_sources",
+            "references": [
+              "source_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "NO ACTION",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      },
+      {
+        "name": "material_sources",
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_title",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_url",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "notes",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": "id",
+        "autoincrement": "id",
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [],
+        "foreignKeys": [
+          {
+            "columns": [
+              "material_id"
+            ],
+            "table": "materials",
+            "references": [
+              "material_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      },
+      {
+        "name": "material_tags",
+        "columns": [
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "tag",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "position",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 2,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "material_id",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "position",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": null,
+        "autoincrement": null,
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [],
+        "foreignKeys": [
+          {
+            "columns": [
+              "material_id"
+            ],
+            "table": "materials",
+            "references": [
+              "material_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      },
+      {
+        "name": "material_uses",
+        "columns": [
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "use",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "position",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 2,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "material_id",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "position",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": null,
+        "autoincrement": null,
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [],
+        "foreignKeys": [
+          {
+            "columns": [
+              "material_id"
+            ],
+            "table": "materials",
+            "references": [
+              "material_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      },
+      {
+        "name": "materials",
+        "columns": [
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "name_en",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "name_zh",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "abbreviation",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "material_family",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "grade_name",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "supplier_or_brand",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "category",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "category_en",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "category_zh",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "subcategory",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "state",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "family",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "manufacturer",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "trade_name",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "density",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "tensile_strength",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "flexural_strength",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "impact_strength",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "hardness",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "elongation",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "glass_transition_temperature",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "melting_temperature",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "max_temperature",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "continuous_use_temperature",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "thermal_conductivity",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "dielectric_constant",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "flame_rating",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "electrical_insulation",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "chemical_resistance",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "transparency",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "flexibility",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "waterproof_sealing",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "water_absorption",
+            "type": "REAL",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "flammability",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "recyclability",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "cost_level",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "processing_methods",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "applications",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "applications_en",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "applications_zh",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "limitations",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "alternatives",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "source_note",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "typical_applications",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "advantages",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "disadvantages",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "tags_en",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "tags_zh",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "summary",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "description_en",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "description_zh",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "translation_quality",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "translation_status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "notes",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "record_type",
+            "type": "TEXT",
+            "notNull": true,
+            "default": "'legacy'",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "record_origin",
+            "type": "TEXT",
+            "notNull": true,
+            "default": "'legacy'",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "scope_status",
+            "type": "TEXT",
+            "notNull": true,
+            "default": "'in_scope'",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "catalog_visibility",
+            "type": "TEXT",
+            "notNull": true,
+            "default": "'admin_only'",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "material_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": null,
+        "autoincrement": null,
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [],
+        "foreignKeys": []
+      },
+      {
+        "name": "real_material_identities",
+        "columns": [
+          {
+            "name": "material_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 1,
+            "collation": "binary"
+          },
+          {
+            "name": "manufacturer",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "commercial_grade",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "material_family",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "manufacturer_key",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "commercial_grade_key",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "material_family_key",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "created_by_batch_id",
+            "type": "TEXT",
+            "notNull": false,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "created_at",
+            "type": "TEXT",
+            "notNull": true,
+            "default": null,
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          },
+          {
+            "name": "active",
+            "type": "INTEGER",
+            "notNull": true,
+            "default": "1",
+            "primaryKeyOrder": 0,
+            "collation": "binary"
+          }
+        ],
+        "primaryKey": [
+          {
+            "column": "material_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "rowidAlias": null,
+        "autoincrement": null,
+        "withoutRowid": false,
+        "strict": false,
+        "unique": [],
+        "checks": [
+          "active in ( 0 , 1 )"
+        ],
+        "foreignKeys": [
+          {
+            "columns": [
+              "material_id"
+            ],
+            "table": "materials",
+            "references": [
+              "material_id"
+            ],
+            "onUpdate": "NO ACTION",
+            "onDelete": "CASCADE",
+            "match": "NONE",
+            "deferrable": false,
+            "initiallyDeferred": false
+          }
+        ]
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_certification_fingerprint",
+        "table": "material_certifications",
+        "unique": true,
+        "keys": [
+          {
+            "column": "evidence_fingerprint",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": "evidence_fingerprint is not null"
+      },
+      {
+        "name": "idx_evidence_sources_url",
+        "table": "evidence_sources",
+        "unique": false,
+        "keys": [
+          {
+            "column": "source_url",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "source_type",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_import_batches_active_hash",
+        "table": "import_batches",
+        "unique": true,
+        "keys": [
+          {
+            "column": "input_file_hash",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": "status = 'committed'"
+      },
+      {
+        "name": "idx_import_links_entity",
+        "table": "import_entity_links",
+        "unique": false,
+        "keys": [
+          {
+            "column": "entity_type",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "entity_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_material_certifications_name",
+        "table": "material_certifications",
+        "unique": false,
+        "keys": [
+          {
+            "column": "material_id",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "certification_name",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_material_evidence_fingerprint",
+        "table": "material_evidence",
+        "unique": true,
+        "keys": [
+          {
+            "column": "evidence_fingerprint",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": "evidence_fingerprint is not null"
+      },
+      {
+        "name": "idx_material_evidence_material",
+        "table": "material_evidence",
+        "unique": false,
+        "keys": [
+          {
+            "column": "material_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_material_evidence_source",
+        "table": "material_evidence",
+        "unique": false,
+        "keys": [
+          {
+            "column": "source_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_materials_catalog_layer",
+        "table": "materials",
+        "unique": false,
+        "keys": [
+          {
+            "column": "record_type",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "catalog_visibility",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "scope_status",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "record_origin",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_materials_identity_lookup",
+        "table": "materials",
+        "unique": false,
+        "keys": [
+          {
+            "column": "manufacturer",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "grade_name",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "material_family",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_property_evidence_fingerprint",
+        "table": "material_property_evidence",
+        "unique": true,
+        "keys": [
+          {
+            "column": "evidence_fingerprint",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": "evidence_fingerprint is not null"
+      },
+      {
+        "name": "idx_property_evidence_source",
+        "table": "material_property_evidence",
+        "unique": false,
+        "keys": [
+          {
+            "column": "source_id",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": null
+      },
+      {
+        "name": "idx_real_material_identity_key",
+        "table": "real_material_identities",
+        "unique": true,
+        "keys": [
+          {
+            "column": "manufacturer_key",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "commercial_grade_key",
+            "collation": "binary",
+            "descending": false
+          },
+          {
+            "column": "material_family_key",
+            "collation": "binary",
+            "descending": false
+          }
+        ],
+        "predicate": "active = 1"
+      }
+    ]
+  },
+  "transitions": [
+    {
+      "fromVersion": 0,
+      "inputProfile": "blank",
+      "structureRef": "blank",
+      "toVersion": 1,
+      "action": "bootstrap_v1"
+    },
+    {
+      "fromVersion": 0,
+      "inputProfile": "legacy_current",
+      "structureRef": "current",
+      "toVersion": 1,
+      "action": "adopt_v1"
+    }
+  ]
+}

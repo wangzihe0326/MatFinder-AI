@@ -2,6 +2,21 @@
 
 MatFinder AI can run as a single Node.js web service that serves the frontend, API routes, and the local SQLite material database. The local SQLite database remains the source of truth; OpenAI is used only for optional explanations and comparisons.
 
+## AD-09 Deployment Status
+
+Runtime now requires a formal-v1 database. Schema preparation is explicit and
+offline through the canonical lifecycle; the web process does not migrate the
+tracked source database. The checked-in `matfinder.db` remains an unprepared
+legacy-current v0 source. Without a prepared database override, startup exits 1
+with `SCHEMA_OFFLINE_PREPARATION`.
+
+Local prepared-copy startup is implemented; follow [README Local Setup](README.md#local-setup).
+Production image/build preparation remains pending Phase 3. Image-time Python
+preparation/adoption, a prepared production v1 database, post-preparation AD-08
+stats generation, publication of matching image artifacts, and an AD-09 Render
+rollout are not implemented. The platform sections below are configuration
+references for use after that work, not a ready AD-09 rollout procedure.
+
 ## Production Configuration
 
 Copy `.env.example` or `config/production.env.example` into your deployment platform's environment variable settings.
@@ -10,7 +25,7 @@ Copy `.env.example` or `config/production.env.example` into your deployment plat
 | --- | --- | --- | --- |
 | `NODE_ENV` | Recommended | `development` | Set to `production` in deployed environments. |
 | `PORT` | Platform-provided | `3000` | HTTP port. Render and Railway inject this automatically for web services. |
-| `MATFINDER_DB_PATH` | Optional | `matfinder.db` | SQLite database path. Use an absolute path if storing the DB on a mounted disk. |
+| `MATFINDER_DB_PATH` | Prepared DB required | `matfinder.db` | Absolute path to a prepared formal-v1 SQLite database. The default tracked v0 source intentionally fails startup. |
 | `OPENAI_API_KEY` | Optional | none | Enables GPT material analysis and AI comparison. Local database features still work without it. |
 | `OPENAI_MODEL` | Optional | `gpt-4.1-mini` | Model used for AI analysis and comparison. |
 | `MATFINDER_ADMIN_TOKEN` | Audit access | none | Backend-only bearer credential for the `/audit` page and audit APIs. If absent, audit APIs remain closed. |
@@ -54,9 +69,22 @@ process; the technical SQLite read still runs on every health/readiness probe.
 
 ## SQLite Deployment Notes
 
-After all maintenance writers have finished, seal the database in DELETE journal
+Finish all offline schema preparation and data maintenance before finalizing
+AD-08 stats. The required order is:
+
+```text
+schema/data mutation complete -> final DB bytes -> AD-08 stats generation -> publish matching artifacts
+```
+
+Changing `user_version` changes database bytes, so an older stats artifact cannot
+be reused after preparation. This is deployment correctness guidance; Phase-3
+image automation is still pending.
+
+The existing manual AD-08 finalization tool is described below. After all
+maintenance writers have finished, seal the database in DELETE journal
 mode and run `npm run build:catalog-stats -- <absolute-database-path>`. The default
-path is the repository's `matfinder.db`. This offline command reserves the SQLite
+path is the repository's `matfinder.db`; use an explicit finalized formal-v1 path
+and leave the tracked v0 source unchanged. This offline command reserves the SQLite
 writer, reads public materials in keyset batches of 30, evaluates complete evidence,
 streams the database bytes with a 64 KiB buffer, and atomically publishes
 `<database-path>.catalog-stats.json`. It does not change material data. WAL, SHM
@@ -74,8 +102,9 @@ for the process. Each source file is capped at 256 KiB. A preloaded module witho
 this binding is rejected; an in-process builder must use this bootstrap and rejects
 source changes since load. Runtime compares the artifact against its loaded P,
 never labels cached P1 with later disk P2, and does not hash source on requests.
-Identity includes line endings. A Git commit ID is not a substitute. Source-checkout sidecars are ignored;
-Docker generates a fresh artifact after `COPY` and fails its build on errors.
+Identity includes line endings. A Git commit ID is not a substitute. Source-checkout
+sidecars are ignored. AD-09 image preparation and stats regeneration from final
+prepared database bytes remain pending Phase 3.
 
 Finalization first opens the existing database with `r+` without writing bytes, so
 container-filesystem writable copy-up completes before the SQLite open is anchored.
@@ -115,7 +144,8 @@ recommendation eligibility, readiness and catalog aggregates. AD-08 does not rew
 that diagnostic approximation. Public canonical ownership applies to those public
 and runtime surfaces, not audit inventory summaries.
 
-Startup verifies the small artifact and streams the actual database once before
+After the formal-v1 compatibility gate passes, startup verifies the small artifact
+and streams the actual database once before
 listening. Missing, malformed, mismatched or unsupported generations permit a
 degraded server: catalog browsing remains available, stats return 503 without fake
 zeroes, and ready returns `catalog_stats_unavailable`. Health remains technical.
@@ -126,40 +156,24 @@ finish maintenance, regenerate/publish the matching artifact, then restart. An o
 matching DB/artifact/code pair can be restored only through restart/revalidation.
 No online rebuilding or general cache-freshness mechanism is provided.
 
-- The Docker image uses the `matfinder.db` file shipped in the repository.
-- The deployed server reads SQLite directly from Node.js at startup; Python is not required for production runtime or Docker build.
-- Current app behavior is read-only. Rebuild/redeploy after changing material data.
-- Run `npm run migrate:materials` only as a local data maintenance step when intentionally regenerating `matfinder.db`.
-- If you later add admin editing, mount persistent storage and set `MATFINDER_DB_PATH` to that mounted file path.
+- Runtime reads a prepared formal-v1 database directly with Node.js and remains read-only; Python is required for offline lifecycle preparation, not web requests.
+- Keep the tracked v0 source unchanged. Prepare a separate copy using the README workflow and select it through `MATFINDER_DB_PATH`.
+- Local generation uses `npm run migrate:materials -- "<new-generated-db>"`: the target must be explicit, new and absent. Canonical bootstrap creates formal v1 before material population; generation also refreshes the checkout's `data/database-summary.*` reports.
+- Production preparation and matching artifact publication remain gated on Phase 3. No runtime auto-migration or v0 fallback is provided.
 
 ## Docker
 
-Build locally:
-
-```bash
-docker build -t matfinder-ai .
-```
-
-Run locally:
-
-```bash
-docker run --rm -p 3000:3000 --env-file .env.local matfinder-ai
-```
-
-Then open:
-
-```txt
-http://localhost:3000
-http://localhost:3000/api/health
-```
-
-Without `OPENAI_API_KEY`, search, filters, local recommendation, details, and comparison table continue to work. GPT analysis/comparison panels will show that OpenAI is not configured.
+The current Dockerfile copies the repository database and has no AD-09 offline
+preparation stage. Its unprepared tracked v0 database is incompatible with the
+formal-v1 runtime. Production image preparation, final matching stats/artifact
+publication and rollout are pending Phase 3; no new Docker procedure is provided
+here ahead of that implementation.
 
 ## Render
 
 Official references: [Render deploys](https://render.com/docs/deploys/), [Render health checks](https://render.com/docs/health-checks), [Render environment variables](https://render.com/docs/environment-variables).
 
-Recommended backend deployment:
+Backend configuration reference after Phase-3 preparation:
 
 1. Push the repository to GitHub.
 2. In Render, create a new Web Service from the repository.
@@ -167,7 +181,7 @@ Recommended backend deployment:
 4. Set the health check path to `/api/health`.
 5. Add environment variables:
    - `NODE_ENV=production`
-   - `MATFINDER_DB_PATH=/app/matfinder.db`
+   - `MATFINDER_DB_PATH=<absolute-prepared-v1-db>`
    - `OPENAI_MODEL=gpt-4.1-mini`
    - `MATFINDER_TRUST_PROXY=render`
    - `MATFINDER_ADMIN_TOKEN=<long random backend-only token>` if audit access is needed
@@ -185,14 +199,14 @@ The AI API permits three quick actions per client, then refills one action every
 
 Official references: [Railway Express guide](https://docs.railway.com/guides/express), [Railway variables](https://docs.railway.com/develop/variables), [Railway variables reference](https://docs.railway.com/reference/variables).
 
-Recommended backend deployment:
+Backend configuration reference after Phase-3 preparation:
 
 1. Push the repository to GitHub.
 2. Create a Railway project and deploy from the repo.
 3. Railway should detect `Dockerfile`; `railway.json` also pins Dockerfile-based deployment.
 4. Add variables:
    - `NODE_ENV=production`
-   - `MATFINDER_DB_PATH=/app/matfinder.db`
+   - `MATFINDER_DB_PATH=<absolute-prepared-v1-db>`
    - `OPENAI_MODEL=gpt-4.1-mini`
    - `MATFINDER_ALLOWED_ORIGINS=https://your-vercel-app.vercel.app` if using a separate Vercel frontend
    - `OPENAI_API_KEY=<your key>` if AI explanations should be enabled
@@ -230,11 +244,15 @@ If `MATFINDER_API_BASE_URL` is empty, the frontend uses same-origin `/api/...`, 
 
 ## Smoke Tests
 
-Run before deployment:
+For local checks, first complete the prepared-copy workflow in README. In a
+POSIX shell, select that prepared database explicitly:
 
 ```bash
-npm start
+MATFINDER_DB_PATH="<prepared-v1-db>" npm start
 ```
+
+For PowerShell, use the README `$env:MATFINDER_DB_PATH` example. These checks
+verify local schema-compatible startup; they do not complete Phase 3 or a rollout.
 
 In another terminal:
 

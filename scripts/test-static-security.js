@@ -44,6 +44,11 @@ const traversalPaths = [
 ];
 
 async function main() {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "matfinder-static-security-"));
+  const databasePath = path.join(directory, "fixture.db");
+  require("./schema-test-fixtures").copyPreparedFixture(databasePath);
   const port = await freePort();
   const child = spawn(process.execPath, ["server.js"], {
     cwd: root,
@@ -51,7 +56,7 @@ async function main() {
       ...process.env,
       NODE_ENV: "test",
       PORT: String(port),
-      MATFINDER_DB_PATH: path.join(root, "matfinder.db")
+      MATFINDER_DB_PATH: databasePath
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -103,6 +108,7 @@ async function main() {
       new Promise((resolve) => setTimeout(resolve, 3_000))
     ]);
     if (!child.killed) child.kill("SIGKILL");
+    fs.rmSync(directory, { recursive: true, force: true });
   }
 
   if (stderr && !/SQLite is an experimental feature/.test(stderr)) {

@@ -65,14 +65,9 @@ if (process.argv.includes("--probe-server")) {
 } else main().catch((error) => { console.error(error); process.exitCode = 1; });
 
 function createSchema(file) {
-  const source = new DatabaseSync(path.join(root, "matfinder.db"), { readOnly: true });
-  const destination = new DatabaseSync(file);
-  try {
-    for (const row of source.prepare("SELECT sql FROM sqlite_master WHERE type IN ('table','index') AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY CASE WHEN type='table' THEN 0 ELSE 1 END, name").all())
-      destination.exec(row.sql);
-    destination.exec("PRAGMA user_version = " + source.prepare("PRAGMA user_version").get().user_version);
-  } finally { destination.close(); source.close(); }
+  require("./schema-test-fixtures").bootstrapFixture(file);
 }
+
 function insert(database, table, row) {
   const keys = Object.keys(row);
   database.prepare(`INSERT INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`)
@@ -322,8 +317,10 @@ async function generationCases(file, directory) {
   try {
     wal.exec("PRAGMA journal_mode=WAL");
     await assert.rejects(buildCatalogStats(empty), /sealed/);
-    const unsealed = await runtime(empty);
-    try { assert.equal(unsealed.getCatalogStats(), null); } finally { unsealed.close(); }
+    // The canonical runtime gate now rejects this unsealed target before AD-08
+    // initialization. The existing fail-closed generation assertion is stronger:
+    // no repository can expose a generation from it at all.
+    await assert.rejects(runtime(empty), error => error.code === "SCHEMA_UNREADABLE");
   } finally { wal.close(); }
 }
 
@@ -380,7 +377,7 @@ async function boundedCases(directory) {
 
 async function policyCases(directory) {
   const policyRoot = path.join(directory, "policy"); fs.mkdirSync(policyRoot); fs.mkdirSync(path.join(policyRoot, "scripts"));
-  for (const file of POLICY_MANIFEST) fs.copyFileSync(path.join(root, file), path.join(policyRoot, file));
+  for (const file of [...POLICY_MANIFEST, "schema-contract.js", "database-schema-contract.json"]) fs.copyFileSync(path.join(root, file), path.join(policyRoot, file));
   const digest = await policyDigest(policyRoot);
   fs.writeFileSync(path.join(policyRoot, "unrelated.txt"), "not a policy input");
   assert.equal(await policyDigest(policyRoot), digest);
@@ -646,7 +643,7 @@ async function latePublicationCases(file, directory) {
 async function executedPolicyCases(file, directory) {
   const isolated = path.join(directory, "executed-policy");
   fs.mkdirSync(path.join(isolated, "scripts"), { recursive: true });
-  for (const relative of [...POLICY_MANIFEST, "catalog-policy.js", "catalog-stats-artifact.js", "scripts/build-catalog-stats.js"])
+  for (const relative of [...POLICY_MANIFEST, "catalog-policy.js", "catalog-stats-artifact.js", "schema-contract.js", "database-schema-contract.json", "scripts/build-catalog-stats.js"])
     fs.copyFileSync(path.join(root, relative), path.join(isolated, relative));
   const target = path.join(isolated, "fixture.db"); fs.copyFileSync(file, target);
   const qualityFile = path.join(isolated, "material-quality.js");
