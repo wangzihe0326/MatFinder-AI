@@ -172,6 +172,34 @@ function singleAuthority({ sourceOnly = false, bytecodeOnly = false } = {}) {
     const copy = fixture("approved-copy");
     assert.deepEqual(audit(copy), result);
     if (!bytecodeOnly) {
+    // Exercise the frozen boundSources check on a real production-source copy,
+    // not just a helper string. Only checkout EOL representation may vary.
+    const sourceFile = "data/materials.js";
+    const sourceLF = fs.readFileSync(path.join(root, sourceFile), "utf8").replace(/\r\n?/g, "\n");
+    assert.ok(sourceLF.includes("\n"), "EOL proof requires a multiline bound source");
+    const expectedDigest = policy.boundSources[sourceFile];
+    const eolCopy = fixture("canonical-source-eol");
+    const rawDigests = new Set();
+    for (const [name, eol] of [["LF", "\n"], ["CRLF", "\r\n"], ["lone CR", "\r"]]) {
+      const bytes = Buffer.from(sourceLF.replace(/\n/g, eol), "utf8");
+      rawDigests.add(createHash("sha256").update(bytes).digest("hex"));
+      assert.equal(guard.canonicalSourceDigest(bytes), expectedDigest, name + " canonical identity");
+      write(eolCopy, sourceFile, bytes);
+      assert.deepEqual(audit(eolCopy), result, name + " bound source must pass the actual guard");
+    }
+    assert.equal(rawDigests.size, 3, "EOL fixtures must have different raw bytes");
+    assert.throws(() => guard.canonicalSourceDigest(Buffer.from([0xc3, 0x28])),
+      "Invalid UTF-8 must not be silently replaced");
+    assert.notEqual(guard.canonicalSourceDigest(Buffer.from("\ufeff" + sourceLF, "utf8")), expectedDigest,
+      "BOM content is not an EOL representation change");
+    console.log("Canonical bound source LF/CRLF/lone CR: 3/3 actual authority audits PASS");
+    reject("canonical-source-content-mutation", c => {
+      const mutated = sourceLF + "\nmodule.exports.__authorityPortabilityMutation = true;\n";
+      new (require("node:vm").Script)(mutated, { filename: sourceFile });
+      assert.notEqual(guard.canonicalSourceDigest(Buffer.from(mutated, "utf8")), expectedDigest,
+        "Actual exported content mutation must change canonical identity");
+      write(c, sourceFile, mutated);
+    }, { message: "Frozen authority/maintenance source changed: " + sourceFile });
     const dynamicJavaScript = 'module.exports = db => db.exec(["CREATE", " TABLE rogue(id INTEGER)"].join(""));';
     for (const [index, extension] of [".js", ".JS", ".Js", ".jS"].entries())
       rejectSourceCase("JS-case-" + index, "scripts/rogue" + extension,

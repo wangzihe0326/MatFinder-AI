@@ -20,6 +20,13 @@ function productionSourceExtension(file) {
   return SOURCE_EXTENSIONS.has(extension) ? extension : null;
 }
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
+// Frozen source-text identity only: strict UTF-8, preserving BOM/content;
+// normalize CRLF and lone CR to LF without formatting other source bytes.
+// Binary/bytecode identities continue to use the separate raw digest above.
+function canonicalSourceDigest(sourceBytes) {
+  const source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(sourceBytes);
+  return digest(Buffer.from(source.replace(/\r\n?/g, '\n'), 'utf8'));
+}
 const signature = tokens => digest(JSON.stringify(tokens.map(t => [t.kind, t.value])));
 
 function python() {
@@ -243,15 +250,15 @@ function audit(root, options = {}) {
   }
   if (expected.size) throw Error('Approved SQL execution path disappeared: ' + [...expected.keys()].join(', '));
   if (JSON.stringify(actual.files) !== JSON.stringify(policy.productionFiles)) throw Error('Unclassified/missing production source inventory');
-  // Exact reviewed producer closures include aliases/constants outside sinks.
-  // These supplemental source identities are conservative: any changed or new
-  // production source needs review; there is no automatic approval/update.
+  // Frozen canonical source-text closures include aliases/constants outside sinks.
+  // EOL representation is normalized; substantive source changes still require
+  // review and fail closed. There is no automatic approval/update or formatter.
   // Dynamic canonical SQL generation and the historical maintenance constants
   // are transitively bound; a new call inside either file inherits no approval.
-  for (const file of Object.keys(policy.boundSources)) if (digest(fs.readFileSync(path.join(root, file))) !== policy.boundSources[file]) throw Error('Frozen authority/maintenance source changed: ' + file);
+  for (const file of Object.keys(policy.boundSources)) if (canonicalSourceDigest(fs.readFileSync(path.join(root, file))) !== policy.boundSources[file]) throw Error('Frozen authority/maintenance source changed: ' + file);
   return { productionFiles: actual.files.length, owners: actual.groups.length, sinks: actual.groups.reduce((n, g) => n + g.sites.length, 0), executableBytecode: [READER] };
 }
-module.exports = { audit, inventorySources, compact, jsInventory, verifyBinaries, python, BASE_SHA, RETIRED, READER };
+module.exports = { audit, canonicalSourceDigest, inventorySources, compact, jsInventory, verifyBinaries, python, BASE_SHA, RETIRED, READER };
 if (require.main === module) {
   try { console.log(JSON.stringify(audit(path.resolve(__dirname, '..')))); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
