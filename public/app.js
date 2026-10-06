@@ -2332,6 +2332,37 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+// External evidence links are absolute HTTP(S) URLs, never page-relative URLs.
+function parseExternalSourceUrl(value) {
+  if (typeof value !== "string") return null;
+  const candidate = value.trim();
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(candidate) || !/^https?:\/\//i.test(candidate)) return null;
+  // Reject a missing authority instead of letting URL repair extra slashes/backslashes.
+  if (!/^https?:\/\/[^\s/\\?#]+(?:[/?#]|$)/i.test(candidate)) return null;
+  try {
+    const parsed = new URL(candidate);
+    // Some browser URL implementations preserve invalid host bytes as % escapes.
+    return ["http:", "https:"].includes(parsed.protocol) && parsed.hostname &&
+      !/[%\s\\]/.test(parsed.hostname) ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function renderTextElement(tag, text, className = "") {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function renderAnalysisBlock(title, ...paragraphs) {
+  const block = document.createElement("div");
+  block.className = "analysis-block";
+  block.append(renderTextElement("h3", title), ...paragraphs.map((text) => renderTextElement("p", text)));
+  return block;
+}
+
 function escapeAttribute(value) {
   return escapeHtml(value).replace(/`/g, "&#096;");
 }
@@ -2852,8 +2883,8 @@ function renderPropertyEvidence(item) {
     return visibleClaims.map((claim) => {
       const source = claim?.source || claim || {};
       const sourceTitle = source.sourceTitle || null;
-      const sourceUrl = source.sourceUrl || null;
-      const isVerifiedLink = sourceTitle && /^https?:\/\//i.test(sourceUrl || "");
+      const sourceUrl = parseExternalSourceUrl(source.sourceUrl);
+      const isVerifiedLink = sourceTitle && sourceUrl;
       const value = claim?.value === null || claim?.value === undefined || claim?.value === ""
         ? "Property data unavailable"
         : `${claim.value}${claim.unit ? ` ${claim.unit}` : " (Unit unavailable)"}`;
@@ -2892,14 +2923,15 @@ function renderIdentityEvidence(item) {
   const sources = Array.isArray(identity.sources) ? identity.sources : [];
   const sourceCards = sources.length
     ? sources.map((source) => {
-        const verifiedLink = source.sourceTitle && /^https?:\/\//i.test(source.sourceUrl || "");
+        const sourceUrl = parseExternalSourceUrl(source.sourceUrl);
+        const verifiedLink = source.sourceTitle && sourceUrl;
         return `
           <article class="source-item">
             <h4>${verifiedLink ? escapeHtml(source.sourceTitle) : "Source not verified"}</h4>
             <p><strong>${languageIsZh ? "来源类型" : "Source type"}:</strong> ${escapeHtml(source.sourceType || "unknown")}</p>
             <p><strong>${languageIsZh ? "验证状态" : "Verification status"}:</strong> ${escapeHtml(source.verificationStatus || "unverified")}</p>
             <p><strong>${languageIsZh ? "可信度" : "Confidence"}:</strong> ${escapeHtml(source.confidenceLevel || "low")}</p>
-            ${verifiedLink ? `<a href="${escapeAttribute(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">${languageIsZh ? "查看来源" : "View source"}</a>` : `<p class="property-missing">Source not verified</p>`}
+            ${verifiedLink ? `<a href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">${languageIsZh ? "查看来源" : "View source"}</a>` : `<p class="property-missing">Source not verified</p>`}
           </article>
         `;
       }).join("")
@@ -2930,9 +2962,10 @@ function renderCertificationEvidence(item) {
     <div class="property-evidence-table certification-evidence-table">
       ${certifications.map((certification) => {
         const source = certification.source || certification;
-        const verifiedLink = source.sourceTitle && /^https?:\/\//i.test(source.sourceUrl || "");
+        const sourceUrl = parseExternalSourceUrl(source.sourceUrl);
+        const verifiedLink = source.sourceTitle && sourceUrl;
         const sourceMarkup = verifiedLink
-          ? `<a href="${escapeAttribute(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceTitle)}</a>`
+          ? `<a href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceTitle)}</a>`
           : `<span class="property-missing">Source not verified</span>`;
         return `
           <article class="property-evidence-row certification-evidence-row">
@@ -2964,7 +2997,7 @@ function renderRankedAlternatives(item) {
       ${alternatives
         .map(
           (entry, index) => `
-            <button class="similar-card ranked-alternative" type="button" data-profile-id="${entry.material.id}">
+            <button class="similar-card ranked-alternative" type="button" data-profile-id="${escapeAttribute(entry.material.id)}">
               <span>#${index + 1} ${escapeHtml(entry.material.abbr)} · ${t("similarityScore")} ${entry.score}</span>
               <strong>${escapeHtml(materialName(entry.material))}</strong>
               <small>${escapeHtml(materialCategory(entry.material))}</small>
@@ -3805,19 +3838,19 @@ function renderRecommendationCard(candidate, index, bucket = candidate.bucket ||
       <span class="rank">${escapeHtml(bucketLabel)} ${index + 1}</span>
       <div>
         <div class="recommendation-card-labels">
-          <span class="category">${materialCategory(item)}</span>
+          <span class="category">${escapeHtml(materialCategory(item))}</span>
           <span class="quality-badge is-${quality.tone}">${escapeHtml(quality.label)}</span>
         </div>
-        <h3>${materialName(item)} (${item.abbr})</h3>
-        <p class="summary">${materialSummary(item)}</p>
+        <h3>${escapeHtml(materialName(item))} (${escapeHtml(item.abbr)})</h3>
+        <p class="summary">${escapeHtml(materialSummary(item))}</p>
         ${renderRequirementEvidenceTable(candidate.requirementResults || [])}
       </div>
       <div class="score-box">
         <div class="score-label"><span>${state.language === "zh" ? "证据评分" : "Evidence score"}</span><strong>${candidate.score}</strong></div>
         <div class="score-track"><div class="score-fill" style="width: ${candidate.score}%"></div></div>
-        <button type="button" data-detail-id="${item.id}">${state.language === "zh" ? "查看证据详情" : "View evidence details"}</button>
+        <button type="button" data-detail-id="${escapeAttribute(item.id)}">${state.language === "zh" ? "查看证据详情" : "View evidence details"}</button>
         ${comparisonAllowed
-          ? `<button class="compare-button" type="button" data-compare-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
+          ? `<button class="compare-button" type="button" data-compare-id="${escapeAttribute(item.id)}" aria-pressed="${state.selected.has(item.id)}">
               ${state.selected.has(item.id) ? t("added") : t("compare")}
             </button>`
           : `<span class="recommendation-action-blocked">${state.language === "zh" ? "已禁止比较和 AI 分析" : "Comparison and AI analysis blocked"}</span>`}
@@ -3842,9 +3875,10 @@ function renderRequirementEvidenceTable(requirementResults) {
     <div class="requirement-evidence-table">
       ${requirementResults.map((result) => {
         const source = result.evidenceSource;
-        const verifiedLink = source?.sourceTitle && /^https?:\/\//i.test(source?.sourceUrl || "");
+        const sourceUrl = parseExternalSourceUrl(source?.sourceUrl);
+        const verifiedLink = source?.sourceTitle && sourceUrl;
         const sourceMarkup = verifiedLink
-          ? `<a href="${escapeAttribute(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceTitle)}</a>`
+          ? `<a href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceTitle)}</a>`
           : `<span class="property-missing">Source not verified</span>`;
         return `
           <article class="requirement-evidence-row is-${escapeAttribute(result.status)}">
@@ -4057,30 +4091,30 @@ function renderCards(items) {
     card.innerHTML = `
       <div class="card-head">
         <div>
-          <span class="category">${materialCategory(item)}</span>
-          <h3>${materialName(item)}</h3>
+          <span class="category">${escapeHtml(materialCategory(item))}</span>
+          <h3>${escapeHtml(materialName(item))}</h3>
         </div>
         <div class="recommendation-card-labels">
           <span class="quality-badge is-${dataQualityMeta(item).tone}">${escapeHtml(dataQualityMeta(item).label)}</span>
-          <span class="abbr">${item.abbr}</span>
+          <span class="abbr">${escapeHtml(item.abbr)}</span>
         </div>
       </div>
       <div>
         ${recommendation ? `<span class="chip">${state.language === "zh" ? "证据评分" : "Evidence score"} ${recommendation.score}</span>` : ""}
-        <p class="summary">${materialSummary(item)}</p>
+        <p class="summary">${escapeHtml(materialSummary(item))}</p>
         <div class="metrics">
-          <div class="metric"><span>${t("continuousUse")}</span><strong>${formatQualityCheckedValue(item, "continuous_use_temperature", item.continuous_use_temperature, " deg C")}</strong></div>
-          <div class="metric"><span>${t("tensileStrength")}</span><strong>${formatQualityCheckedValue(item, "tensile", item.tensile, " MPa")}</strong></div>
-          <div class="metric"><span>${t("density")}</span><strong>${formatQualityCheckedValue(item, "density", item.density, " g/cm3")}</strong></div>
-          <div class="metric"><span>Tg / Tm</span><strong>${formatValue(item.tg, " deg C")} / ${formatQualityCheckedValue(item, "tm", item.tm, " deg C")}</strong></div>
+          <div class="metric"><span>${t("continuousUse")}</span><strong>${escapeHtml(formatQualityCheckedValue(item, "continuous_use_temperature", item.continuous_use_temperature, " deg C"))}</strong></div>
+          <div class="metric"><span>${t("tensileStrength")}</span><strong>${escapeHtml(formatQualityCheckedValue(item, "tensile", item.tensile, " MPa"))}</strong></div>
+          <div class="metric"><span>${t("density")}</span><strong>${escapeHtml(formatQualityCheckedValue(item, "density", item.density, " g/cm3"))}</strong></div>
+          <div class="metric"><span>Tg / Tm</span><strong>${escapeHtml(formatValue(item.tg, " deg C"))} / ${escapeHtml(formatQualityCheckedValue(item, "tm", item.tm, " deg C"))}</strong></div>
         </div>
-        <div class="tag-list">${materialTags(item).map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
+        <div class="tag-list">${materialTags(item).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
       </div>
       <div class="card-actions">
-        <button class="primary-button detail-button" type="button" data-id="${item.id}">${t("detailsAi")}</button>
+        <button class="primary-button detail-button" type="button" data-id="${escapeAttribute(item.id)}">${t("detailsAi")}</button>
         ${isQuarantined
           ? `<span class="recommendation-action-blocked">${state.language === "zh" ? "已禁止比较" : "Comparison blocked"}</span>`
-          : `<button class="compare-button" type="button" data-id="${item.id}" aria-pressed="${state.selected.has(item.id)}">
+          : `<button class="compare-button" type="button" data-id="${escapeAttribute(item.id)}" aria-pressed="${state.selected.has(item.id)}">
               ${state.selected.has(item.id) ? t("added") : t("compare")}
             </button>`}
         ${state.compareErrors?.get(item.id) ? `<p class="recommendation-empty" role="alert">${escapeHtml(state.compareErrors.get(item.id))}</p>` : ""}
@@ -4275,26 +4309,23 @@ function renderCompare() {
   ];
 
   const table = document.createElement("table");
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>${t("metric")}</th>
-        ${selectedItems.map((item) => `<th>${item.abbr}<br>${materialName(item)}</th>`).join("")}
-      </tr>
-    </thead>
-    <tbody>
-      ${rows
-        .map(
-          ([label, getter]) => `
-            <tr>
-              <th>${label}</th>
-              ${selectedItems.map((item) => `<td>${getter(item)}</td>`).join("")}
-            </tr>
-          `
-        )
-        .join("")}
-    </tbody>
-  `;
+  const head = document.createElement("thead");
+  const header = document.createElement("tr");
+  header.append(renderTextElement("th", t("metric")));
+  selectedItems.forEach((item) => {
+    const cell = renderTextElement("th", item.abbr);
+    cell.append(document.createElement("br"), document.createTextNode(materialName(item)));
+    header.append(cell);
+  });
+  head.append(header);
+  const body = document.createElement("tbody");
+  rows.forEach(([label, getter]) => {
+    const row = document.createElement("tr");
+    row.append(renderTextElement("th", label));
+    selectedItems.forEach((item) => row.append(renderTextElement("td", getter(item))));
+    body.append(row);
+  });
+  table.append(head, body);
 
   elements.compareTableWrap.replaceChildren(table);
 }
@@ -4363,9 +4394,8 @@ function renderAiComparePanel() {
   }
 
   elements.aiCompareStatus.textContent = selectedItems.length > 2 ? t("usingFirstTwo") : t("ready");
-  elements.aiCompareContent.innerHTML = `
-    <p class="recommendation-empty">${t("selectReady", materialName(pair[0]), materialName(pair[1]))}</p>
-  `;
+  elements.aiCompareContent.replaceChildren(renderTextElement("p",
+    t("selectReady", materialName(pair[0]), materialName(pair[1])), "recommendation-empty"));
 }
 
 async function runAiComparison() {
@@ -4425,40 +4455,28 @@ async function runAiComparison() {
 
 function renderAiComparisonLoading(pair) {
   elements.aiCompareStatus.textContent = t("generating");
-  elements.aiCompareContent.innerHTML = `
-    <p class="recommendation-empty">${t("sendingComparison", materialName(pair[0]), materialName(pair[1]))}</p>
-  `;
+  elements.aiCompareContent.replaceChildren(renderTextElement("p",
+    t("sendingComparison", materialName(pair[0]), materialName(pair[1])), "recommendation-empty"));
 }
 
 function renderAiComparison(pair, comparison, status) {
   elements.aiCompareStatus.textContent = status;
-  elements.aiCompareContent.innerHTML = `
-    <div class="analysis-block">
-      <h3>${t("selectionAdvice")}</h3>
-      <p>${comparison.selectionAdvice}</p>
-    </div>
-    <div class="analysis-grid">
-      ${renderAnalysisList(t("keyDifferences"), comparison.keyDifferences)}
-      ${renderAnalysisList(t("strengthsWeaknesses"), comparison.strengthsAndWeaknesses)}
-      ${renderAnalysisList(t("recommendedUseCases"), comparison.recommendedUseCases)}
-      <div class="analysis-block">
-        <h3>${t("sourceOfTruth")}</h3>
-        <p>${t("sourcePair", materialName(pair[0]), materialName(pair[1]))}</p>
-      </div>
-    </div>
-  `;
+  const grid = document.createElement("div");
+  grid.className = "analysis-grid";
+  grid.append(
+    renderAnalysisList(t("keyDifferences"), comparison.keyDifferences),
+    renderAnalysisList(t("strengthsWeaknesses"), comparison.strengthsAndWeaknesses),
+    renderAnalysisList(t("recommendedUseCases"), comparison.recommendedUseCases),
+    renderAnalysisBlock(t("sourceOfTruth"), t("sourcePair", materialName(pair[0]), materialName(pair[1])))
+  );
+  elements.aiCompareContent.replaceChildren(renderAnalysisBlock(t("selectionAdvice"), comparison.selectionAdvice), grid);
 }
 
 function renderAiComparisonError(pair, error) {
   elements.aiCompareStatus.textContent = t("unavailable");
   const directFileHint = window.location.protocol === "file:" ? t("serverHint") : "";
-  elements.aiCompareContent.innerHTML = `
-    <div class="analysis-block">
-      <h3>${t("comparisonFailed")}</h3>
-      <p>${error.message}.${directFileHint}</p>
-      <p>${t("comparisonNeedsServer", pair[0].abbr, pair[1].abbr)}</p>
-    </div>
-  `;
+  elements.aiCompareContent.replaceChildren(renderAnalysisBlock(t("comparisonFailed"),
+    `${error.message}.${directFileHint}`, t("comparisonNeedsServer", pair[0].abbr, pair[1].abbr)));
 }
 
 function legacyShowDetail(id) {
@@ -4688,50 +4706,36 @@ function renderAnalysisQualityBlocked(item) {
 
 function renderAnalysisLoading(item) {
   elements.analysisStatus.textContent = t("generating");
-  elements.analysisContent.innerHTML = `
-    <p class="recommendation-empty">${t("sendingAnalysis", materialName(item))}</p>
-  `;
+  elements.analysisContent.replaceChildren(renderTextElement("p",
+    t("sendingAnalysis", materialName(item)), "recommendation-empty"));
 }
 
 function renderAnalysis(item, analysis, status) {
   elements.analysisStatus.textContent = status;
-  elements.analysisContent.innerHTML = `
-    <div class="analysis-block">
-      <h3>${t("materialOverview")}</h3>
-      <p>${analysis.overview}</p>
-    </div>
-    <div class="analysis-grid">
-      ${renderAnalysisList(t("advantages"), analysis.advantages)}
-      ${renderAnalysisList(t("limitations"), analysis.limitations)}
-      ${renderAnalysisList(t("recommendedApplications"), analysis.recommendedApplications)}
-      <div class="analysis-block">
-        <h3>${t("sourceOfTruth")}</h3>
-        <p>${t("sourceSingle", materialName(item))}</p>
-      </div>
-    </div>
-  `;
+  const grid = document.createElement("div");
+  grid.className = "analysis-grid";
+  grid.append(
+    renderAnalysisList(t("advantages"), analysis.advantages),
+    renderAnalysisList(t("limitations"), analysis.limitations),
+    renderAnalysisList(t("recommendedApplications"), analysis.recommendedApplications),
+    renderAnalysisBlock(t("sourceOfTruth"), t("sourceSingle", materialName(item)))
+  );
+  elements.analysisContent.replaceChildren(renderAnalysisBlock(t("materialOverview"), analysis.overview), grid);
 }
 
 function renderAnalysisList(title, items) {
-  const listItems = items.length ? items.map((item) => `<li>${item}</li>`).join("") : `<li>${t("notSpecified")}</li>`;
-  return `
-    <div class="analysis-block">
-      <h3>${title}</h3>
-      <ul>${listItems}</ul>
-    </div>
-  `;
+  const block = renderAnalysisBlock(title);
+  const list = document.createElement("ul");
+  (items.length ? items : [t("notSpecified")]).forEach((item) => list.append(renderTextElement("li", item)));
+  block.append(list);
+  return block;
 }
 
 function renderAnalysisError(item, error) {
   elements.analysisStatus.textContent = t("unavailable");
   const directFileHint = window.location.protocol === "file:" ? t("serverHint") : "";
-  elements.analysisContent.innerHTML = `
-    <div class="analysis-block">
-      <h3>${t("analysisFailed")}</h3>
-      <p>${error.message}.${directFileHint}</p>
-      <p>${t("analysisNeedsServer", materialName(item))}</p>
-    </div>
-  `;
+  elements.analysisContent.replaceChildren(renderAnalysisBlock(t("analysisFailed"),
+    `${error.message}.${directFileHint}`, t("analysisNeedsServer", materialName(item))));
 }
 
 init().catch(() => {

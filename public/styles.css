@@ -1363,7 +1363,10 @@ output {
 
 .material-card {
   display: grid;
+  /* Keep long API text from widening the implicit column beyond the card. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
+  overflow-wrap: anywhere;
   min-height: 282px;
   padding: 14px;
   border: 1px solid var(--line);
@@ -1399,6 +1402,11 @@ output {
   color: var(--teal-dark);
   font-size: 0.92rem;
   font-weight: 800;
+}
+
+.material-card .abbr {
+  /* Preserve the badge's normal height, but let wrapped text grow in flow. */
+  min-height: min-content;
 }
 
 .category {
