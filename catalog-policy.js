@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 
 // Semantic inputs only. Artifact/bootstrap mechanics are governed by the format.
 const POLICY_MANIFEST = Object.freeze([
-  "material-quality.js", "evidence-model.js", "material-repository.js"
+  "material-quality.js", "evidence-model.js", "material-repository.js", "property-projection-policy.js"
 ]);
 const MAX_POLICY_FILE_BYTES = 256 * 1024;
 let loadedPolicy;

@@ -377,6 +377,15 @@ function insertMaterial(database, id, overrides = {}) {
     "material_family, manufacturer_key, commercial_grade_key, material_family_key, " +
     "created_at, active) VALUES (?, ?, ?, 'PC', ?, ?, 'pc', '2026-01-01', ?)"
   ).run(id, "AD04 FIXTURE", id, id.toLowerCase(), id.toLowerCase(), active);
+  // FA-003P changes explicit numeric authority; preserve AD-04 query oracles
+  // with independently sourced TEST ONLY claims, not a production scalar fallback.
+  for (const [propertyKey, unit] of [["density", "g/cm3"], ["tensile_strength", "MPa"], ["continuous_use_temperature", "degC"]]) {
+    if (typeof row[propertyKey] !== "number" || !Number.isFinite(row[propertyKey])) continue;
+    database.prepare(`INSERT INTO material_property_evidence (material_id,property_key,value_numeric,unit,position,
+      test_standard,test_condition,value_type,source_type,source_title,source_url,verification_status,confidence_level)
+      VALUES (?,?,?,?,0,'TEST STANDARD','TEST CONDITION','typical','manufacturer','AD04 TEST ONLY',
+      'https://example.invalid/ad04','verified','medium')`).run(id,propertyKey,row[propertyKey],unit);
+  }
   const insertTag = database.prepare("INSERT INTO material_tags (material_id, tag, position) VALUES (?, ?, ?)");
   tags.forEach((tag, index) => insertTag.run(id, tag, index));
   const insertUse = database.prepare("INSERT INTO material_uses (material_id, use, position) VALUES (?, ?, ?)");
@@ -646,7 +655,7 @@ function repositoryChecks(repository) {
     "Excluded rows must not contribute to public facets.");
   assert.ok(list({ audit: true }).total > list().total,
     "The existing authenticated audit list remains separate.");
-  assert.equal(repository.getMetrics().propertyEvidenceRowsRead, 0);
+  assert.ok(repository.getMetrics().propertyEvidenceRowsRead > 0, "Page evidence is now the numeric authority.");
   assert.equal(repository.getMetrics().fullEvidenceTableReads, 0);
   assert.ok(repository.getMetrics().maximumRowsInSingleQuery <= 200);
 }

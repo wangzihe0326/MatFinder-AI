@@ -11,6 +11,7 @@ const {
 } = require("./evidence-model");
 const { annotateMaterialQuality } = require("./material-quality");
 const { inspectConnection } = require("./schema-contract");
+const propertyProjection = require("./property-projection-policy");
 
 const DEFAULT_PAGE_SIZE = 48;
 const MAX_PAGE_SIZE = 200;
@@ -612,31 +613,30 @@ class MaterialRepository {
   _listPublicMaterials(options) {
     const limit = options.limit ?? DEFAULT_PAGE_SIZE;
     const offset = options.offset ?? 0;
-    const predicate = buildPublicCatalogPredicate(options);
+    const countQuery = buildProjectedCatalogQuery(options);
     const total = Number(this._get(
-      `SELECT COUNT(DISTINCT m.material_id) AS count
-         FROM materials m ${CATALOG_JOINS}
-        WHERE ${predicate.sql}`,
-      predicate.params, "catalog_count"
+      `${countQuery.withSql} SELECT COUNT(DISTINCT m.material_id) AS count
+         FROM ${countQuery.fromSql} WHERE ${countQuery.predicate.sql}`,
+      countQuery.params, "catalog_count"
     )?.count || 0);
     const facets = this._catalogFacets(options);
-    const order = buildCatalogOrder(options);
+    const pageQuery = buildProjectedCatalogQuery(options, undefined, true);
+    const order = buildCatalogOrder(options, pageQuery.fields);
     const rows = this._all(
-      `SELECT ${LIST_COLUMNS}, NULL AS quality_level
-         FROM materials m ${CATALOG_JOINS}
-        WHERE ${predicate.sql}
-        ORDER BY ${order.sql}
-        LIMIT ? OFFSET ?`,
-      [...predicate.params, ...order.params, limit, offset], "material_list"
+      `${pageQuery.withSql} SELECT ${LIST_COLUMNS}, NULL AS quality_level
+         FROM ${pageQuery.fromSql} WHERE ${pageQuery.predicate.sql}
+         ORDER BY ${order.sql} LIMIT ? OFFSET ?`,
+      [...pageQuery.params, ...order.params, limit, offset], "material_list"
     );
-    const hydrated = this._hydrateDetailedRows(rows, this._readAd08Rows.bind(this));
+    const hydrated = this._hydrateDetailedRows(rows, this._readAd08Rows.bind(this), true);
     const items = rows.map((row, index) => {
       const canonical = hydrated[index];
       const item = materialFromListRow({ ...row, quality_level: canonical.data_quality.level });
       item.data_quality = canonical.data_quality;
       for (const field of ["tags", "uses", "tags_en", "tags_zh", "applications_en", "applications_zh"])
         item[field] = canonical[field];
-      return item;
+      return propertyProjection.applyPublicProjection(item,
+        propertyProjection.compactProjections(canonical.propertyProjections));
     });
     return { items, total, limit, offset, hasMore: offset + limit < total, facets };
   }
@@ -696,20 +696,21 @@ class MaterialRepository {
   }
 
   _catalogFacets(options) {
-    const categoryBase = buildPublicCatalogPredicate(options, "category");
+    const categoryQuery = buildProjectedCatalogQuery(options, "category");
+    const categoryBase = categoryQuery.predicate;
     const categoryAll = Number(this._get(
-      `SELECT COUNT(DISTINCT m.material_id) AS count
-         FROM materials m ${CATALOG_JOINS} WHERE ${categoryBase.sql}`,
-      categoryBase.params, "catalog_category_count"
+      `${categoryQuery.withSql} SELECT COUNT(DISTINCT m.material_id) AS count
+         FROM ${categoryQuery.fromSql} WHERE ${categoryBase.sql}`,
+      categoryQuery.params, "catalog_category_count"
     )?.count || 0);
     const categoryRows = this._all(
-      `SELECT m.category AS value, COUNT(DISTINCT m.material_id) AS count
-         FROM materials m ${CATALOG_JOINS}
+      `${categoryQuery.withSql} SELECT m.category AS value, COUNT(DISTINCT m.material_id) AS count
+         FROM ${categoryQuery.fromSql}
         WHERE ${categoryBase.sql}
           AND NULLIF(TRIM(m.category), '') IS NOT NULL
         GROUP BY m.category
         ORDER BY count DESC, m.category ASC`,
-      categoryBase.params, "catalog_categories"
+      categoryQuery.params, "catalog_categories"
     );
     return {
       categories: {
@@ -722,7 +723,8 @@ class MaterialRepository {
   }
 
   _catalogOptionFacets(options, dimension) {
-    const base = buildPublicCatalogPredicate(options, dimension);
+    const query = buildProjectedCatalogQuery(options, dimension);
+    const base = query.predicate;
     const ids = dimension === "performance" ? PERFORMANCE_IDS : DOMAIN_IDS;
     const candidateFields = dimension === "performance" ? [
       "m.material_id", "m.max_temperature", "m.continuous_use_temperature",
@@ -745,9 +747,9 @@ class MaterialRepository {
       return `COALESCE(SUM(CASE WHEN ${flagsInGroup} THEN 1 ELSE 0 END), 0) AS group${index}`;
     }) : [];
     const row = this._get(
-      `WITH candidates AS MATERIALIZED (
+      `${query.withSql ? query.withSql + "," : "WITH"} candidates AS MATERIALIZED (
          SELECT ${candidateFields.join(", ")}, ${signal} AS catalog_signal
-           FROM materials m ${CATALOG_JOINS}
+           FROM ${query.fromSql}
           WHERE ${base.sql}
        ), flags AS MATERIALIZED (
          SELECT ${flags.join(", ")}
@@ -755,7 +757,7 @@ class MaterialRepository {
        )
        SELECT COUNT(*) AS all_count, ${[...sums, ...groupSums].join(", ")}
          FROM flags`,
-      [...base.params, ...predicates.flatMap((predicate) => predicate.params)],
+      [...query.params, ...predicates.flatMap((predicate) => predicate.params)],
       `catalog_${dimension}_facets`
     );
     const result = {
@@ -792,7 +794,9 @@ class MaterialRepository {
       "material_detail"
     );
     if (!row) return null;
-    return this._hydrateDetailedRows([row])[0] || null;
+    const material = this._hydrateDetailedRows([row], this._all.bind(this), options.audit !== true)[0] || null;
+    return material && options.audit !== true
+      ? propertyProjection.applyPublicProjection(material, material.propertyProjections) : material;
   }
 
   getRecommendationCandidates() {
@@ -881,14 +885,14 @@ class MaterialRepository {
     this.database.close();
   }
 
-  _hydrateDetailedRows(rows, read = this._all.bind(this)) {
+  _hydrateDetailedRows(rows, read = this._all.bind(this), withProjection = false) {
     const hydrated = [];
     for (const rowBatch of chunks(rows, DETAIL_BATCH_SIZE)) {
       const materials = rowBatch.map(materialFromListRow);
       const byId = new Map(materials.map((material) => [material.id, material]));
       this._attachTagsAndUses(materials, read);
       this._attachLegacySources(byId, read);
-      this._attachEvidence(byId, read);
+      this._attachEvidence(byId, read, withProjection);
       for (const material of materials) {
         if (!material.evidence) material.evidence = buildLegacyEvidence(material);
         hydrated.push(annotateMaterialQuality(material));
@@ -955,7 +959,7 @@ class MaterialRepository {
     }
   }
 
-  _attachEvidence(byId, read = this._all.bind(this)) {
+  _attachEvidence(byId, read = this._all.bind(this), withProjection = false) {
     if (!byId.size) return;
     for (const material of byId.values()) {
       material.evidence = {
@@ -1033,6 +1037,11 @@ class MaterialRepository {
       `
         SELECT
           evidence_row.material_id,
+          evidence_row.id,
+          evidence_row.position,
+          evidence_row.source_id,
+          normalized_source.source_id AS resolved_source_id,
+          ${withProjection ? propertyProjection.claimJsonSql("evidence_row", "normalized_source") + " AS projection_claim," : ""}
           evidence_row.property_key,
           evidence_row.value_numeric,
           evidence_row.value_text,
@@ -1065,6 +1074,13 @@ class MaterialRepository {
       const claim = normalizePropertyEvidence(row, material.evidence.identity);
       material.evidence.properties[claim.propertyKey] ||= [];
       material.evidence.properties[claim.propertyKey].push(claim);
+    }
+
+    if (withProjection) {
+      const rowsById = new Map(ids.map(id => [id, []]));
+      for (const row of propertyRows) rowsById.get(row.material_id)?.push(JSON.parse(row.projection_claim));
+      for (const [id, material] of byId)
+        material.propertyProjections = propertyProjection.projectProperties(id, rowsById.get(id));
     }
 
     const certificationRows = read(
@@ -1626,16 +1642,46 @@ function buildPublicCatalogPredicate(options, excludedDimension) {
     predicates.push(buildDomainPredicate(options.domain));
   }
   if (options.minTempC !== undefined) {
-    predicates.push(knownNumeric("m.continuous_use_temperature", ">=", options.minTempC));
+    predicates.push({ sql: `${propertyProjection.queryKeySql("m.material_id", "continuous_use_temperature")} >= ?`, params: [options.minTempC] });
   }
   if (options.minTensileMpa !== undefined) {
-    predicates.push(knownNumeric("m.tensile_strength", ">=", options.minTensileMpa));
+    predicates.push({ sql: `${propertyProjection.queryKeySql("m.material_id", "tensile_strength")} >= ?`, params: [options.minTensileMpa] });
   }
   if (options.recyclable === true) predicates.push(recyclablePredicate());
   return combinePredicates("AND", predicates);
 }
 
-function buildCatalogOrder(options) {
+// Scope before projection without LIMIT/OFFSET. Self-excluded facets receive
+// their own scope; no derived keys persist beyond this SQLite statement.
+function buildProjectedCatalogQuery(options, excludedDimension, includeSort = false) {
+  const keys = new Set();
+  if (options.minTempC !== undefined) keys.add("continuous_use_temperature");
+  if (options.minTensileMpa !== undefined) keys.add("tensile_strength");
+  const sortKey = {density:"density",strength:"tensile_strength",temperature:"continuous_use_temperature"}[options.sort];
+  if (includeSort && sortKey) keys.add(sortKey);
+  if (!keys.size) {
+    const predicate = buildPublicCatalogPredicate(options, excludedDimension);
+    return {withSql:"",fromSql:`materials m ${CATALOG_JOINS}`,predicate,params:predicate.params,fields:{}};
+  }
+  const scope = buildPublicCatalogPredicate({...options,minTempC:undefined,minTensileMpa:undefined},excludedDimension);
+  // Bind keys directly to the material scope: a reordered facet join may read
+  // pp_keys before m, when only scope.material_id is available for index lookup.
+  const fields = Object.fromEntries([...keys].map(key => [key,`pp_${key}.query_key`]));
+  const predicates = [];
+  if (options.minTempC !== undefined) predicates.push({sql:`${fields.continuous_use_temperature} >= ?`,params:[options.minTempC]});
+  if (options.minTensileMpa !== undefined) predicates.push({sql:`${fields.tensile_strength} >= ?`,params:[options.minTensileMpa]});
+  const predicate = combinePredicates("AND",predicates);
+  return {
+    withSql:`WITH pp_materials AS MATERIALIZED (
+      SELECT m.material_id FROM materials m ${CATALOG_JOINS} WHERE ${scope.sql}
+    ), ${propertyProjection.queryRelationSql("pp_materials", [...keys])}`,
+    fromSql:`pp_materials scope JOIN materials m ON m.material_id=scope.material_id ${CATALOG_JOINS}
+      ${[...keys].map(key => `LEFT JOIN pp_keys pp_${key} ON pp_${key}.material_id=scope.material_id AND pp_${key}.property_key='${key}'`).join("\n")}`,
+    predicate,params:[...scope.params,...predicate.params],fields
+  };
+}
+
+function buildCatalogOrder(options, fields = {}) {
   const nameAndId = "LOWER(COALESCE(m.name, '')) ASC, m.material_id ASC";
   if (options.sort === "match" && options.query) {
     const relevance = [
@@ -1652,16 +1698,13 @@ function buildCatalogOrder(options) {
     };
   }
   const numericSorts = {
-    temperature: ["m.continuous_use_temperature", "DESC"],
-    strength: ["m.tensile_strength", "DESC"],
-    density: ["m.density", "ASC"]
+    temperature: "continuous_use_temperature", strength: "tensile_strength", density: "density"
   };
   if (numericSorts[options.sort]) {
-    const [field, direction] = numericSorts[options.sort];
-    const known = `typeof(${field}) IN ('integer', 'real')`;
+    const key = numericSorts[options.sort];
+    const field = fields[key] || propertyProjection.queryKeySql("m.material_id", key);
     return {
-      sql: `CASE WHEN ${known} THEN 0 ELSE 1 END ASC,
-        CASE WHEN ${known} THEN ${field} ELSE NULL END ${direction}, ${nameAndId}`,
+      sql: `${field} ${propertyProjection.PROPERTIES[key].sort} NULLS LAST, ${nameAndId}`,
       params: []
     };
   }

@@ -301,6 +301,10 @@ class CommitStateTests(unittest.TestCase):
             ((common / "objects").as_posix() + "\n").encode("utf-8"))
         git(cls.copy, "checkout", "--quiet", "--detach", git(ROOT, "rev-parse", "HEAD"))
         current = set(current_inventory(ROOT)) | set(FEATURE_SOURCES)
+        # Include reviewed production additions before they are staged. The
+        # copied guard still checks the closed inventory and every source hash.
+        policy = json.loads((ROOT / "scripts/schema-authority-policy.json").read_text(encoding="utf-8"))
+        current.update(policy["productionFiles"])
         for name in sorted(current - APPROVED_FEATURE_DELETIONS):
             target = cls.copy / name
             target.parent.mkdir(parents=True, exist_ok=True)

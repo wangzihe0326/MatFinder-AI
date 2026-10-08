@@ -95,3 +95,36 @@ Formal import is a single SQLite transaction. A severe validation or database
 error rolls back the complete batch. Re-importing the same file hash returns the
 existing batch without adding rows. If evidence is shared by another committed
 batch, rollback transfers ownership to that batch and retains the evidence.
+
+## Canonical property projection (FA-003)
+
+`property-projection-policy.js` owns `property-projection-v1` for density,
+tensile strength, HDT, and continuous-use temperature. Its shared definitions
+produce both JS projection and SELECT-only SQL eligibility/key expressions.
+The repository executes SQL before count/order/pagination, then hydrates only
+page evidence. The frontend consumes the server's `propertyProjections`.
+
+Eligible claims require their own reliable source, high/medium confidence,
+canonical units, finite valid values, and recorded standard/condition. Source
+resolution joins `evidence_sources` and uses field-wise normalized-first NULL
+fallback; an empty normalized field does not fall back. Partially verified
+claims can appear with annotations in display/compare, but cannot supply a
+query key. A key requires one typical context/value supported by verified
+claims. A partially verified disagreement prevents that key. Explicit conflict
+or quarantine blocks the property even when another usable claim exists.
+
+States are `single`, `range` (observed, not guaranteed), `multiple`, `unknown`,
+and `conflicting`. Duplicate observations retain provenance. Context comparison
+only trims ASCII edge spaces and folds ASCII case; load spelling, internal
+spaces, standards and units are not inferred equivalent. No max/min/latest
+claim winner or unit conversion resolves ambiguity. HDT remains condition-bound
+and never has a generic query key. Continuous-use evidence requires its exact
+property key; max temperature, HDT, RTI and melting point cannot supply it.
+
+Public density/tensile/continuous-use compatibility aliases derive from the
+verified query key or are null. Stored legacy scalar columns remain unchanged;
+missing imported evidence never falls back to them. Audit/learning paths and
+recommendation-v3 semantics remain separate. Detail retains all original
+normalized evidence and source records. Projection previews cap context groups
+at 12 and values/source refs at 8 per group, include full counts, mark incomplete
+previews, and link to the existing complete evidence detail.

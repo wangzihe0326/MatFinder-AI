@@ -1499,6 +1499,15 @@ output {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Keep long provenance previews from squeezing adjacent material columns. */
+.compare-table-wrap table {
+  table-layout: fixed;
+}
+
+.compare-table-wrap th:first-child {
+  width: 142px;
+}
+
 table {
   width: 100%;
   min-width: 720px;
