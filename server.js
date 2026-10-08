@@ -511,7 +511,8 @@ function toCompactMaterial(material) {
     "record_origin",
     "scope_status",
     "catalog_visibility",
-    "entityType"
+    "entityType",
+    "propertyProjections"
   ];
   const compact = {};
   fields.forEach((field) => {

@@ -2676,8 +2676,10 @@ function keyPropertyRows(item) {
   const flameByData = tags.has("flame retardant") || hasAnyText(item, ["flame retardant", "fire", "self extinguishing"]);
 
   return [
-    [t("density"), formatQualityCheckedValue(item, "density", item.density, " g/cm3")],
-    [t("continuousUse"), formatQualityCheckedValue(item, "maxTemp", item.maxTemp, " deg C")],
+    [t("density"), formatCanonicalProperty(item, "density", "density", " g/cm3")],
+    [t("continuousUse"), formatCanonicalProperty(item, "continuous_use_temperature", "maxTemp", " deg C")],
+    ...(item.propertyProjections ? [[t("tensileStrength"), formatCanonicalProperty(item, "tensile_strength", "tensile", " MPa")],
+      ["HDT", formatCanonicalProperty(item, "hdt", "hdt", " deg C")]] : []),
     [
       t("propertyTransparency"),
       transparentByData
@@ -2736,6 +2738,82 @@ function formatQualityCheckedValue(item, field, value, suffix = "") {
     return state.language === "zh" ? "异常值已阻断" : "Invalid value blocked";
   }
   return formatValue(value, suffix);
+}
+
+// Server-owned property projection: this renderer never selects raw evidence.
+function projectionVerificationLabel(value) {
+  const labels = {
+    verified: ["Verified", "已验证"], partially_verified: ["Partially verified", "部分验证"],
+    mixed: ["Verified and partially verified sources", "含已验证与部分验证来源"]
+  };
+  const pair = labels[value];
+  return pair ? keyedText(...pair) : keyedText("Reference only", "仅供参考");
+}
+
+function formatCanonicalProperty(item, propertyKey, legacyField, suffix = "") {
+  const projection = item.propertyProjections?.[propertyKey];
+  if (!projection) return formatQualityCheckedValue(item, legacyField, item[legacyField], suffix);
+  let text;
+  switch (projection.projectionState) {
+    case "single":
+      text = `${projection.value} ${projection.unit} · ${projection.valueType} · ${projectionVerificationLabel(projection.sourceState)}`;
+      text += ` — ${projection.standard}; ${projection.condition}`;
+      break;
+    case "range":
+      text = `${keyedText("Observed values (same conditions)", "观察值范围（同条件）")}: ${projection.observedRange.join("–")} ${projection.unit} · ${projectionVerificationLabel(projection.sourceState)}`;
+      break;
+    case "multiple": text = `${keyedText("Multiple conditions / types", "多条件／多类型")} (${projection.contextCount}) · ${projectionVerificationLabel(projection.sourceState)}`; break;
+    case "conflicting": text = keyedText("Conflicting evidence — see details", "证据冲突，请查看详情"); break;
+    default: text = projection.reasonCodes.includes("partial_only")
+      ? keyedText("Partially verified — see details", "部分验证，请查看详情")
+      : projection.sourceState === "blocked" ? keyedText("Blocked evidence — see details", "证据已阻断，请查看详情")
+      : projection.claimCount ? keyedText("No usable measurement — see details", "暂无可用测量，请查看详情") : formatValueFor(null);
+  }
+  if (projection.excludedCount) text += keyedText(" · Additional reference/unusable claims in details", " · 详情含额外参考或不可用证据");
+  return formatQualityCheckedValue(item, legacyField, text);
+}
+
+function renderCanonicalCompareCell(item, propertyKey, legacyField, suffix = "") {
+  const projection = item.propertyProjections?.[propertyKey];
+  if (!projection) return formatValue(item[legacyField], suffix); // Existing learning/audit representation.
+  const cell = document.createElement("div");
+  cell.append(renderTextElement("p", formatCanonicalProperty(item, propertyKey, legacyField, suffix)));
+  if (item.data_quality?.level !== "quarantined") {
+    for (const entry of projection.entries) {
+      const values = entry.values.join(", ");
+      if (projection.projectionState !== "single")
+        cell.append(renderTextElement("p", `${values} ${entry.unit} · ${entry.valueType} · ${projectionVerificationLabel(entry.sourceState)} — ${entry.standard}; ${entry.condition}`));
+      cell.append(renderTextElement("p", keyedText(
+        `Source records: ${entry.sourceCount}; evidence claims: ${entry.claimCount}; distinct reported values: ${entry.distinctValueCount}.`,
+        `来源记录：${entry.sourceCount}；证据条目：${entry.claimCount}；不同报告值：${entry.distinctValueCount}。`
+      )));
+      const shown = entry.supportingClaimRefs.length;
+      const total = entry.sourceReferenceCount;
+      cell.append(renderTextElement("p", keyedText(
+        `Source references: ${shown} / ${total} shown; ${total - shown} more in details.`,
+        `来源引用：已显示 ${shown} / 共 ${total}；另有 ${total - shown} 项可在详情查看。`
+      )));
+      for (const source of entry.supportingClaimRefs) {
+        const sourceUrl = parseExternalSourceUrl(source.sourceUrl);
+        const label = `${source.sourceTitle || keyedText("Source unavailable", "来源未提供")} · ${projectionVerificationLabel(source.verificationStatus)}`;
+        if (sourceUrl) {
+          const link = renderTextElement("a", label);
+          link.href = sourceUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
+          cell.append(link);
+        } else cell.append(renderTextElement("span", label));
+      }
+    }
+  }
+  if (!projection.entries.length) cell.append(renderTextElement("p", keyedText(
+    "0 source references shown; available original evidence is in details.",
+    "已显示 0 项来源引用；已有原始证据可在详情查看。"
+  )));
+  cell.append(renderTextElement("p", keyedText("Reported test conditions; different conditions are not equivalent.", "所列为记录的测试条件；不同条件不表示等价。")));
+  if (!projection.complete) cell.append(renderTextElement("p", keyedText("Summary shown; full evidence in details.", "此处为摘要，完整证据请查看详情。")));
+  const details = renderTextElement("button", keyedText("View evidence details", "查看证据详情"));
+  details.type = "button"; details.addEventListener("click", () => showDetail(item.id));
+  cell.append(details);
+  return cell;
 }
 
 function getRecommendationForMaterial(item) {
@@ -4103,9 +4181,10 @@ function renderCards(items) {
         ${recommendation ? `<span class="chip">${state.language === "zh" ? "证据评分" : "Evidence score"} ${recommendation.score}</span>` : ""}
         <p class="summary">${escapeHtml(materialSummary(item))}</p>
         <div class="metrics">
-          <div class="metric"><span>${t("continuousUse")}</span><strong>${escapeHtml(formatQualityCheckedValue(item, "continuous_use_temperature", item.continuous_use_temperature, " deg C"))}</strong></div>
-          <div class="metric"><span>${t("tensileStrength")}</span><strong>${escapeHtml(formatQualityCheckedValue(item, "tensile", item.tensile, " MPa"))}</strong></div>
-          <div class="metric"><span>${t("density")}</span><strong>${escapeHtml(formatQualityCheckedValue(item, "density", item.density, " g/cm3"))}</strong></div>
+          <div class="metric"><span>${t("continuousUse")}</span><strong>${escapeHtml(formatCanonicalProperty(item, "continuous_use_temperature", "continuous_use_temperature", " deg C"))}</strong></div>
+          <div class="metric"><span>${t("tensileStrength")}</span><strong>${escapeHtml(formatCanonicalProperty(item, "tensile_strength", "tensile", " MPa"))}</strong></div>
+          <div class="metric"><span>${t("density")}</span><strong>${escapeHtml(formatCanonicalProperty(item, "density", "density", " g/cm3"))}</strong></div>
+          ${item.propertyProjections ? `<div class="metric"><span>HDT</span><strong>${escapeHtml(formatCanonicalProperty(item, "hdt", "hdt", " deg C"))}</strong></div>` : ""}
           <div class="metric"><span>Tg / Tm</span><strong>${escapeHtml(formatValue(item.tg, " deg C"))} / ${escapeHtml(formatQualityCheckedValue(item, "tm", item.tm, " deg C"))}</strong></div>
         </div>
         <div class="tag-list">${materialTags(item).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
@@ -4297,11 +4376,12 @@ function renderCompare() {
 
   const rows = [
     [t("category"), (item) => materialCategory(item)],
-    [t("density"), (item) => formatValue(item.density, " g/cm3")],
+    [t("density"), (item) => renderCanonicalCompareCell(item, "density", "density", " g/cm3")],
     [t("glassTransition"), (item) => formatValue(item.tg, " deg C")],
     [t("meltingPoint"), (item) => formatValue(item.tm, " deg C")],
-    [t("continuousUse"), (item) => formatValue(item.maxTemp, " deg C")],
-    [t("tensileStrength"), (item) => formatValue(item.tensile, " MPa")],
+    [t("continuousUse"), (item) => renderCanonicalCompareCell(item, "continuous_use_temperature", "maxTemp", " deg C")],
+    [t("tensileStrength"), (item) => renderCanonicalCompareCell(item, "tensile_strength", "tensile", " MPa")],
+    ...(selectedItems.some(item => item.propertyProjections) ? [["HDT", (item) => renderCanonicalCompareCell(item, "hdt", "hdt", " deg C")]] : []),
     [t("elongation"), (item) => formatValue(item.elongation, "%")],
     [t("dielectricConstant"), (item) => formatValue(item.dielectric)],
     [t("recyclable"), (item) => (item.recyclable ? t("yes") : t("specialtyStream"))],
@@ -4322,7 +4402,13 @@ function renderCompare() {
   rows.forEach(([label, getter]) => {
     const row = document.createElement("tr");
     row.append(renderTextElement("th", label));
-    selectedItems.forEach((item) => row.append(renderTextElement("td", getter(item))));
+    selectedItems.forEach((item) => {
+      const value = getter(item);
+      const cell = document.createElement("td");
+      if (value && typeof value === "object") cell.append(value);
+      else cell.textContent = value ?? "";
+      row.append(cell);
+    });
     body.append(row);
   });
   table.append(head, body);

@@ -1481,7 +1481,62 @@ function assertReportCompatibility(detailed, compact) {
   }
 }
 
-module.exports = { assertReportCompatibility };
+function assertProjectionConsumers(items) {
+  context.projectionItems = items;
+  const state = read("state"), oldLanguage = state.language;
+  const oldSelected = read("[...selectedMaterialEntities.entries()]");
+  const oldIds = [...state.selected];
+  try {
+    state.language = "en";
+    const pc = items[0], pa = items[1], partial = items[2];
+    assert.ok(read('formatCanonicalProperty(projectionItems[0], "tensile_strength", "tensile", " MPa")').includes("65 MPa"));
+    assert.ok(read('formatCanonicalProperty(projectionItems[2], "tensile_strength", "tensile", " MPa")').includes("Partially verified"));
+    read('renderCards(projectionItems)');
+    const cards = node("#materialsGrid").innerHTML;
+    assert.ok(cards.includes("65 MPa"));assert.ok(cards.includes("Multiple conditions"));
+    assert.ok(cards.includes("Partially verified"));
+    read('state.selected.clear(); selectedMaterialEntities.clear(); projectionItems.forEach(item => {state.selected.add(item.id); selectedMaterialEntities.set(item.id,item);}); renderCompare()');
+    const compared = node("#compareTableWrap").innerHTML;
+    for(const value of ["65 MPa","85 MPa","50 MPa","dry","conditioned","Partially verified","TEST ONLY property"])
+      assert.ok(compared.includes(value),value+' must reach actual compare renderer');
+    assert.equal(pc.propertyProjections.continuous_use_temperature.queryKey,null);
+    assert.equal(partial.tensile,null,'partial display must not manufacture a numeric alias');
+    assert.equal(pa.propertyProjections.tensile_strength.queryKey,null);
+    const missing = read('renderCanonicalCompareCell(projectionItems[0], "continuous_use_temperature", "maxTemp", " deg C")').innerHTML;
+    assert.ok(missing.includes("Not specified"));
+    assert.ok(!missing.includes("260"));
+    console.log('FA-003 actual card/compare DOM consumers: single/partial/multiple/missing PASS.');
+  } finally {
+    state.language=oldLanguage; state.selected.clear();for(const id of oldIds)state.selected.add(id);
+    context.savedProjectionEntities=oldSelected;
+    read('selectedMaterialEntities.clear(); savedProjectionEntities.forEach(([id,item]) => selectedMaterialEntities.set(id,item))');
+    delete context.savedProjectionEntities;delete context.projectionItems;
+  }
+}
+// Read actual app renderers for isolated real-pilot and adversarial contracts.
+function snapshotProjectionConsumers(items) {
+  const state=read("state"), language=state.language, output={};
+  try {
+    state.language="en";
+    for(const item of items) {
+      context.projectionSnapshotItem=item;
+      output[item.id]={};
+      for(const [key,field] of [["density","density"],["tensile_strength","tensile"],
+        ["hdt","hdt"],["continuous_use_temperature","maxTemp"]]) {
+        context.projectionSnapshotKey=key;context.projectionSnapshotField=field;
+        output[item.id][key]={
+          summary:read('formatCanonicalProperty(projectionSnapshotItem,projectionSnapshotKey,projectionSnapshotField)'),
+          compareHtml:read('renderCanonicalCompareCell(projectionSnapshotItem,projectionSnapshotKey,projectionSnapshotField)').innerHTML
+        };
+      }
+    }
+    return output;
+  } finally {
+    state.language=language;
+    for(const key of ["projectionSnapshotItem","projectionSnapshotKey","projectionSnapshotField"])delete context[key];
+  }
+}
+module.exports = { assertReportCompatibility, assertProjectionConsumers, snapshotProjectionConsumers };
 if (require.main === module) {
   let completed = false;
   let watchdog;

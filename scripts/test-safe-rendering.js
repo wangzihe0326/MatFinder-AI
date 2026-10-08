@@ -48,11 +48,13 @@ function inputMaterial(commercialGrade) {
 
 function prepareRuntime(runtime) {
   // Copy reviewed runtime sources only, using working-tree bytes for the candidate.
-  // No DB, .env, untracked files, handoff carrier, or production material dataset.
+  // Include explicitly bound policy additions before staging; no DB, .env,
+  // arbitrary untracked files, handoff carrier, or production material dataset.
   const tracked = command("git", ["-c", `safe.directory=${root.replaceAll("\\", "/")}`, "ls-files", "-z"]).split("\0");
   const scripts = new Set(["scripts/migrate.py", "scripts/real_material_importer.py",
     "scripts/material_import_schema.py", "scripts/build-catalog-stats.js"]);
-  for (const file of tracked.filter((file) => file !== "PROJECT_STATE.md" &&
+  const sources = [...new Set([...tracked, ...require("../catalog-policy").POLICY_MANIFEST])];
+  for (const file of sources.filter((file) => file !== "PROJECT_STATE.md" &&
     (/^[^/]+\.js$/.test(file) || /^public\/.*\.(js|html|css|svg)$/.test(file) ||
       file === "database-schema-contract.json" || scripts.has(file)))) {
     const target = path.join(runtime, file);
@@ -432,6 +434,7 @@ async function browserChecks(browser, origin) {
     // Formatted values are output-boundary fixtures, not importer numeric claims.
     await page.evaluate((text) => {
       const item = { ...materials[0], tg: text, tm: text, density: text, tensile: text, continuous_use_temperature: text };
+      delete item.propertyProjections; // Retain the original legacy output-boundary coverage.
       renderCards([item]);
       selectedMaterialEntities.set(item.id, item); state.selected = new Set([item.id]); renderCompare();
     }, hostile);
@@ -440,6 +443,73 @@ async function browserChecks(browser, origin) {
       [`${hostile} deg C`, `${hostile} MPa`, `${hostile} g/cm3`, `${hostile} deg C / ${hostile} deg C`]);
     await contains(page, "#compareTableWrap", hostile);
     await noExecution(page, "formatted metric text");
+    // Canonical projection output must independently preserve hostile context
+    // and provenance as text; legacy scalar injection must not mask this path.
+    await page.evaluate((text) => {
+      const item=structuredClone(materials[0]);
+      for(const projection of Object.values(item.propertyProjections)) {
+        projection.standard=text;projection.condition=text;
+        for(const entry of projection.entries) {
+          entry.standard=text;entry.condition=text;
+          for(const source of entry.supportingClaimRefs) {
+            source.sourceTitle=text;source.sourceUrl="javascript:document.body.dataset.auditXss='executed'";
+          }
+        }
+      }
+      renderCards([item]);
+      selectedMaterialEntities.set(item.id,item);state.selected=new Set([item.id]);renderCompare();
+    },hostile);
+    await contains(page,"#materialsGrid .metrics",hostile);
+    await contains(page,"#materialsGrid .metrics","65 MPa");
+    await contains(page,"#compareTableWrap",hostile);
+    await contains(page,"#compareTableWrap","65 MPa");
+    assert.equal(await page.locator('#compareTableWrap a[href^="javascript:"]').count(),0);
+    await noExecution(page,"canonical projection context/source text");
+    pass("FA-003: canonical measurement/context/provenance rendering inert in real Chromium");
+    // FA-003 R1: actual Chrome rendering of full counts versus bounded references.
+    // Policy creates metadata from complete TEST ONLY collections; the browser does not invent counts.
+    const projectionPolicy = require("../property-projection-policy");
+    for (const [count, oneSource] of [[0,false],[1,false],[8,false],[9,false],[12,false],[17,false],[12,true]]) {
+      const rows=Array.from({length:count},(_,i)=>({material_id:items[0].id,property_key:"tensile_strength",
+        id:i+1,position:i,value_numeric:65,unit:"MPa",value_type:"typical",test_standard:"TEST STANDARD",
+        test_condition:"TEST CONDITION",verification_status:"verified",confidence_level:"medium",conflict_status:"none",
+        source_type:"manufacturer",source_title:hostile,source_url:`https://example.invalid/r1/${i}`,
+        source_id:oneSource?901:null,resolved_source_id:oneSource?901:null}));
+      const projection=projectionPolicy.projectProperty(items[0].id,"tensile_strength",rows);
+      for (const language of ["en","zh"]) {
+        await page.evaluate(({item,projection,language})=>{
+          const candidate=structuredClone(item);candidate.propertyProjections={tensile_strength:projection};
+          selectedMaterialEntities.set(candidate.id,candidate);state.selected=new Set([candidate.id]);
+          state.language=language;renderCompare();setRoute("compare");
+        },{item:items[0],projection,language});
+        const shown=Math.min(count,8), remaining=count-shown, sources=oneSource?1:count;
+        await contains(page,"#compareTableWrap", count ? (language==="en"
+          ? `Source records: ${sources}; evidence claims: ${count}; distinct reported values: 1.`
+          : `来源记录：${sources}；证据条目：${count}；不同报告值：1。`) : (language==="en"
+          ? "0 source references shown" : "已显示 0 项来源引用"));
+        if(count) {
+          await contains(page,"#compareTableWrap",language==="en"
+            ? `Source references: ${shown} / ${count} shown; ${remaining} more in details.`
+            : `来源引用：已显示 ${shown} / 共 ${count}；另有 ${remaining} 项可在详情查看。`);
+          await contains(page,"#compareTableWrap",hostile);
+        }
+        assert.equal(await page.locator("#compareTableWrap a").count(),shown);
+        await noExecution(page,`R1 ${count} reference count ${language}`);
+      }
+    }
+    await page.evaluate(item=>{
+      selectedMaterialEntities.set(item.id,item);state.selected.add(item.id);renderCompare();
+    },items[1]);
+    for(const width of [1280,390]) {
+      await page.setViewportSize({width,height:720});
+      const columns=await page.locator("#compareTableWrap tbody tr").first().locator("td")
+        .evaluateAll(cells=>cells.map(el=>el.getBoundingClientRect().width));
+      assert.equal(columns.length,2);
+      assert.ok(Math.max(...columns)/Math.min(...columns)<1.1,
+        "Long provenance must not squeeze the adjacent material column: "+JSON.stringify(columns));
+    }
+    await page.setViewportSize({width:1280,height:720});
+    pass("FA-003 R1: EN/ZH 0/1/8/9/12/17 full/preview/remaining counts; 12 claims versus one source; hostile text inert in Chrome");
     assert.deepEqual(errors, [], "Browser JavaScript errors");
     assert.deepEqual(unexpected, [], "Unexpected requests must fail the test, even when blocked");
     pass("C: formatted values inert; no unexpected DOM handlers, JavaScript errors or network requests");

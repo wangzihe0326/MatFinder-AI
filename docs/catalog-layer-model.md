@@ -83,3 +83,25 @@ Trusted statistics count:
 Audit statistics separately count legacy material rows, legacy property rows,
 generated rows, quarantined evidence rows, quarantined material rows, and
 out-of-scope rows.
+
+## Evidence-derived catalog values (FA-003)
+
+Public list/detail responses add `propertyProjections` for four properties. See
+[the evidence model](material-evidence-model.md#canonical-property-projection-fa-003)
+for eligibility, ambiguity, provenance and compatibility rules. Cards and compare
+use this server representation; they do not choose raw claims independently.
+
+`minTensileMpa` and `minTempC` use verified projection keys in SQL before page
+selection. Only PASS enters an active threshold result; FAIL and UNKNOWN do not.
+An omitted threshold does not exclude a material because that property is
+missing. Density sorts ascending; strength and continuous-use temperature sort
+descending. Missing/conflicting/ambiguous keys sort last, then lowercase name
+and material ID keep pagination deterministic. Correlated aggregates preserve
+one material per row; count and self-excluding facets use the same predicates.
+
+Existing performance-facet heuristics, public boundary and runtime quality
+remain unchanged. In particular, the heat-resistant facet's legacy temperature
+heuristic is independent of the explicit continuous-use threshold. This change
+does not fix the separately tracked normalized-source stats/admin discrepancy
+(FA-004) or all legacy thermal consumers (FA-005). It does not write scalar
+columns, migrate schema, change importer behavior, or change recommendation rules.

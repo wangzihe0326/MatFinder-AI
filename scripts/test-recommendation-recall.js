@@ -558,7 +558,8 @@ async function fullDetailedOracleChecks(databasePath) {
         const ids = repository.database.prepare("SELECT material_id FROM materials ORDER BY material_id").all()
           .map((row) => row.material_id);
         assert.equal(ids.length, 201);
-        detailed = ids.map((id) => repository.getMaterialById(id));
+        // FA-003 public aliases now use verified keys; recommendation-v3 retains its legacy detailed oracle.
+        detailed = ids.map((id) => repository.getMaterialById(id, { audit: true }));
         assert.ok(detailed.every(Boolean));
       } catch (error) { throw rememberFailure(error); }
       finally { repository.close(); }
@@ -734,7 +735,8 @@ function reportCompatibilityChecks(databasePath) {
   const repository = new MaterialRepository(databasePath);
   try {
     const compact = repository.getRecommendationCandidates();
-    const detailed = compact.map((item) => repository.getMaterialById(item.id));
+    // Preserve the pre-FA-003 report oracle; public projection aliases intentionally have a different contract.
+    const detailed = compact.map((item) => repository.getMaterialById(item.id, { audit: true }));
     const { assertReportCompatibility } = require("./test-catalog-frontend");
     const html = assertReportCompatibility(detailed, compact);
     assert.ok(html["en:REPORT-LIST"].includes("Fixture restriction &lt;limited&gt;."));
@@ -795,7 +797,8 @@ async function boundaryAndParityChecks(databasePath) {
   try {
     const compact = repository.getRecommendationCandidates();
     assert.deepEqual(compact.map((item) => item.id), expectedIds);
-    const full = expectedIds.map((id) => repository.getMaterialById(id));
+    // Candidate fields remain legacy-compatible; the public universe is asserted independently above.
+    const full = expectedIds.map((id) => repository.getMaterialById(id, { audit: true }));
     const byId = new Map(compact.map((item) => [item.id, item]));
     for (const id of ["H-HIGH", "LEGACY", "MULTI"]) assert.equal(byId.get(id).data_quality.level, "high");
     assert.equal(byId.get("M-MEDIUM").data_quality.level, "medium");

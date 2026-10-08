@@ -155,7 +155,7 @@ async function main() {
       verifiedPropertyDataPoints: 6, materialsAwaitingVerification: 5 });
     assert.equal(artifact.policyDigest, await policyDigest());
     assert.equal(HASH_BUFFER_BYTES, 65536);
-    assert.deepEqual(POLICY_MANIFEST, ["material-quality.js", "evidence-model.js", "material-repository.js"]);
+    assert.deepEqual(POLICY_MANIFEST, ["material-quality.js", "evidence-model.js", "material-repository.js", "property-projection-policy.js"]);
     const repository = await runtime(file);
     try {
       const page = repository.listMaterials({ limit: 30 });
@@ -186,7 +186,7 @@ async function main() {
       assert.deepEqual(after.repository, before.repository, "Stats route must not scan, hydrate or evaluate");
       assert.equal(before.repository.hydratedCalls, 0, "Startup never evaluates materials");
       assert.equal(before.repository.evaluatorCalls, 0);
-      assert.equal(before.repository.fileHashReads, 4, "One DB hash and the three semantic policy files at startup");
+      assert.equal(before.repository.fileHashReads, 5, "One DB hash and the four semantic policy files at startup");
       const page = (await request(server, "/api/materials?limit=30")).body;
       const evaluated = await diagnostics(server.child);
       assert.ok(evaluated.repository.evaluatorCalls > before.repository.evaluatorCalls,
@@ -342,13 +342,13 @@ async function boundedCases(directory) {
   try {
     const hydrate = repository._hydrateDetailedRows;
     const sizes = [];
-    repository._hydrateDetailedRows = function (rows, read) {
+    repository._hydrateDetailedRows = function (rows, read, withProjection) {
       // The reused hydration method itself chunks pages at 30; inspect its reader IDs.
       assert.equal(typeof read, "function");
       return hydrate.call(this, rows, (sql, params, tag) => {
         if (tag === "property_evidence") sizes.push(params.length);
         return read(sql, params, tag);
-      });
+      }, withProjection);
     };
     for (const limit of [30, 31, 48, 49, 200]) {
       sizes.length = 0;
@@ -381,8 +381,12 @@ async function policyCases(directory) {
   const digest = await policyDigest(policyRoot);
   fs.writeFileSync(path.join(policyRoot, "unrelated.txt"), "not a policy input");
   assert.equal(await policyDigest(policyRoot), digest);
-  fs.appendFileSync(path.join(policyRoot, "evidence-model.js"), "\n// changed bytes\n");
-  assert.notEqual(await policyDigest(policyRoot), digest);
+  for (const name of ["evidence-model.js", "property-projection-policy.js"]) {
+    const source=path.join(policyRoot,name), original=fs.readFileSync(source);
+    fs.appendFileSync(source,"\n// changed bytes\n");
+    assert.notEqual(await policyDigest(policyRoot),digest,name+" is a semantic digest input");
+    fs.writeFileSync(source,original);
+  }
   const file = path.join(directory, "overflow.db"); createSchema(file);
   const database = new DatabaseSync(file);
   try {
@@ -658,6 +662,13 @@ async function executedPolicyCases(file, directory) {
     const result = spawnSync(process.execPath, ["-e", code], { cwd: isolated, encoding: "utf8", windowsHide: true, timeout: 20000 });
     assert.equal(result.status, 0, result.stderr); return result.stdout.trim();
   };
+  const projectionFile=path.join(isolated,"property-projection-policy.js");
+  const projectionSource=fs.readFileSync(projectionFile);
+  child(`const assert=require('node:assert/strict'),fs=require('node:fs');
+    const bound=require('./catalog-policy').loadCanonicalPolicy();
+    fs.appendFileSync(${JSON.stringify(projectionFile)},'\\n// changed projection policy\\n');
+    assert.throws(()=>bound.assertCurrentSources(),/no longer matches/);`);
+  fs.writeFileSync(projectionFile,projectionSource);
   const runtimeResult = () => JSON.parse(child(`(async()=>{
     const {MaterialRepository}=require('./catalog-policy').loadCanonicalPolicy().repository;
     const r=new MaterialRepository(${JSON.stringify(target)});await r.initializeCatalogStats();
