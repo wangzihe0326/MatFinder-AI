@@ -845,24 +845,29 @@ function frontendCardChecks() {
     materialName: (item) => item.name,
     materialUses: () => [],
     materialTags: () => [],
-    escapeHtml: (value) => value,
     dataQualityMeta: () => ({ tone: "high", label: "Verified" }),
     showDetail() {}, toggleCompare() {}
   };
   const source = [
+    // Use the same escaping dependencies as the real browser renderer.
+    sliceFunction("escapeHtml", "parseExternalSourceUrl"),
+    sliceFunction("escapeAttribute", "getSearchText"),
     sliceFunction("formatValue", "escapeHtml"),
     sliceFunction("materialSummary", "localizeRecommendationReason"),
     sliceFunction("formatQualityCheckedValue", "getRecommendationForMaterial"),
     sliceFunction("renderCards", "resetMaterialsPage")
   ].join("\n");
   const renderCards = vm.runInNewContext(`${source}\nrenderCards`, context);
+  const specialId = "N-HIGH '\"<&>`";
   renderCards([
-    { id: "N-HIGH", name: "N High", category: "Numeric", maxTemp: 220,
+    { id: specialId, name: "N High", category: "Numeric", maxTemp: 220,
       continuous_use_temperature: 200, tags: [], data_quality: { level: "high" } },
     { id: "N-MISSING", name: "N Missing", category: "Numeric", maxTemp: 180,
       continuous_use_temperature: null, tags: [], data_quality: { level: "high" } }
   ]);
   assert.equal(cards.length, 2);
+  assert.equal((cards[0].innerHTML.match(/data-id="N-HIGH &#039;&quot;&lt;&amp;&gt;&#096;"/g) || []).length, 2,
+    "Detail and compare IDs must use the real attribute escaping contract");
   assert.ok(cards[0].innerHTML.includes("<span>Continuous use</span><strong>200 deg C</strong>"));
   assert.ok(!cards[0].innerHTML.includes("<strong>220 deg C</strong>"));
   assert.ok(cards[0].innerHTML.includes("200 deg C"));

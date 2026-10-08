@@ -551,9 +551,10 @@ async function main() {
   assert.equal(pkg.scripts["test:schema-build"], "node scripts/test-schema-build.js");
   assert.match(pkg.scripts["test:acceptance"], /test:schema-integration\s*&&\s*npm run test:schema-build\s*&&/);
   // No host npm installation: the current application uses only built-ins.
-  // A future dependency requires a reviewed host mapping, rather than bypassing it.
+  // A future runtime dependency requires a reviewed host mapping, rather than bypassing it.
   assert.deepEqual(pkg.dependencies || {}, {});
-  assert.deepEqual(pkg.devDependencies || {}, {});
+  // SEC-01 browser tests use this pinned dev dependency; Docker omits it.
+  assert.deepEqual(pkg.devDependencies || {}, { playwright: "1.63.0" });
   const policy = JSON.parse(fs.readFileSync(path.join(root, "scripts/schema-authority-policy.json"), "utf8"));
   assert.equal(policy.excluded.filter(file => file === "scripts/test-schema-build.js").length, 1);
   assert.ok(!policy.productionFiles.includes("scripts/test-schema-build.js"));
