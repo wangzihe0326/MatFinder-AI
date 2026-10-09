@@ -63,7 +63,15 @@ assert.equal(
   partitionSearchResults(audited).referenceOrLegacyRecords.length,
   audited.length
 );
-assert.equal(repository.getMetrics().propertyEvidenceRowsRead, 0);
+// FA-004 A-A deliberately hydrates only SQL-selected audit pages.
+assert.ok(repository.getMetrics().propertyEvidenceRowsRead > 0,
+  "Audit quality must actually read canonical evidence");
+assert.ok(repository.getMetrics().maximumRowsInSingleQuery <= 1000,
+  "Audit hydration must retain bounded reads");
+for (const material of audited) {
+  assert.equal(material.audit_state.access, "audit_only");
+  assert.equal(material.audit_state.hold, "quarantined");
+}
 repository.close();
 repository = null;
 

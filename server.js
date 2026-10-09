@@ -4,6 +4,10 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 require("./catalog-policy").loadCanonicalPolicy();
 const {
+  AdminCapacityContext,
+  AdminCapacityError,
+  AdminRequestCancelledError,
+  jsonEncodedByteLength,
   DEFAULT_PAGE_SIZE,
   DOMAIN_IDS,
   MAX_PAGE_SIZE,
@@ -198,7 +202,11 @@ function parsePublicCatalogQuery(searchParams) {
   };
 }
 
+let activeAdminTicket = null;
+
 const server = http.createServer(async (request, response) => {
+  let adminTicket;
+  let isAdminRoute = false;
   try {
     const requestUrl = new URL(request.url, `http://localhost:${port}`);
     const requestPath = requestUrl.pathname;
@@ -249,6 +257,7 @@ const server = http.createServer(async (request, response) => {
       requestPath === "/api/admin/audit-summary" ||
       (auditMode && (requestPath === "/api/materials" || requestPath.startsWith("/api/materials/")))
     );
+    isAdminRoute = auditRoute;
     const identity = apiProtection.identity(request);
     if (auditRoute) {
       response.setHeader("Cache-Control", "no-store");
@@ -263,6 +272,7 @@ const server = http.createServer(async (request, response) => {
         sendRateLimit(response, access.retryAfterSeconds);
         return;
       }
+      adminTicket = acquireAdminTicket(request, response);
     } else if (request.method === "GET" && requestPath.startsWith("/api/")) {
       const retryAfterSeconds = apiProtection.publicGet(identity, publicApiWeight(requestPath));
       if (retryAfterSeconds) {
@@ -275,14 +285,23 @@ const server = http.createServer(async (request, response) => {
       response.setHeader("Cache-Control", "no-store");
       const result = repository.listMaterials(auditMode ? {
         audit: true,
+        adminCapacity: adminTicket.context,
         query: String(requestUrl.searchParams.get("q") || "").trim(),
         limit: requestUrl.searchParams.get("limit"),
         offset: requestUrl.searchParams.get("offset")
       } : parsePublicCatalogQuery(requestUrl.searchParams));
       response.setHeader("X-Total-Count", String(result.total));
-      sendJson(response, 200, {
-        ...result,
-        items: result.items.map(toCompactMaterial)
+      if (auditMode) {
+        const context = adminTicket.context;
+        context.checkpoint();
+        const payload = { ...result, items: result.items.map((material) => {
+          context.checkpoint();
+          return toAuditMaterial(material, true);
+        }) };
+        context.checkpoint();
+        sendAdminJson(response, 200, payload, adminTicket);
+      } else sendJson(response, 200, {
+        ...result, items: result.items.map((material) => toCompactMaterial(material))
       });
       return;
     }
@@ -305,7 +324,10 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && requestPath === "/api/admin/audit-summary") {
-      sendJson(response, 200, repository.getAuditStats());
+      adminTicket.context.checkpoint();
+      const stats = repository.getAuditStats({ adminCapacity: adminTicket.context });
+      adminTicket.context.checkpoint();
+      sendAdminJson(response, 200, stats, adminTicket);
       return;
     }
 
@@ -334,13 +356,19 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "GET" && requestPath.startsWith("/api/materials/")) {
       const materialId = decodeURIComponent(requestPath.slice("/api/materials/".length));
       const material = repository.getMaterialById(materialId, {
-        audit: auditMode
+        audit: auditMode,
+        ...(auditMode ? { adminCapacity: adminTicket.context } : {})
       });
       if (!material) {
-        sendJson(response, 404, { error: "Material not found" });
+        sendJson(response, 404, { error: "Material not found" }, adminTicket);
         return;
       }
-      sendJson(response, 200, material);
+      if (auditMode) {
+        adminTicket.context.checkpoint();
+        const payload = toAuditMaterial(material);
+        adminTicket.context.checkpoint();
+        sendAdminJson(response, 200, payload, adminTicket);
+      } else sendJson(response, 200, material);
       return;
     }
 
@@ -361,7 +389,27 @@ const server = http.createServer(async (request, response) => {
 
     serveStatic(request, response);
   } catch (error) {
-    if (response.destroyed || response.writableEnded) return;
+    if (isAdminRoute && response.headersSent) {
+      response.destroy();
+      adminTicket?.release();
+      return;
+    }
+    if (response.destroyed || response.writableEnded) {
+      adminTicket?.release();
+      return;
+    }
+    if (isAdminRoute && error instanceof AdminRequestCancelledError) {
+      response.destroy();
+      return;
+    }
+    if (isAdminRoute && error instanceof AdminCapacityError) {
+      response.removeHeader("X-Total-Count");
+      response.setHeader("Cache-Control", "no-store");
+      sendAdminFailure(response, 503, {
+        error: "Admin request exceeds capacity", code: "admin_capacity_exceeded"
+      }, adminTicket);
+      return;
+    }
     if (error instanceof CatalogQueryError) {
       response.setHeader("Cache-Control", "no-store");
       sendJson(response, 400, {
@@ -380,9 +428,140 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, error.status, { error: error.message });
       return;
     }
-    sendJson(response, 500, { error: "Server error", detail: error.message });
+    const failure = { error: "Server error", detail: error.message };
+    if (isAdminRoute) sendAdminFailure(response, 500, failure, adminTicket);
+    else sendJson(response, 500, failure);
   }
 });
+
+// Admin-only admission. Queue zero means no application waiter; it cannot
+// prevent sockets/proxies from queuing before this synchronous callback runs.
+function acquireAdminTicket(request, response) {
+  if (activeAdminTicket) throw new AdminCapacityError("activeAdminRequest");
+  const context = new AdminCapacityContext({
+    isCancelled: () => request.aborted || response.destroyed
+  });
+  const ticket = { context, accountedBytes: 0, released: false, outputCleanup: null };
+  const release = () => {
+    if (ticket.released) return;
+    ticket.released = true;
+    ticket.accountedBytes = 0;
+    ticket.outputCleanup?.();
+    ticket.outputCleanup = null;
+    if (activeAdminTicket === ticket) activeAdminTicket = null;
+    response.removeListener("finish", release);
+    response.removeListener("close", release);
+    response.removeListener("error", fail);
+    request.removeListener("aborted", cancel);
+  };
+  const fail = () => { response.destroy(); release(); };
+  ticket.release = release;
+  const cancel = () => {
+    // An aborted request cannot interrupt an executing synchronous SQL step.
+    // destroy schedules response close; no next request may enter before cleanup.
+    response.destroy();
+  };
+  activeAdminTicket = ticket;
+  response.once("finish", release);
+  response.once("close", release);
+  response.once("error", fail);
+  request.once("aborted", cancel);
+  try { context.checkpoint(); } catch (error) { release(); throw error; }
+  return ticket;
+}
+
+function sendAdminJson(response, status, payload, ticket) {
+  const context = ticket.context;
+  context.checkpoint();
+  // Count before allocating the complete JSON string or response Buffer. This
+  // is encoded payload accounting, not an assertion about V8/native heap size.
+  const responseBytes = jsonEncodedByteLength(payload);
+  context.setResponseBytes(responseBytes);
+  const pageBytes = context.metrics.pageObjectBytes || 0;
+  // Conservative payload reservation: canonical UTF-16 proxy (2x), DTO proxy
+  // (2x), JSON UTF-16 (2x), and selected body/compression workspace (2x).
+  // Object headers, SQLite/native allocation and kernel socket memory are not
+  // proved by this accounting; process acceptance is measured independently.
+  const accountedBytes = pageBytes * 2 + responseBytes * 6;
+  context.check("inflightAccountedBytes", accountedBytes);
+  ticket.accountedBytes = accountedBytes;
+  context.metrics.inflightAccountedBytes = accountedBytes;
+  context.checkpoint();
+  const json = JSON.stringify(payload);
+  if (Buffer.byteLength(json) !== responseBytes) throw new Error("Admin JSON byte count mismatch");
+  context.checkpoint();
+  const useGzip = response.acceptsGzip && responseBytes > 1024;
+  const body = useGzip ? zlib.gzipSync(json, { level: zlib.constants.Z_BEST_SPEED }) : Buffer.from(json);
+  // gzip cannot reduce the admitted uncompressed response size. Recheck actual
+  // body bytes against its conservative reservation before success headers.
+  context.check("inflightAccountedBytes", pageBytes * 2 + responseBytes * 4 + body.length * 2);
+  context.checkpoint();
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  const vary = String(response.getHeader("Vary") || "");
+  response.setHeader("Vary", vary ? `${vary}, Accept-Encoding` : "Accept-Encoding");
+  if (useGzip) response.setHeader("Content-Encoding", "gzip");
+  response.setHeader("Content-Length", String(body.length));
+  response.writeHead(status);
+  writeAdminBody(response, body, ticket);
+  // finish/close owns the ticket and its reservation, including blocked writers.
+}
+
+// Separate provisional Admin write-idle contract: 4s without a successful
+// transport write callback. It starts only after headers/body preparation.
+// A callback observes Node handing bytes to its transport, NOT remote receipt.
+// This timer cannot preempt synchronous JS/SQL or eliminate kernel/proxy queues.
+function writeAdminBody(response, body, ticket) {
+  const idleMs = 4000;
+  const chunkBytes = 64 * 1024;
+  let retainedBody = body;
+  let offset = 0;
+  let timer;
+  let next;
+  const cleanup = () => {
+    clearTimeout(timer);
+    clearImmediate(next);
+    retainedBody = null;
+  };
+  ticket.outputCleanup = cleanup;
+  const resetIdle = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      response.destroy();
+      ticket.release();
+    }, idleMs);
+    timer.unref();
+  };
+  const writeNext = () => {
+    if (ticket.released || response.destroyed || !retainedBody) return;
+    try {
+      if (offset === retainedBody.length) {
+        response.end();
+        return;
+      }
+      const chunk = retainedBody.subarray(offset, Math.min(offset + chunkBytes, retainedBody.length));
+      offset += chunk.length;
+      response.write(chunk, error => {
+        if (error) { response.destroy(); ticket.release(); return; }
+        if (ticket.released || response.destroyed) return;
+        resetIdle(); // never reset merely because write() accepted an enqueue
+        if (offset === retainedBody.length) writeNext();
+        else next = setImmediate(writeNext);
+      });
+    } catch {
+      response.destroy();
+      ticket.release();
+    }
+  };
+  resetIdle();
+  writeNext();
+}
+
+function sendAdminFailure(response, status, payload, ticket) {
+  // Error serialization/transport can itself fail. An Admin failure must never
+  // strand its ticket or try to replace a response after headers were sent.
+  try { sendJson(response, status, payload, ticket); }
+  catch { response.destroy(); ticket?.release(); }
+}
 
 function publicApiWeight(requestPath) {
   if (requestPath === "/api/catalog-stats" || requestPath === "/api/recommendation-candidates") return 5;
@@ -464,6 +643,16 @@ function loadEnvFile(filePath) {
     if (!match || process.env[match[1]]) return;
     process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
   });
+}
+
+// Only authenticated audit routes call this serializer. State is repository-derived.
+function toAuditMaterial(material, compact = false) {
+  const result = compact ? toCompactMaterial(material) : { ...material };
+  if (material.audit_state) {
+    const { access, hold, reasons } = material.audit_state;
+    result.audit_state = { access, hold, reasons: [...reasons] };
+  }
+  return result;
 }
 
 function toCompactMaterial(material) {
@@ -897,7 +1086,7 @@ function serveFile(filePath, response) {
   fs.createReadStream(filePath).pipe(response);
 }
 
-function sendJson(response, status, payload) {
+function sendJson(response, status, payload, adminTicket) {
   const json = JSON.stringify(payload);
   const body = response.acceptsGzip && Buffer.byteLength(json) > 1024
     ? zlib.gzipSync(json, { level: zlib.constants.Z_BEST_SPEED })
@@ -910,5 +1099,6 @@ function sendJson(response, status, payload) {
   }
   response.setHeader("Content-Length", String(body.length));
   response.writeHead(status);
-  response.end(body);
+  if (adminTicket) writeAdminBody(response, body, adminTicket);
+  else response.end(body);
 }
