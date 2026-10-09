@@ -128,3 +128,100 @@ recommendation-v3 semantics remain separate. Detail retains all original
 normalized evidence and source records. Projection previews cap context groups
 at 12 and values/source refs at 8 per group, include full counts, mark incomplete
 previews, and link to the existing complete evidence detail.
+
+## Scoped source qualification (FA-004B)
+
+The approved R-A / I-A / A-A / T1-A / T2-A / S-A decisions add source
+qualification for Stats points and audit diagnostics. They do not replace
+canonical quality, global hydration, PUBLIC_BOUNDARY, FA-003 numeric projection,
+recommendation semantics, schema or importer.
+
+Ordinary source metadata resolves field by field, normalized first, with inline
+fallback only for a normalized NULL. Empty strings do not trigger fallback,
+including after trimming. A non-NULL source_id with no registry row is an
+invalid relation: complete inline text cannot rescue Stats/Audit qualification.
+Verification/confidence remain claim-owned; no source-level verification is
+invented. Raw and resolved generated sources and claim quarantine remain
+excluded from trusted qualification.
+
+Trusted types remain manufacturer, official_datasheet, academic and distributor.
+A title must be nonempty after existing text cleanup. URL qualification uses the
+raw string: HTTP(S) scheme, nonempty authority starting with a character other
+than /, ? or #, and no ASCII whitespace/control character (U+0000–U+0020 or
+U+007F). Surrounding whitespace is not repaired; https://? is invalid. This
+limited syntax check proves neither DNS, certificates, reachability nor
+document authenticity.
+
+Scoped SQL reads retrieve relevant text as BLOB bytes and decode UTF-8 without
+dropping embedded NUL; invalid UTF-8 fails closed. A driver text boundary cannot
+silently truncate a hostile raw URL before qualification. Stats and Audit share
+one JS qualification rule set, not separate approximate SQL URL/identity rules.
+SQL still uses material-ID-correlated indexed reads and source-primary-key
+LEFT JOINs. For source type/title/URL/date, meaningful nonempty inline and
+normalized disagreement adds source_metadata_conflict without changing
+precedence or point qualification. An inline unknown type is not meaningful
+conflicting metadata. Identity mismatch and invalid references remain separate
+blocking conditions.
+
+### Material-specific source support
+
+Source reuse is valid storage behavior, not proof that a document supports
+every referencing grade. The baseline is the current active
+real_material_identities triple plus identity evidence belonging to that
+material. A qualified identity anchor needs valid source metadata and a
+verified or partially verified claim status. A canonical Medium result with
+only an unverified identity anchor can therefore coexist with zero scoped
+Stats points; canonical quality is not changed to hide this distinction.
+
+Qualification compares raw claim manufacturer/grade/family with active
+identity, and independently checks any non-NULL registry context. Registry
+context is not coalesced over the claim and then treated as proof of a match.
+Explicit disagreement produces source_identity_context_mismatch; absent
+support or ambiguous equivalence produces unresolved_source_identity_context.
+A valid second identity anchor does not erase an invalid or conflicting
+identity binding. Each property needs its own applicable source relationship;
+another material's identity source cannot supply it.
+
+Identical nonempty raw strings, including identical Unicode spellings, are
+unambiguously equal. For differing ASCII strings, comparison implements the
+existing Python identity_key subset: ASCII case folding and collapse of
+Python-recognized ASCII whitespace. Differing strings containing non-ASCII
+characters are held for review because full NFKC/casefold equivalence has not
+been implemented or proved here. SQLite LOWER, fuzzy names and brand matching
+are not substitutes. Valid Unicode variants may therefore be conservatively
+rejected pending review.
+
+NULL registry context does not mean universal document coverage: material-owned
+identity proof and claim support are still required. A document whose recorded
+context names another grade is held even if a real multi-grade document might
+exist. This is unresolved support, not proof that the official document is
+false. Persisting reviewed multi-grade coverage requires a separate authorized
+data/model task.
+
+### Points, isolation and compatibility
+
+Each eligible property evidence ID contributes once within existing public and
+canonical material membership, subject to its own value, unit, applicable
+source, verified/partially verified status and High/Medium confidence. Source
+IDs, URLs, property keys and ownership references are not counting units.
+Distinct IDs for duplicate rows continue to count as records; distinct
+conditions can contribute separately. No semantic deduplication is introduced.
+
+Admin uses canonical quality after bounded page hydration and adds the
+read-only [audit state](catalog-layer-model.md#admin-quality-and-derived-audit-state).
+Certification quarantine remains an audit signal with existing certification/AI
+rules; it does not become a blanket property-point veto. Stats unit/confidence
+requirements are not added to canonical quality. Partially verified numeric
+evidence still cannot supply a FA-003 filter/sort key.
+
+T2-A preserves artifact v1, generation/digest checks and its awaiting partition,
+including the documented canonical-quarantine discrepancy. Changing this
+partition requires a separate versioned contract.
+
+**GLOBAL SOURCE RELATION CONSISTENCY: NOT FULLY RESOLVED UNDER S-A**
+
+Global canonical orphan/URL behavior and shared-source identity hydration
+remain unresolved, as do applicability corrections for FA-003 and
+recommendation. Scoped negative qualification and audit warnings do not claim
+those consumers were repaired. This contract grants no production release,
+database import, schema change or later S-B implementation authority.

@@ -111,24 +111,40 @@ async function runFinalizedDatabase(directory) {
     assert.ok(afterRecall.repository.maximumRecommendationBatchSize <= 30);
 
     const beforeRepeatedReads = await requestDiagnostics(child);
+    let previousEvidenceReads = beforeRepeatedReads.repository.propertyEvidenceRowsRead;
+    let repeatedPageEvidence = 0;
+    let repeatedDetailEvidence = 0;
     for (let index = 0; index < 25; index += 1) {
       const page = await requestJson(
         `${base}/api/materials?audit=1&limit=20&offset=0&q=ABS`,
         { headers: auditHeaders(10 + (index % 10)) }
       );
       assert.ok(page.items.length <= 20);
+      assert.deepEqual(page.items.map(item => item.id), auditSearch.items.map(item => item.id));
+      const afterPage = await requestDiagnostics(child);
+      const pageEvidence = afterPage.repository.propertyEvidenceRowsRead - previousEvidenceReads;
+      assert.ok(pageEvidence > 0 && pageEvidence <= 1_000,
+        "Approved canonical audit-page hydration must read bounded evidence");
+      repeatedPageEvidence += pageEvidence;
       const repeatedDetail = await requestJson(
         `${base}/api/materials/${encodeURIComponent(auditId)}?audit=1`,
         { headers: auditHeaders(10 + (index % 10)) }
       );
       assert.equal(repeatedDetail.id, auditId);
+      const afterDetail = await requestDiagnostics(child);
+      repeatedDetailEvidence += afterDetail.repository.propertyEvidenceRowsRead -
+        afterPage.repository.propertyEvidenceRowsRead;
+      previousEvidenceReads = afterDetail.repository.propertyEvidenceRowsRead;
     }
     const afterRepeatedReads = await requestDiagnostics(child);
 
     assert.equal(afterRepeatedReads.repository.fullEvidenceTableReads, 0);
+    assert.equal(afterRepeatedReads.repository.propertyEvidenceRowsRead -
+      beforeRepeatedReads.repository.propertyEvidenceRowsRead,
+    repeatedPageEvidence + repeatedDetailEvidence,
+    "Audit-page and detail evidence budgets are accounted separately");
     assert.ok(
-      afterRepeatedReads.repository.propertyEvidenceRowsRead -
-        beforeRepeatedReads.repository.propertyEvidenceRowsRead < 1_000,
+      repeatedDetailEvidence < 1_000,
       "Repeated detail reads must remain bounded and never read the full property table."
     );
     assert.ok(
@@ -158,6 +174,7 @@ async function runFinalizedDatabase(directory) {
         afterRepeatedReadsMb: afterRepeatedReads.memory,
         propertyEvidenceRowsRead:
           afterRepeatedReads.repository.propertyEvidenceRowsRead,
+        repeatedPageEvidence, repeatedDetailEvidence,
         maximumRowsInSingleQuery:
           afterRepeatedReads.repository.maximumRowsInSingleQuery,
         fullEvidenceTableReads:

@@ -13,6 +13,188 @@ const { annotateMaterialQuality } = require("./material-quality");
 const { inspectConnection } = require("./schema-contract");
 const propertyProjection = require("./property-projection-policy");
 
+const ADMIN_CAPACITY_LIMITS = Object.freeze({
+  chunkRows: 1000, rowRawBytes: 32 * 1024, rowDecodedProxyBytes: 64 * 1024,
+  materialRows: 12000, materialRawBytes: 3 * 1048576, materialObjectBytes: 4 * 1048576,
+  pageRows: 16000, pageRawBytes: 4 * 1048576, pageObjectBytes: 8 * 1048576,
+  responseBytes: 4 * 1048576, inflightAccountedBytes: 32 * 1048576,
+  sqlAttempts: 4096, deliveredRows: 20000, logicalWork: 40000,
+  requestMs: 4000, statementCacheSize: 64
+});
+
+class AdminCapacityError extends Error {
+  constructor(budget) {
+    super("Admin request exceeds capacity");
+    this.name = "AdminCapacityError";
+    this.code = "admin_capacity_exceeded";
+    this.status = 503;
+    this.budget = budget;
+  }
+}
+
+class AdminRequestCancelledError extends Error {
+  constructor() {
+    super("Admin request cancelled");
+    this.name = "AdminRequestCancelledError";
+    this.status = 499;
+  }
+}
+
+// JSON encoding amount, not heap memory. Traverse the actual DTO without
+// allocating the complete JSON string or Buffer. No replacer/pretty printing.
+function jsonEncodedByteLength(value) {
+  const ancestors = new Set();
+  function stringBytes(text) {
+    let bytes = 2;
+    for (let index = 0; index < text.length; index++) {
+      const code = text.charCodeAt(index);
+      if (code === 34 || code === 92 || (code === 8 || code === 9 || code === 10 || code === 12 || code === 13)) bytes += 2;
+      else if (code < 32) bytes += 6;
+      else if (code < 128) bytes++;
+      else if (code < 2048) bytes += 2;
+      else if (code >= 0xd800 && code <= 0xdbff) {
+        const next = text.charCodeAt(index + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) { bytes += 4; index++; }
+        else bytes += 6;
+      } else if (code >= 0xdc00 && code <= 0xdfff) bytes += 6;
+      else bytes += 3;
+    }
+    return bytes;
+  }
+  function visit(item, key) {
+    if (item !== null && (typeof item === "object" || typeof item === "bigint") &&
+        typeof item.toJSON === "function") item = item.toJSON(key);
+    if (item instanceof Number || item instanceof String || item instanceof Boolean) item = item.valueOf();
+    if (item !== null && typeof item === "object" && Object.prototype.toString.call(item) === "[object BigInt]")
+      item = BigInt.prototype.valueOf.call(item);
+    if (item === null) return 4;
+    if (typeof item === "string") return stringBytes(item);
+    if (typeof item === "number") return Number.isFinite(item) ? JSON.stringify(item).length : 4;
+    if (typeof item === "boolean") return item ? 4 : 5;
+    if (typeof item === "bigint") throw new TypeError("Do not know how to serialize a BigInt");
+    if (typeof item !== "object") return undefined;
+    if (ancestors.has(item)) throw new TypeError("Converting circular structure to JSON");
+    ancestors.add(item);
+    let bytes = 2;
+    if (Array.isArray(item)) {
+      for (let index = 0; index < item.length; index++)
+        bytes += (index ? 1 : 0) + (visit(item[index], String(index)) ?? 4);
+    } else {
+      let count = 0;
+      for (const name of Object.keys(item)) {
+        const length = visit(item[name], name);
+        if (length !== undefined) bytes += (count++ ? 1 : 0) + stringBytes(name) + 1 + length;
+      }
+    }
+    ancestors.delete(item);
+    return bytes;
+  }
+  return visit(value, "");
+}
+
+class AdminCapacityContext {
+  constructor({ now = () => performance.now(), isCancelled = () => false } = {}) {
+    this.now = now;
+    this.isCancelled = isCancelled;
+    this.startedAt = now();
+    this.seenEvidence = new Set();
+    this.metrics = { sqlAttempts: 0, sqlFailures: 0, cleanupFailures: 0, repeatedEvidenceRows: 0, deliveredRows: 0, retainedRows: 0,
+      admittedRows: 0, rawBytes: 0, decodedBytes: 0, decodedProxyBytes: 0,
+      logicalWork: 0, uniqueEvidenceIds: 0, materialObjectBytes: 0, pageObjectBytes: 2,
+      responseBytes: 0, inflightAccountedBytes: 0, maxChunkRows: 0,
+      maxRowRawBytes: 0, maxRowDecodedProxyBytes: 0, maxMaterialRows: 0,
+      maxMaterialRawBytes: 0, streamRows: {}, sqlMs: 0, admissionMs: 0,
+      hydrationMs: 0, evaluatorMs: 0, elapsedMs: 0 };
+  }
+  check(name, value) {
+    if (!(name in ADMIN_CAPACITY_LIMITS) || !Number.isFinite(value) || value < 0)
+      throw new Error("Invalid Admin capacity accounting");
+    if (value > ADMIN_CAPACITY_LIMITS[name]) throw new AdminCapacityError(name);
+    return value;
+  }
+  checkpoint() {
+    this.metrics.elapsedMs = this.now() - this.startedAt;
+    if (this.isCancelled()) throw new AdminRequestCancelledError();
+    this.check("requestMs", this.metrics.elapsedMs);
+  }
+  setResponseBytes(bytes) {
+    this.metrics.responseBytes = bytes;
+    this.check("responseBytes", bytes);
+  }
+  addWork(rows) {
+    this.metrics.logicalWork += rows;
+    this.check("logicalWork", this.metrics.logicalWork);
+  }
+  delivered(row) {
+    // Count delivery before any later guard/normalizer/consumer can fail.
+    this.metrics.deliveredRows++;
+    this.addWork(1);
+    let raw = 0, decoded = 0;
+    for (const value of Object.values(row)) {
+      if (value == null) continue;
+      if (typeof value === "string") { raw += Buffer.byteLength(value); decoded += 2 * value.length; }
+      else if (ArrayBuffer.isView(value)) { raw += value.byteLength; decoded += value.byteLength; }
+      else { raw += 8; decoded += 8; }
+    }
+    this.metrics.decodedBytes += raw;
+    this.metrics.decodedProxyBytes += decoded;
+    this.check("deliveredRows", this.metrics.deliveredRows);
+    // Diagnostic cursor columns are excluded by the reader from row eligibility.
+  }
+}
+
+// Formal-v1 columns used by scoped evidence_row.*. Schema gate owns this shape.
+const ADMIN_SCOPED_COLUMNS = Object.freeze({
+  material_evidence: "id material_id manufacturer brand commercial_grade material_family source_type source_title source_url source_date verification_status confidence_level last_verified_at notes source_id evidence_fingerprint import_batch_id imported_at evidence_version".split(" "),
+  material_property_evidence: "id material_id property_key position value_numeric value_text unit test_standard test_condition value_type manufacturer brand commercial_grade material_family source_type source_title source_url source_date verification_status confidence_level last_verified_at source_id evidence_fingerprint import_batch_id imported_at evidence_version conflict_group_id conflict_status".split(" ")
+});
+const ADMIN_STREAM_KEYS = Object.freeze({
+  material_tags: ["material_tags", "", "position"],
+  material_uses: ["material_uses", "", "position"],
+  material_sources: ["material_sources", "", "id"],
+  identity_evidence: ["material_evidence", "evidence_row", "id"],
+  property_evidence: ["material_property_evidence", "evidence_row", "tuple"],
+  certification_evidence: ["material_certifications", "evidence_row", "id"],
+  scoped_active_identity: ["real_material_identities", "", "single"],
+  scoped_source_evidence_identity: ["material_evidence", "evidence_row", "id"],
+  scoped_source_evidence_property: ["material_property_evidence", "evidence_row", "id"]
+});
+function adminStreamKey(sql, tag) {
+  return tag === "scoped_source_evidence"
+    ? tag + (sql.includes("FROM material_property_evidence ") ? "_property" : "_identity") : tag;
+}
+function adminProjectionColumns(sql, table) {
+  // Only the fixed Admin hydration SELECT projections reach this parser.
+  // This is projection metadata, never a generic SQL/cursor rewriting service.
+  const select = sql.slice(sql.indexOf("SELECT") + 6, sql.indexOf("FROM"));
+  const fields = []; let depth = 0, start = 0;
+  for (let index = 0; index <= select.length; index++) {
+    if (select[index] === "(") depth++;
+    if (select[index] === ")") depth--;
+    if (index === select.length || (select[index] === "," && depth === 0)) {
+      fields.push(select.slice(start, index).trim()); start = index + 1;
+    }
+  }
+  return fields.flatMap(field => {
+    if (field === "evidence_row.*") return ADMIN_SCOPED_COLUMNS[table];
+    const alias = field.match(/\bAS\s+(\w+)$/i);
+    const name = alias ? alias[1] : field.split(".").at(-1);
+    if (!/^\w+$/.test(name)) throw new Error("Unknown Admin projection");
+    return [name];
+  });
+}
+function adminRawSizeSql(columns) {
+  return columns.map(name => {
+    const value = `q."${name}"`;
+    return `(CASE typeof(${value}) WHEN 'null' THEN 0 WHEN 'text' THEN length(CAST(${value} AS BLOB)) WHEN 'blob' THEN length(${value}) ELSE 8 END)`;
+  }).join(" + ");
+}
+function adminAdmissionSql(sql, columns) {
+  const bytes = adminRawSizeSql(columns);
+  return `SELECT COUNT(*) AS n, COALESCE(SUM(${bytes}), 0) AS bytes,
+    COALESCE(MAX(${bytes}), 0) AS max_row FROM (${sql}) q`;
+}
+
 const DEFAULT_PAGE_SIZE = 48;
 const MAX_PAGE_SIZE = 200;
 const DETAIL_BATCH_SIZE = 30;
@@ -307,6 +489,122 @@ function qualityLevelSql() {
   `;
 }
 
+// FA-004 S-A only. Canonical hydration, numeric projection and recommendation
+// retain their existing authority. Both scoped consumers use these same raw-row
+// predicates; SQL only locates bounded rows by material ID and source primary key.
+const SCOPED_SOURCE_FIELDS = ["source_type", "source_title", "source_url", "source_date",
+  "manufacturer", "commercial_grade", "material_family"];
+const SCOPED_IDENTITY_FIELDS = ["manufacturer", "commercial_grade", "material_family"];
+const SCOPED_TRUSTED_TYPES = new Set(["manufacturer", "official_datasheet", "academic", "distributor"]);
+
+function scopedSqlText(value) {
+  return value == null ? null : new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(value);
+}
+
+function scopedIdentityMatch(left, right) {
+  if (!nullableText(left) || !nullableText(right)) return null;
+  if (left === right) return true;
+  // Python identity_key uses NFKC/casefold/split. ASCII has an exact portable
+  // subset; differing Unicode spellings require review, never SQLite LOWER.
+  if (/[^\x00-\x7f]/.test(left) || /[^\x00-\x7f]/.test(right)) return null;
+  const key = value => value.replace(/[\t\n\v\f\r\x1c-\x20]+/g, " ").trim().toLowerCase();
+  return key(left) === key(right);
+}
+
+function scopedEvidenceQualification(row, identity, property = false) {
+  const reasons = new Set();
+  if (!identity) reasons.add("missing_active_identity");
+  if (row.source_id != null && row.resolved_source_id == null)
+    reasons.add("invalid_source_reference");
+  const source = Object.fromEntries(SCOPED_SOURCE_FIELDS.map(field =>
+    [field, row["normalized_" + field] ?? row[field]]));
+  if (row.source_type === "generated") reasons.add("raw_generated_source");
+  if (source.source_type === "generated") reasons.add("generated_source");
+  if (!SCOPED_TRUSTED_TYPES.has(source.source_type)) reasons.add("source_type_untrusted");
+  if (!nullableText(source.source_title) || !nullableText(source.source_url))
+    reasons.add("source_metadata_missing");
+  // Raw lightweight FA-003-compatible syntax, not URL/network authenticity.
+  if (typeof source.source_url !== "string" ||
+      !/^https?:\/\/[^/?#]/i.test(source.source_url) || /[\x00-\x20\x7f]/.test(source.source_url))
+    reasons.add("source_url_invalid");
+  if (row.verification_status === "quarantined" || row.confidence_level === "quarantined")
+    reasons.add("claim_quarantined");
+  if (!["verified", "partially_verified"].includes(row.verification_status))
+    reasons.add("claim_unverified");
+  for (const field of SCOPED_IDENTITY_FIELDS) {
+    const match = scopedIdentityMatch(row[field], identity?.[field]);
+    if (match === false) reasons.add("source_identity_context_mismatch");
+    if (match === null) reasons.add("unresolved_source_identity_context");
+    // Registry context is an independent constraint, never a material override.
+    // NULL is not universal coverage: own claim + identity proof are required.
+    if (row["normalized_" + field] != null) {
+      const registryMatch = scopedIdentityMatch(row["normalized_" + field], identity?.[field]);
+      if (registryMatch === false) reasons.add("source_identity_context_mismatch");
+      if (registryMatch === null) reasons.add("unresolved_source_identity_context");
+    }
+  }
+  if (property) {
+    if (row.conflict_status === "conflicting") reasons.add("explicit_property_conflict");
+    if (!["high", "medium"].includes(row.confidence_level))
+      reasons.add("claim_confidence_insufficient");
+    if (!Number.isFinite(row.value_numeric) && !nullableText(row.value_text))
+      reasons.add("property_value_missing");
+    if (!nullableText(row.unit)) reasons.add("property_unit_missing");
+  }
+  const metadataConflict = ["source_type", "source_title", "source_url", "source_date"].some(field =>
+    nullableText(row[field]) && nullableText(row["normalized_" + field]) &&
+    !(field === "source_type" && row[field] === "unknown") &&
+    row[field] !== row["normalized_" + field]);
+  return { qualified: reasons.size === 0, reasons: [...reasons],
+    diagnostics: metadataConflict ? ["source_metadata_conflict"] : [] };
+}
+
+function scopedMaterialEvidence(group) {
+  const reasons = new Set();
+  const identityResults = group.identities.map(row =>
+    scopedEvidenceQualification(row, group.activeIdentity));
+  const hasIdentityProof = identityResults.some(result => result.qualified);
+  if (!group.activeIdentity) reasons.add("missing_active_identity");
+  if (!hasIdentityProof) reasons.add("unresolved_source_identity_context");
+  for (const result of identityResults)
+    for (const reason of [...result.reasons, ...result.diagnostics]) reasons.add(reason);
+  // A conflicting identity binding cannot be hidden by a second good anchor.
+  const identityMismatch = reasons.has("source_identity_context_mismatch") ||
+    reasons.has("invalid_source_reference") || reasons.has("unresolved_source_identity_context");
+  const points = new Set();
+  for (const row of group.properties) {
+    const result = scopedEvidenceQualification(row, group.activeIdentity, true);
+    for (const reason of [...result.reasons, ...result.diagnostics]) reasons.add(reason);
+    if (hasIdentityProof && !identityMismatch && result.qualified) points.add(row.id);
+  }
+  return { points: points.size, reasons: [...reasons] };
+}
+
+function derivedAuditState(row, material, scoped) {
+  const reasons = new Set(scoped.reasons);
+  // Certification isolation is an audit signal, not a property-point veto.
+  for (const claim of material.evidence.certifications) {
+    if (claim.verificationStatus === "quarantined" || claim.confidenceLevel === "quarantined")
+      reasons.add("claim_quarantined");
+  }
+  if (row.record_type === "legacy") reasons.add("legacy_record");
+  if (row.catalog_visibility === "admin_only") reasons.add("admin_only");
+  if (row.record_origin === "generated") reasons.add("generated_record");
+  if (row.scope_status === "out_of_scope") reasons.add("out_of_scope");
+  if (material.data_quality.level === "quarantined") reasons.add("canonical_quarantined");
+  else if (!material.data_quality.recommendation_eligible) reasons.add("insufficient_quality_evidence");
+  // Preserve old SQL quarantine independently of the canonical quality grade.
+  const quarantined = row.quality_level === "quarantined" ||
+    material.data_quality.level === "quarantined" ||
+    ["claim_quarantined", "raw_generated_source", "generated_source", "explicit_property_conflict"]
+      .some(reason => reasons.has(reason));
+  return {
+    access: row.audit_boundary_eligible ? "catalog_boundary_eligible" : "audit_only",
+    hold: quarantined ? "quarantined" : reasons.size ? "review_required" : "none",
+    reasons: [...reasons].sort()
+  };
+}
+
 class MaterialRepository {
   constructor(databasePath) {
     if (!fs.existsSync(databasePath)) {
@@ -335,6 +633,8 @@ class MaterialRepository {
     this.readinessCache = null;
     this.catalogGeneration = null;
     this.ad08Statements = new Set();
+    this.adminStatements = new Map();
+    this.adminStreamContracts = null;
     try {
       this.database = new DatabaseSync(databasePath, { readOnly: true });
       this.database.exec(
@@ -516,21 +816,24 @@ class MaterialRepository {
         .map((item) => item.id);
       aggregates.verifiedCommercialGrades += eligibleIds.length;
       aggregates.materialsAwaitingVerification += materials.length - eligibleIds.length;
-      if (eligibleIds.length) aggregates.verifiedPropertyDataPoints += Number(this._get(`
-        SELECT COUNT(*) AS count FROM material_property_evidence
-        WHERE material_id IN (${placeholders(eligibleIds.length)})
-          AND confidence_level IN ('high', 'medium')
-          AND verification_status IN ('verified', 'partially_verified')
-          AND source_type IN ('manufacturer', 'official_datasheet', 'academic', 'distributor')
-          AND NULLIF(TRIM(source_title), '') IS NOT NULL
-          AND (source_url LIKE 'http://%' OR source_url LIKE 'https://%')`, eligibleIds, "count").count);
+      if (eligibleIds.length) {
+        // Count each qualified evidence ID once within the existing keyset batch.
+        // No ownership-link JOIN, semantic deduplication or new material filter.
+        for (const group of this._readScopedSourceEvidence(eligibleIds).values())
+          aggregates.verifiedPropertyDataPoints += scopedMaterialEvidence(group).points;
+      }
       lastId = rows[rows.length - 1].material_id;
     }
     return { aggregates, publicMaterialTotal };
   }
 
-  getAuditStats() {
-    const row = this._get(
+  getAuditStats(options = {}) {
+    const context = options.adminCapacity;
+    if (context && !(context instanceof AdminCapacityContext)) throw new Error("Invalid Admin capacity context");
+    const read = context
+      ? (sql, params, tag) => this._adminReadChunk(sql, params, tag, context)[0]
+      : this._get.bind(this);
+    const row = read(
       `
         SELECT
           (SELECT COUNT(*) FROM materials WHERE record_type = 'legacy')
@@ -596,7 +899,8 @@ class MaterialRepository {
   }
 
   listMaterials(options = {}) {
-    if (options.audit === true) return this._listAuditMaterials(options);
+    if (options.audit === true)
+      return this._runAdmin(options, context => this._listAuditMaterials(options, context));
     const generation = this.getCatalogGeneration();
     this.database.exec("BEGIN");
     try {
@@ -641,7 +945,7 @@ class MaterialRepository {
     return { items, total, limit, offset, hasMore: offset + limit < total, facets };
   }
 
-  _listAuditMaterials(options) {
+  _listAuditMaterials(options, context) {
     const audit = options.audit === true;
     const limit = Math.min(
       MAX_PAGE_SIZE,
@@ -656,17 +960,14 @@ class MaterialRepository {
         ON identity_row.material_id = m.material_id
        AND identity_row.active = 1
     `;
-    const total = Number(
-      this._get(
-        `SELECT COUNT(*) AS count FROM materials m ${joins} WHERE ${where}`,
-        search.params,
-        "count"
-      )?.count || 0
-    );
+    const total = Number(this._adminReadChunk(
+      `SELECT COUNT(*) AS count FROM materials m ${joins} WHERE ${where}`,
+      search.params, "count", context)[0]?.count || 0);
     const exactQuery = String(options.query || "").trim().toLowerCase();
-    const rows = this._all(
+    const rows = this._adminBaseRows(
       `
-        SELECT ${LIST_COLUMNS}, ${qualityLevelSql()} AS quality_level
+        SELECT ${LIST_COLUMNS}, ${qualityLevelSql()} AS quality_level,
+          CASE WHEN ${PUBLIC_BOUNDARY} THEN 1 ELSE 0 END AS audit_boundary_eligible
           FROM materials m
           ${joins}
          WHERE ${where}
@@ -682,17 +983,15 @@ class MaterialRepository {
          LIMIT ? OFFSET ?
       `,
       [...search.params, exactQuery, exactQuery, exactQuery, limit, offset],
-      "material_list"
+      "material_list", context
     );
-    const items = rows.map(materialFromListRow);
-    this._attachTagsAndUses(items);
-    return {
-      items,
-      total,
-      limit,
-      offset,
-      hasMore: offset + limit < total
-    };
+    const items = this._hydrateAuditRows(rows, context);
+    const result = { items, total, limit, offset, hasMore: offset + limit < total };
+    // Include the complete page envelope, not only its canonical items array.
+    context.metrics.pageObjectBytes += jsonEncodedByteLength({ ...result, items: [] }) - 2;
+    context.check("pageObjectBytes", context.metrics.pageObjectBytes);
+    context.checkpoint();
+    return result;
   }
 
   _catalogFacets(options) {
@@ -778,7 +1077,17 @@ class MaterialRepository {
   }
 
   getMaterialById(materialId, options = {}) {
-    const boundary = options.audit === true ? "1 = 1" : PUBLIC_BOUNDARY;
+    if (options.audit === true) {
+      return this._runAdmin(options, context => {
+        const rows = this._adminBaseRows(
+          `SELECT ${LIST_COLUMNS}, ${qualityLevelSql()} AS quality_level,
+             CASE WHEN ${PUBLIC_BOUNDARY} THEN 1 ELSE 0 END AS audit_boundary_eligible
+           FROM materials m ${CATALOG_JOINS} WHERE m.material_id = ? LIMIT 1`,
+          [materialId], "audit_detail", context);
+        return this._hydrateAuditRows(rows, context)[0] || null;
+      });
+    }
+    const boundary = PUBLIC_BOUNDARY;
     const row = this._get(
       `
         SELECT ${LIST_COLUMNS}, ${qualityLevelSql()} AS quality_level
@@ -878,14 +1187,15 @@ class MaterialRepository {
   }
 
   getMetrics() {
-    return { ...this.metrics };
+    return { ...this.metrics, adminCapacity: this.lastAdminCapacityMetrics };
   }
 
   close() {
+    this.adminStatements.clear();
     this.database.close();
   }
 
-  _hydrateDetailedRows(rows, read = this._all.bind(this), withProjection = false) {
+  _hydrateDetailedRows(rows, read = this._all.bind(this), withProjection = false, evaluate = annotateMaterialQuality) {
     const hydrated = [];
     for (const rowBatch of chunks(rows, DETAIL_BATCH_SIZE)) {
       const materials = rowBatch.map(materialFromListRow);
@@ -895,10 +1205,82 @@ class MaterialRepository {
       this._attachEvidence(byId, read, withProjection);
       for (const material of materials) {
         if (!material.evidence) material.evidence = buildLegacyEvidence(material);
-        hydrated.push(annotateMaterialQuality(material));
+        hydrated.push(evaluate(material));
       }
     }
     return hydrated;
+  }
+
+  _readScopedSourceEvidence(ids, read = this._readAd08Rows.bind(this)) {
+    const groups = new Map(ids.map(id => [id, { activeIdentity: null, identities: [], properties: [] }]));
+    for (const batch of chunks(ids, DETAIL_BATCH_SIZE)) {
+      const active = read(`SELECT material_id,
+        ${SCOPED_IDENTITY_FIELDS.map(name => `CAST(${name} AS BLOB) AS ${name}`).join(", ")}
+        FROM real_material_identities WHERE active = 1 AND material_id IN (${placeholders(batch.length)})`,
+      batch, "scoped_active_identity");
+      for (const row of active) {
+        for (const name of SCOPED_IDENTITY_FIELDS) row[name] = scopedSqlText(row[name]);
+        groups.get(row.material_id).activeIdentity = row;
+      }
+      for (const [table, field] of [["material_evidence", "identities"],
+        ["material_property_evidence", "properties"]]) {
+        const rawFields = field === "properties" ? [...SCOPED_SOURCE_FIELDS, "value_text", "unit"] : SCOPED_SOURCE_FIELDS;
+        // node:sqlite TEXT decoding can truncate at embedded NUL. CAST preserves
+        // raw UTF-8 bytes so qualification cannot silently repair a broken URL
+        // or compare a truncated grade. NULL and empty remain distinct.
+        const rows = read(`SELECT evidence_row.*,
+          normalized_source.source_id AS resolved_source_id,
+          ${rawFields.map(name => `CAST(evidence_row.${name} AS BLOB) AS raw_${name}`).join(", ")},
+          ${SCOPED_SOURCE_FIELDS.map(name => `CAST(normalized_source.${name} AS BLOB) AS normalized_${name}`).join(", ")}
+          FROM ${table} evidence_row
+          LEFT JOIN evidence_sources normalized_source ON normalized_source.source_id = evidence_row.source_id
+          WHERE evidence_row.material_id IN (${placeholders(batch.length)})
+          ORDER BY evidence_row.material_id, evidence_row.id`, batch, "scoped_source_evidence");
+        for (const row of rows) {
+          for (const name of rawFields) row[name] = scopedSqlText(row["raw_" + name]);
+          for (const name of SCOPED_SOURCE_FIELDS)
+            row["normalized_" + name] = scopedSqlText(row["normalized_" + name]);
+          groups.get(row.material_id)[field].push(row);
+        }
+      }
+    }
+    return groups;
+  }
+
+  _hydrateAuditRows(rows, context) {
+    const contracts = this._adminStreamContracts();
+    const admissions = this._adminAdmission(rows, context, contracts);
+    const read = (sql, params, tag) => this._adminReadStream(sql, params, tag, context, contracts, admissions);
+    const items = [];
+    for (const row of rows) {
+      context.checkpoint();
+      const started = context.now();
+      const hydrated = this._hydrateDetailedRows([row], read, false,
+        material => this._evaluateAdminMaterial(material, context));
+      context.checkpoint();
+      this._attachAuditState([row], hydrated, read);
+      const bytes = jsonEncodedByteLength(hydrated[0]);
+      context.metrics.materialObjectBytes = Math.max(context.metrics.materialObjectBytes, bytes);
+      context.check("materialObjectBytes", bytes);
+      context.metrics.pageObjectBytes += bytes + (items.length ? 1 : 0);
+      context.check("pageObjectBytes", context.metrics.pageObjectBytes);
+      items.push(hydrated[0]);
+      context.metrics.hydrationMs += context.now() - started;
+      context.checkpoint();
+    }
+    return items;
+  }
+
+  _attachAuditState(rows, materials, read) {
+    for (let offset = 0; offset < materials.length; offset += DETAIL_BATCH_SIZE) {
+      const page = materials.slice(offset, offset + DETAIL_BATCH_SIZE);
+      const groups = this._readScopedSourceEvidence(page.map(material => material.id), read);
+      for (let index = 0; index < page.length; index++) {
+        const material = page[index];
+        material.audit_state = derivedAuditState(rows[offset + index], material,
+          scopedMaterialEvidence(groups.get(material.id)));
+      }
+    }
   }
 
   _attachTagsAndUses(materials, read = this._all.bind(this)) {
@@ -1137,6 +1519,256 @@ class MaterialRepository {
           sourceDate: nullableText(row.source_date)
         }
       });
+    }
+  }
+
+  _runAdmin(options, work) {
+    const context = options.adminCapacity || new AdminCapacityContext();
+    if (!(context instanceof AdminCapacityContext)) throw new Error("Invalid Admin capacity context");
+    let transaction = false;
+    this.lastAdminCapacityMetrics = context.metrics;
+    try {
+      this._adminExec("BEGIN", context);
+      transaction = true;
+      const result = work(context);
+      this._adminExec("COMMIT", context);
+      transaction = false;
+      context.checkpoint();
+      return result;
+    } catch (error) {
+      if (transaction) {
+        // Cleanup is mandatory even after the work budget/cancellation fails.
+        // Preserve the initiating exception; account for the rollback attempt.
+        try { this._adminExec("ROLLBACK", context, true); } catch {}
+      }
+      throw error;
+    } finally {
+      context.metrics.elapsedMs = context.now() - context.startedAt;
+      context.seenEvidence.clear();
+    }
+  }
+
+  _adminExec(sql, context, cleanup = false) {
+    if (!cleanup) context.checkpoint();
+    context.metrics.sqlAttempts++;
+    if (!cleanup) context.check("sqlAttempts", context.metrics.sqlAttempts);
+    const started = context.now();
+    try { this.database.exec(sql); }
+    catch (error) { context.metrics.sqlFailures++; throw error; }
+    finally { context.metrics.sqlMs += context.now() - started; }
+    // BEGIN/COMMIT success must update transaction ownership before a later
+    // cooperative check can fail. The caller provides that next boundary.
+  }
+
+  _adminReadChunk(sql, params, tag, context, cache = false) {
+    context.checkpoint();
+    context.metrics.sqlAttempts++;
+    context.check("sqlAttempts", context.metrics.sqlAttempts);
+    this.metrics.queries++;
+    const started = context.now();
+    let statement, iterator, failure;
+    const rows = [];
+    try {
+      statement = cache ? this.adminStatements.get(sql) : null;
+      if (!statement) {
+        statement = this.database.prepare(sql);
+        if (cache) {
+          if (this.adminStatements.size >= ADMIN_CAPACITY_LIMITS.statementCacheSize)
+            throw new Error("Admin fixed statement cache exceeded");
+          this.adminStatements.set(sql, statement);
+        }
+      }
+      this.ad08Statements.add(statement);
+      iterator = statement.iterate(...params);
+      for (const row of iterator) {
+        context.delivered(row);
+        if (rows.length >= ADMIN_CAPACITY_LIMITS.chunkRows)
+          throw new Error("Admin SQL chunk exceeded 1000 rows");
+        rows.push(row);
+        const streamKey = adminStreamKey(sql, tag);
+        if (ADMIN_STREAM_KEYS[streamKey]) {
+          context.metrics.retainedRows++;
+          context.metrics.streamRows[streamKey] = (context.metrics.streamRows[streamKey] || 0) + 1;
+          if (row.__admin_cursor !== undefined) {
+            const identity = JSON.stringify([streamKey, row.material_id, row.__admin_cursor]);
+            if (!context.seenEvidence.has(identity)) {
+              context.seenEvidence.add(identity);
+              context.metrics.uniqueEvidenceIds++;
+            } else context.metrics.repeatedEvidenceRows++;
+          }
+        }
+        this.metrics.rowsReturned++;
+        this.metrics.maximumRowsInSingleQuery = Math.max(this.metrics.maximumRowsInSingleQuery, rows.length);
+        if (tag === "property_evidence") this.metrics.propertyEvidenceRowsRead++;
+      }
+      context.metrics.maxChunkRows = Math.max(context.metrics.maxChunkRows, rows.length);
+    } catch (error) {
+      failure = error;
+      if (!(error instanceof AdminCapacityError) && !(error instanceof AdminRequestCancelledError))
+        context.metrics.sqlFailures++;
+      throw error;
+    } finally {
+      try { iterator?.return?.(); }
+      catch (cleanupError) {
+        context.metrics.cleanupFailures++;
+        if (!failure) throw cleanupError;
+      }
+      finally {
+        this.ad08Statements.delete(statement);
+        context.metrics.sqlMs += context.now() - started;
+      }
+    }
+    context.checkpoint();
+    return rows;
+  }
+
+  _adminBaseRows(sql, params, tag, context) {
+    const columns = adminProjectionColumns(`SELECT ${LIST_COLUMNS}, NULL AS quality_level,
+      NULL AS audit_boundary_eligible FROM materials m`, "materials");
+    const size = adminRawSizeSql(columns);
+    // The exact original ORDER/LIMIT/OFFSET chooses membership before scalar
+    // admission. No material name/description/ID enters JS in this first read.
+    const sizes = this._adminReadChunk(`SELECT ${size} AS raw_bytes FROM (${sql}) q`,
+      params, "admin_base_admission", context);
+    context.baseBytes = sizes.map(row => Number(row.raw_bytes));
+    context.metrics.rawBytes = 0;
+    for (const bytes of context.baseBytes) {
+      context.metrics.maxRowRawBytes = Math.max(context.metrics.maxRowRawBytes, bytes);
+      context.check("rowRawBytes", bytes);
+      context.metrics.rawBytes += bytes;
+      context.addWork(1);
+      context.check("pageRawBytes", context.metrics.rawBytes);
+    }
+    const rows = this._adminReadChunk(sql, params, tag, context);
+    if (rows.length !== sizes.length) throw new Error("Admin base admission snapshot mismatch");
+    for (const row of rows) this._adminDecodedRowCheck(row, context);
+    return rows;
+  }
+
+  _adminDecodedRowCheck(row, context) {
+    let bytes = 0;
+    for (const [name, value] of Object.entries(row)) {
+      if (name === "__admin_cursor" || value == null) continue;
+      bytes += typeof value === "string" ? 2 * value.length
+        : ArrayBuffer.isView(value) ? value.byteLength : 8;
+    }
+    context.metrics.maxRowDecodedProxyBytes = Math.max(context.metrics.maxRowDecodedProxyBytes, bytes);
+    context.check("rowDecodedProxyBytes", bytes);
+  }
+
+  _adminStreamContracts() {
+    if (this.adminStreamContracts) return this.adminStreamContracts;
+    const contracts = new Map();
+    const capture = (sql, params, tag) => {
+      const key = adminStreamKey(sql, tag);
+      const definition = ADMIN_STREAM_KEYS[key];
+      if (!definition || params.length !== 1) throw new Error("Unknown Admin evidence stream");
+      const [table, alias, kind] = definition;
+      const where = sql.indexOf("WHERE"), order = sql.indexOf("ORDER BY", where);
+      if (where < 0) throw new Error("Missing Admin stream predicate");
+      const prefix = sql.slice(0, where);
+      const originalOrder = order < 0 ? "" : sql.slice(order).trim();
+      const qualifier = alias ? alias + "." : "";
+      const predicate = (kind === "single" ? "active = 1 AND " : "") + qualifier + "material_id = ?";
+      const cursor = qualifier + (kind === "position" ? "position" : "id");
+      const select = kind === "single" ? prefix : prefix.replace("SELECT", `SELECT ${cursor} AS __admin_cursor,`);
+      const first = `${select}WHERE ${predicate} ${originalOrder} LIMIT 1000`;
+      const seek = kind === "tuple"
+        ? " AND (evidence_row.property_key, evidence_row.position) > (SELECT property_key, position FROM material_property_evidence WHERE material_id = ? AND id = ?)"
+        : ` AND ${cursor} > ?`;
+      contracts.set(key, { key, sql, tag, table, kind, first,
+        validateCursor: kind === "single" ? null
+          : `SELECT 1 AS present FROM ${table} WHERE material_id = ? AND ${kind === "position" ? "position" : "id"} = ? LIMIT 1`,
+        next: kind === "single" ? null : `${select}WHERE ${predicate}${seek} ${originalOrder} LIMIT 1000`,
+        admission: adminAdmissionSql(`${prefix}WHERE ${predicate}`, adminProjectionColumns(sql, table)) });
+      return [];
+    };
+    // Reuse the exact canonical/scoped projections and normalization authority.
+    // Capture SQL only; do not read data or run a partial evaluator.
+    const material = materialFromListRow({ material_id: "" });
+    const byId = new Map([["", material]]);
+    this._attachTagsAndUses([material], capture);
+    this._attachLegacySources(byId, capture);
+    this._attachEvidence(byId, capture);
+    this._readScopedSourceEvidence([""], capture);
+    if (contracts.size !== 9) throw new Error("Incomplete Admin stream contracts");
+    this.adminStreamContracts = contracts;
+    return contracts;
+  }
+
+  _adminAdmission(rows, context, contracts) {
+    const started = context.now();
+    const admissions = new Map();
+    try {
+      for (let index = 0; index < rows.length; index++) {
+        const id = rows[index].material_id;
+        const admitted = new Map(); let count = 0, bytes = context.baseBytes[index];
+        for (const contract of contracts.values()) {
+          const result = this._adminReadChunk(contract.admission, [id], "admin_admission", context, true)[0];
+          admitted.set(contract.key, Number(result.n));
+          count += Number(result.n); bytes += Number(result.bytes);
+          context.metrics.admittedRows += Number(result.n);
+          context.metrics.rawBytes += Number(result.bytes);
+          context.metrics.maxRowRawBytes = Math.max(context.metrics.maxRowRawBytes, Number(result.max_row));
+          context.addWork(Number(result.n));
+          context.check("rowRawBytes", Number(result.max_row));
+          context.check("materialRows", count);
+          context.check("materialRawBytes", bytes);
+          context.check("pageRows", context.metrics.admittedRows);
+          context.check("pageRawBytes", context.metrics.rawBytes);
+        }
+        context.metrics.maxMaterialRows = Math.max(context.metrics.maxMaterialRows, count);
+        context.metrics.maxMaterialRawBytes = Math.max(context.metrics.maxMaterialRawBytes, bytes);
+        admissions.set(id, admitted);
+      }
+      return admissions;
+    } finally { context.metrics.admissionMs += context.now() - started; }
+  }
+
+  _adminReadStream(sql, params, tag, context, contracts, admissions) {
+    const key = adminStreamKey(sql, tag), contract = contracts.get(key);
+    if (!contract || contract.sql !== sql || params.length !== 1 || !admissions.has(params[0]))
+      throw new Error("Unknown Admin stream invocation");
+    const id = params[0], expected = admissions.get(id).get(key), seen = new Set(), rows = [];
+    let cursor;
+    do {
+      if (cursor !== undefined && !this._adminReadChunk(contract.validateCursor,
+        [id, cursor], "admin_cursor_validation", context, true)[0])
+        throw new Error("Invalid Admin stream cursor");
+      const query = cursor === undefined ? contract.first : contract.next;
+      const bindings = cursor === undefined ? [id]
+        : contract.kind === "tuple" ? [id, id, cursor] : [id, cursor];
+      const chunk = this._adminReadChunk(query, bindings, tag, context, true);
+      for (const row of chunk) {
+        if (row.material_id !== id) throw new Error("Admin stream material mismatch");
+        this._adminDecodedRowCheck(row, context);
+        if (contract.kind !== "single") {
+          const next = row.__admin_cursor;
+          if (!Number.isSafeInteger(next) || seen.has(next) ||
+              (contract.kind !== "tuple" && cursor !== undefined && next <= cursor))
+            throw new Error("Invalid Admin stream cursor progression");
+          seen.add(next);
+          cursor = next;
+          delete row.__admin_cursor;
+        }
+        rows.push(row);
+      }
+      if (rows.length > expected) throw new Error("Admin stream duplicated snapshot rows");
+      if (chunk.length < ADMIN_CAPACITY_LIMITS.chunkRows) break;
+      if (contract.kind === "single") throw new Error("Invalid active identity cardinality");
+      // Full chunks require another keyset read, even at an exact multiple.
+    } while (true);
+    if (rows.length !== expected) throw new Error("Admin stream incomplete or invalid cursor");
+    return rows;
+  }
+
+  _evaluateAdminMaterial(material, context) {
+    context.checkpoint();
+    const started = context.now();
+    try { return annotateMaterialQuality(material); }
+    finally {
+      context.metrics.evaluatorMs += context.now() - started;
+      // Preserve evaluator errors; successful callers check the next boundary.
     }
   }
 
@@ -1811,6 +2443,11 @@ function chunks(values, size) {
 }
 
 module.exports = {
+  ADMIN_CAPACITY_LIMITS,
+  AdminCapacityError,
+  AdminCapacityContext,
+  AdminRequestCancelledError,
+  jsonEncodedByteLength,
   DEFAULT_PAGE_SIZE,
   DOMAIN_IDS,
   FAMILY_CODES,

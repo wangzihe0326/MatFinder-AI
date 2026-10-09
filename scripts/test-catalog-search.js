@@ -49,7 +49,11 @@ assert.equal(
   false,
   "Searching absorption must not return ABS by abbreviation."
 );
-assert.equal(repository.getMetrics().propertyEvidenceRowsRead, 0);
+// FA-004 A-A deliberately hydrates only SQL-selected audit pages.
+assert.ok(repository.getMetrics().propertyEvidenceRowsRead > 0,
+  "Audit quality must actually read canonical evidence");
+assert.ok(repository.getMetrics().maximumRowsInSingleQuery <= 1000,
+  "Audit hydration must retain bounded reads");
 repository.close();
 fs.rmSync(directory, { recursive: true, force: true });
 
