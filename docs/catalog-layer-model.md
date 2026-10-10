@@ -314,3 +314,24 @@ identity hydration, FA-003 source applicability and recommendation source
 qualification remain outside this implementation. Stats/Admin parity does not
 establish global policy closure or authorize a production import. FA-005 is
 unchanged; FA-003 production performance acceptance remains pending.
+
+### PILOT-D5 low-density/lightweight query boundary
+
+The `low-density-lightweight` tag retains its two independent OR branches:
+existing qualitative text signals within the existing catalog field whitelist,
+or an eligible density query key with `0 < density <= 1.2 g/cm3`. The numeric
+branch uses the unchanged canonical property projection, also used by public
+numeric sorting and the public density alias; it does not fall back to the
+legacy `materials.density` scalar. Partial-only, unusable-unit, conflicting and
+multiple-context evidence retain the existing projection outcomes.
+
+Public/query/category/domain scope is established before the required density
+projection and tag predicate. COUNT, facets, ordering and pagination consume
+that predicate in SQL. Each facet excludes only its own active dimension; the
+performance facet requires the density key even when that tag is not selected.
+Only required property keys are qualified, once per SQL statement, without a
+persistent projection cache or whole-catalog evidence hydration in JavaScript.
+
+A qualitative text match is not a claim of verified density at or below 1.2:
+text may independently match a record with unknown or higher density. No source,
+recommendation, public eligibility, temperature or release policy changes here.

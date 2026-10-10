@@ -84,7 +84,7 @@
     "evidence-model.js": "9edf322c46c573b796ff3f310d7c355a680d8bc1197a4506eb8d7049cb77061e",
     "evidence-validator.js": "ef889b3ca2b4d5c16ea25d262d230f3ca476f1d974de18d423866ef176cb8bff",
     "material-quality.js": "e5b4ccdbe6a3d08c39cc71e1d27806abaf017d21b68bbdecb8ef83bdeb46a940",
-    "material-repository.js": "75fadfbc9933e2296a21347a7e48fde0eea74a14677e1bb5e48b77188a07a672",
+    "material-repository.js": "898f9d876f5f82a168e3389b684036a5f069d95bc41d75c97cb1980a0c1174e4",
     "pilot-status.js": "f3d28b23ce34d750484da477da9d18d26d85035169c8de282bffe21b7ae0ebc5",
     "property-projection-policy.js": "48a2be4743249037d86885d37e63fd7250660c2b8ab68b770e2c726472096c3f",
     "public/app.js": "515a862de447b4d698a1f35a2f7a9992fea6aa80626f46f787347f821dd67166",
@@ -261,7 +261,7 @@
     {
       "file": "material-repository.js",
       "owner": "buildPerformancePredicate",
-      "bodySHA256": "84398217cd03a3647b992c917173840fafc1b634fedcfa50aab666267bd104ed",
+      "bodySHA256": "1d62e5b09c4b177ed11aafb559f7e50434a64a42af8afc6d7faadbf233f7b611",
       "sites": [
         {
           "api": "get",
@@ -488,7 +488,7 @@
     {
       "file": "material-repository.js",
       "owner": "MaterialRepository._catalogOptionFacets",
-      "bodySHA256": "d93a82fad19ed565bf3401c57005e8ce103555b1310cf8503c59842f2cd55fb2",
+      "bodySHA256": "2cda56ceca8e4280aa43773c6fa60829a61c4c1c1052fcaaae595a12ac6d5bc1",
       "sites": [
         {
           "api": "_get",
