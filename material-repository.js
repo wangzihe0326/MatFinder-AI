@@ -1022,19 +1022,21 @@ class MaterialRepository {
   }
 
   _catalogOptionFacets(options, dimension) {
-    const query = buildProjectedCatalogQuery(options, dimension);
+    const query = buildProjectedCatalogQuery(options, dimension, false,
+      dimension === "performance" ? ["density"] : []);
     const base = query.predicate;
     const ids = dimension === "performance" ? PERFORMANCE_IDS : DOMAIN_IDS;
     const candidateFields = dimension === "performance" ? [
       "m.material_id", "m.max_temperature", "m.continuous_use_temperature",
       "m.glass_transition_temperature", "m.tensile_strength", "m.flexural_strength",
       "m.elongation", "m.chemical_resistance", "m.dielectric_constant",
-      "m.category", "m.water_absorption", "m.recyclability", "m.density"
+      "m.category", "m.water_absorption", "m.recyclability",
+      `${query.fields.density} AS density_query_key`
     ] : ["m.material_id"];
     const signal = dimension === "performance"
       ? catalogPerformanceSignalText() : catalogDomainSignalText();
     const predicates = ids.map((id) => dimension === "performance"
-      ? buildPerformancePredicate(id, "m.catalog_signal")
+      ? buildPerformancePredicate(id, "m.catalog_signal", "m.density_query_key")
       : buildDomainPredicate(id, "m.catalog_signal"));
     const flags = predicates.map((predicate, index) =>
       `CASE WHEN ${predicate.sql} THEN 1 ELSE 0 END AS flag${index}`);
@@ -2196,7 +2198,7 @@ function signalKeywords(keywords, signalExpression) {
     containsText(signalExpression, keyword)));
 }
 
-function buildPerformancePredicate(id, signalExpression = catalogPerformanceSignalText()) {
+function buildPerformancePredicate(id, signalExpression = catalogPerformanceSignalText(), densityExpression) {
   const option = PERFORMANCE_OPTIONS.get(id);
   if (!option) throw new RangeError(`Unknown catalog performance ID: ${id}`);
   const branches = [signalKeywords(option.signals, signalExpression)];
@@ -2245,11 +2247,15 @@ function buildPerformancePredicate(id, signalExpression = catalogPerformanceSign
     case "recyclable":
       branches.push(recyclablePredicate());
       break;
-    case "low-density-lightweight":
+    case "low-density-lightweight": {
+      // The qualitative signal remains an independent OR branch. Only the
+      // numeric branch consumes the existing verified density query key.
+      const density = densityExpression || propertyProjection.queryKeySql("m.material_id", "density");
       branches.push(combinePredicates("AND", [
-        knownNumeric("m.density", ">", 0), knownNumeric("m.density", "<=", 1.2)
+        knownNumeric(density, ">", 0), knownNumeric(density, "<=", 1.2)
       ]));
       break;
+    }
   }
   return combinePredicates("OR", branches);
 }
@@ -2285,8 +2291,10 @@ function buildPublicCatalogPredicate(options, excludedDimension) {
 
 // Scope before projection without LIMIT/OFFSET. Self-excluded facets receive
 // their own scope; no derived keys persist beyond this SQLite statement.
-function buildProjectedCatalogQuery(options, excludedDimension, includeSort = false) {
-  const keys = new Set();
+function buildProjectedCatalogQuery(options, excludedDimension, includeSort = false, requiredKeys = []) {
+  const densityTag = excludedDimension !== "performance" && options.performance === "low-density-lightweight";
+  const keys = new Set(requiredKeys);
+  if (densityTag) keys.add("density");
   if (options.minTempC !== undefined) keys.add("continuous_use_temperature");
   if (options.minTensileMpa !== undefined) keys.add("tensile_strength");
   const sortKey = {density:"density",strength:"tensile_strength",temperature:"continuous_use_temperature"}[options.sort];
@@ -2295,11 +2303,15 @@ function buildProjectedCatalogQuery(options, excludedDimension, includeSort = fa
     const predicate = buildPublicCatalogPredicate(options, excludedDimension);
     return {withSql:"",fromSql:`materials m ${CATALOG_JOINS}`,predicate,params:predicate.params,fields:{}};
   }
-  const scope = buildPublicCatalogPredicate({...options,minTempC:undefined,minTensileMpa:undefined},excludedDimension);
+  // Defer the entire density tag (numeric OR text) until its key is available;
+  // retaining the old scalar predicate here would discard eligible candidates.
+  const scope = buildPublicCatalogPredicate({...options,minTempC:undefined,minTensileMpa:undefined,
+    performance:densityTag ? undefined : options.performance},excludedDimension);
   // Bind keys directly to the material scope: a reordered facet join may read
   // pp_keys before m, when only scope.material_id is available for index lookup.
   const fields = Object.fromEntries([...keys].map(key => [key,`pp_${key}.query_key`]));
   const predicates = [];
+  if (densityTag) predicates.push(buildPerformancePredicate(options.performance, undefined, fields.density));
   if (options.minTempC !== undefined) predicates.push({sql:`${fields.continuous_use_temperature} >= ?`,params:[options.minTempC]});
   if (options.minTensileMpa !== undefined) predicates.push({sql:`${fields.tensile_strength} >= ?`,params:[options.minTensileMpa]});
   const predicate = combinePredicates("AND",predicates);

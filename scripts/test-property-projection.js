@@ -61,6 +61,17 @@ function checkRepository(repository) {
   assert.equal(list({minTensileMpa:70}).total,0);
   assert.equal(list({}).total,3);
   assert.deepEqual(list({sort:'density'}).items.map(x=>x.id),['PA-LIKE','PC-LIKE','MISSING']);
+  // PILOT-D5: no qualitative text signal can mask the NULL-scalar regression.
+  for (const [id, density] of [['PC-LIKE',1.2],['PA-LIKE',1.13]]) {
+    const raw=repository.database.prepare('SELECT * FROM materials WHERE material_id=?').get(id);
+    assert.equal(raw.density,null);
+    assert.doesNotMatch(JSON.stringify(raw),/lightweight|low density|轻量|低密度/i);
+    const projection=repository.getMaterialById(id).propertyProjections.density;
+    assert.equal(projection.queryEligible,true);assert.equal(projection.queryKey,density);
+  }
+  console.log('PILOT-D5 preconditions PASS: NULL scalars, no text signal, verified 1.13/1.2 and density sort.');
+  assert.deepEqual(list({performance:'low-density-lightweight',sort:'density'}).items.map(x=>x.id),
+    ['PA-LIKE','PC-LIKE'],'PILOT-D5 numeric tag must consume verified density before pagination');
   const pc=list({query:'PC-LIKE'}).items[0];
   assert.equal(pc.tensile,65);
   assert.equal(pc.propertyProjections.tensile_strength.projectionState,'single');
@@ -436,6 +447,146 @@ function r1SourceCountChecks(repository) {
   console.log("FA-003 R1 provenance counts 0/1/8/9/12/17 and duplicate-source distinction PASS.");
 }
 
+// PILOT-D5 synthetic TEST ONLY cases. Expected keys are frozen policy outcomes,
+// independent of whether the legacy material scalar would pass the tag.
+function densityTagCases() {
+  const claim=(value=1.13,options={})=>({value,options});
+  return [
+    ["NULL 1.13",null,[claim()],1.13], ["NULL boundary",null,[claim(1.2)],1.2],
+    ["above boundary",null,[claim(1.21)],1.21],
+    ["low scalar high evidence",0.8,[claim(1.4)],1.4],
+    ["high scalar low evidence",1.9,[claim()],1.13],
+    ["zero",0.8,[claim(0)],null], ["negative",0.8,[claim(-1)],null],
+    ["non numeric",0.8,[claim('1.1x')],null], ["unknown",0.8,[],null],
+    ["kg/m3 no new conversion",0.8,[claim(1130,{unit:'kg/m3'})],null],
+    ["wrong unit",0.8,[claim(1.13,{unit:'MPa'})],null],
+    ["partial only",0.8,[claim(1.13,{verification_status:'partially_verified'})],null],
+    ["unverified",0.8,[claim(1.13,{verification_status:'unverified'})],null],
+    ["conflicting",0.8,[claim(1.13,{conflict_status:'conflicting'})],null],
+    ["two contexts",0.8,[claim(),claim(1.13,{test_condition:'OTHER'})],null],
+    ["verified plus agreeing partial",null,[claim(),claim(1.13,{verification_status:'partially_verified'})],1.13],
+    ["verified plus different partial",0.8,[claim(),claim(1.1,{verification_status:'partially_verified'})],null],
+    ["verified plus other partial context",0.8,[claim(),claim(1.13,{verification_status:'partially_verified',test_condition:'OTHER'})],null],
+    ["duplicate verified",null,[claim(),claim()],1.13],
+    ["normalized source",null,[claim(1.13,{source_id:900,source_title:null,source_url:null})],1.13],
+    ["normalized source missing title",0.8,[claim(1.13,{source_id:901,source_title:null,source_url:null})],null],
+    ["minimum only",0.8,[claim(1.13,{value_type:'minimum'})],null],
+    ["missing condition",0.8,[claim(1.13,{test_condition:null})],null],
+    ["low confidence",0.8,[claim(1.13,{confidence_level:'low'})],null]
+  ];
+}
+function populateDensityTags(db) {
+  densityTagCases().forEach(([,scalar,claims],index)=>{
+    const id='D5-N-'+String(index).padStart(2,'0');
+    insertMaterial(db,id,id,'D5 numeric');
+    db.prepare('UPDATE materials SET density=? WHERE material_id=?').run(scalar,id);
+    claims.forEach(({value,options},position)=>insertClaim(db,id,'density',value,{position,...options}));
+  });
+  // Separate qualitative branch: even an above-threshold key may match text.
+  for(const [id,field,text,value] of [
+    ['D5-T-SUMMARY','summary','lightweight',null],
+    ['D5-T-HIGH','summary','low density',1.5],
+    ['D5-T-ZH','summary','轻量',null],
+    ['D5-T-NO','summary','ordinary',null],
+    ['D5-T-NOTES','notes','lightweight',null],
+    ['D5-T-DESCRIPTION','description_en','low density',null],
+    ['D5-T-SOURCE','source_note','低密度',null]
+  ]) {
+    insertMaterial(db,id,id,'D5 text');
+    db.prepare(`UPDATE materials SET ${field}=? WHERE material_id=?`).run(text,id);
+    if(value!==null)insertClaim(db,id,'density',value);
+  }
+  for(const letter of 'ABCDEF') {
+    const id='D5-C-'+letter;
+    insertMaterial(db,id,id,letter==='D'?'D5 category B':'D5 category A');
+    db.prepare('UPDATE materials SET summary=? WHERE material_id=?').run(letter==='F'?'medical':'automotive',id);
+    insertClaim(db,id,'density',letter==='A'?1.2:letter==='B'?1.13:letter==='C'?1.4:1.1);
+    insertClaim(db,id,'tensile_strength',letter==='E'?20:65);
+  }
+  for(const [suffix,column,value] of [['ORIGIN','record_origin','generated'],
+    ['VISIBILITY','catalog_visibility','admin_only'],['SCOPE','scope_status','out_of_scope']]) {
+    const id='D5-B-'+suffix;insertMaterial(db,id,id,'D5 boundary');insertClaim(db,id,'density',1.13);
+    db.prepare(`UPDATE materials SET ${column}=?,summary='lightweight' WHERE material_id=?`).run(value,id);
+  }
+  for(const suffix of ['INACTIVE','QUARANTINED']) {
+    const id='D5-B-'+suffix;insertMaterial(db,id,id,'D5 boundary');insertClaim(db,id,'density',1.13);
+    if(suffix==='INACTIVE')db.prepare('UPDATE real_material_identities SET active=0 WHERE material_id=?').run(id);
+    else db.prepare("UPDATE material_evidence SET verification_status='quarantined' WHERE material_id=?").run(id);
+  }
+}
+function densityTagChecks(repository) {
+  const tag='low-density-lightweight';
+  densityTagCases().forEach(([name,scalar,,key],index)=>{
+    const id='D5-N-'+String(index).padStart(2,'0');
+    const material=repository.getMaterialById(id);
+    assert.equal(repository.database.prepare('SELECT density FROM materials WHERE material_id=?').get(id).density,scalar);
+    assert.equal(material.propertyProjections.density.queryKey,key,name);
+    assert.equal(material.density,key,name+' public scalar alias');
+    const page=repository.listMaterials({query:id,performance:tag,sort:'density'});
+    const hit=key!==null&&key>0&&key<=1.2;
+    assert.deepEqual(page.items.map(x=>x.id),hit?[id]:[],name);
+    assert.equal(page.total,Number(hit),name+' total');
+    assert.equal(page.facets.performance.all,1,name+' self-exclusion');
+    assert.equal(page.facets.performance.options.find(x=>x.id===tag)?.count||0,Number(hit),name+' facet');
+  });
+  const text=repository.listMaterials({category:'D5 text',performance:tag,sort:'density'});
+  assert.deepEqual(text.items.map(x=>x.id),['D5-T-HIGH','D5-T-SUMMARY','D5-T-ZH']);
+  assert.deepEqual(text.items.map(x=>x.density),[1.5,null,null],'text matches are not numeric eligibility claims');
+  assert.equal(text.total,3);assert.equal(text.facets.performance.all,7);
+  assert.equal(text.facets.performance.options.find(x=>x.id===tag).count,3);
+  assert.equal(repository.listMaterials({category:'D5 boundary',performance:tag}).total,0,'PUBLIC_BOUNDARY precedes both tag branches');
+  const options={query:'D5-C-',category:'D5 category A',domain:'automotive',
+    minTensileMpa:40,performance:tag,sort:'density',limit:1};
+  const pages=[0,1,2].map(offset=>repository.listMaterials({...options,offset}));
+  assert.deepEqual(pages.map(page=>page.items.map(x=>x.id)),[['D5-C-B'],['D5-C-A'],[]]);
+  for(const page of pages) {
+    assert.equal(page.total,2);assert.deepEqual(page.facets,pages[0].facets);
+    assert.equal(page.facets.categories.all,3);
+    assert.deepEqual(page.facets.categories.options,[{value:'D5 category A',count:2},{value:'D5 category B',count:1}]);
+    assert.equal(page.facets.performance.all,3,'only performance dimension is excluded');
+    assert.equal(page.facets.performance.options.find(x=>x.id===tag).count,2);
+    assert.equal(page.facets.domains.all,3,'domain self-exclusion retains numeric tag');
+    assert.equal(page.facets.domains.options.find(x=>x.id==='automotive').count,2);
+    assert.equal(page.facets.domains.options.find(x=>x.id==='medical').count,1);
+  }
+  assert.deepEqual(pages.map(x=>x.hasMore),[true,false,false]);
+  // Even when another tag is selected, the density facet still needs its own key.
+  const other=repository.listMaterials({category:'Projection',performance:'high-strength'});
+  assert.equal(other.total,0);assert.equal(other.facets.performance.options.find(x=>x.id===tag).count,2);
+  console.log(`PILOT-D5 ${densityTagCases().length} numeric, 7 separate text, 5 public boundary cases; combined facets and limit1 offsets 0/1/2 PASS.`);
+  return pages;
+}
+function densityTagPlanChecks(repository) {
+  const capture=[],originals=Object.fromEntries(['_get','_all'].map(method=>[method,repository[method]]));
+  try {
+    for(const [method,original] of Object.entries(originals))repository[method]=function(sql,params,tag) {
+      if(tag.startsWith('catalog_')||tag==='material_list')capture.push({tag,sql,params,
+        plan:this.database.prepare('EXPLAIN QUERY PLAN '+sql).all(...params).map(row=>row.detail)});
+      return original.apply(this,arguments);
+    };
+    for(const options of [{},{performance:'high-strength'},{performance:'low-density-lightweight'},
+      {performance:'low-density-lightweight',sort:'density',minTensileMpa:40}]) {
+      capture.length=0;repository.listMaterials({category:'Projection',limit:1,...options});
+      assert.equal(capture.length,6,'count, category count/options, performance, domains, page');
+      for(const {tag,sql,plan} of capture) {
+        const density=tag==='catalog_performance_facets'||options.performance==='low-density-lightweight';
+        const keys=[...(density?['density']:[]),...(options.minTensileMpa!==undefined?['tensile_strength']:[])];
+        const clause=sql.match(/WHERE p\.property_key IN \(([^)]+)\)/)?.[1];
+        assert.deepEqual(clause?clause.replaceAll("'",'').split(',').sort():[],keys.sort(),tag+' exact required keys');
+        assert.equal(plan.filter(x=>/MATERIALIZE pp_claims\b/.test(x)).length,keys.length?1:0,tag+' one qualification');
+        assert.ok(!plan.some(x=>/^SCAN p\b/.test(x)),tag+' no global evidence scan');
+        assert.ok(!sql.includes('pp_scope AS MATERIALIZED'),tag+' no repeated per-material projection');
+        if(keys.length) {
+          assert.ok(plan.some(x=>/^SEARCH p\b/.test(x)&&/material_id=\? AND property_key=\?/.test(x)),tag+' material/key lookup');
+          assert.ok(plan.some(x=>/^SEARCH s USING INTEGER PRIMARY KEY/.test(x)),tag+' source PK lookup');
+        }
+      }
+    }
+    assert.equal(repository.getMetrics().fullEvidenceTableReads,0);
+  } finally {for(const [method,original] of Object.entries(originals))repository[method]=original;}
+  console.log('PILOT-D5 plans: six statements, exact keys, shared qualification, indexed material/source lookup PASS.');
+}
+
 async function main() {
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'matfinder-fa003-projection-'));
   const file=path.join(directory,'test-only.db');
@@ -443,9 +594,12 @@ async function main() {
   try {
     bootstrapFixture(file);
     const db=new DatabaseSync(file);
-    try { populate(db); populateMatrix(db); populateR1Facets(db); } finally {db.close();}
+    try { populate(db); populateMatrix(db); populateR1Facets(db); populateDensityTags(db); } finally {db.close();}
     repository=new MaterialRepository(file);
     checkRepository(repository);
+    const densityPages=densityTagChecks(repository);
+    densityTagPlanChecks(repository);
+    await require('./test-catalog-frontend').assertDensityTagConsumers(densityPages.slice(0,2));
     matrixChecks(repository);
     r1FacetCorrectnessChecks(repository);
     r1QueryPlanChecks(repository);

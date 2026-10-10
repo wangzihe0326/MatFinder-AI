@@ -431,6 +431,7 @@ async function main() {
   await recommendationFrontendChecks();
   await entityFrontendChecks();
   await comparisonFrontendChecks();
+  await assertDensityTagConsumers(densityConsumerFixturePages());
   process.stdout.write("AD-04 frontend catalog regressions 34–49 passed.\n");
 }
 
@@ -1481,6 +1482,62 @@ function assertReportCompatibility(detailed, compact) {
   }
 }
 
+// Test actual app consumers with paginated repository responses, not a second
+// browser filter. A qualitative tag match must not invent a density measurement.
+async function assertDensityTagConsumers(pages) {
+  const state=read('state'),savedState={...state},savedFetch=fetchHandler;
+  const saved=read('({materials,materialCatalogTotal,catalogFacets,categories,catalogPageGeneration,catalogLayerStats,catalogLoadError,catalogQueryResetPending})');
+  try {
+    Object.assign(state,{route:'materials',language:'en',query:'',category:'all',
+      property:'low-density-lightweight',domain:'all',sort:'density',materialsPageSize:1,
+      minTemp:read('DEFAULT_MIN_TEMP'),minStrength:read('DEFAULT_MIN_STRENGTH'),recyclableOnly:false});
+    fetchHandler=async url=>{
+      const params=new URL(url,'http://test').searchParams;
+      assert.equal(params.get('performance'),'low-density-lightweight');
+      assert.equal(params.get('sort'),'density');assert.equal(params.get('limit'),'1');
+      return ok(pages[Number(params.get('offset'))]);
+    };
+    for(let index=0;index<pages.length;index++) {
+      await read(`loadPublicMaterialPage(${index+1})`);
+      const expected=pages[index],item=expected.items[0];
+      assert.equal(read('materialCatalogTotal'),expected.total);
+      assert.equal(read('materials[0].id'),item.id);
+      assert.equal(read('materials[0].density'),item.density);
+      const expectedCount=expected.facets.performance.options.find(x=>x.id==='low-density-lightweight').count;
+      assert.equal(read('getPerformanceFilterCounts().get("low-density-lightweight")'),expectedCount);
+      assert.ok(descendants(node('#propertyFacetFilter')).some(entry=>
+        entry.dataset.property==='low-density-lightweight'&&entry.innerHTML.includes(`<strong>${expectedCount}</strong>`)));
+      const cards=node('#materialsGrid').children.filter(x=>x.tag==='article');
+      assert.equal(cards.length,1);assert.ok(cards[0].innerHTML.includes(item.id));
+      context.densityConsumerItem=item;
+      const rendered=read('formatCanonicalProperty(densityConsumerItem,"density","density")');
+      assert.ok(cards[0].innerHTML.includes(rendered));
+      if(item.density!==null)assert.ok(rendered.includes(String(item.density)));
+      else assert.ok(!/1\.13|1\.2/.test(rendered),'text match must not invent verified numeric density');
+    }
+    console.log('PILOT-D5 frontend: server tag/sort parameters, cross-page density cards and global facet counts PASS.');
+  } finally {
+    Object.assign(state,savedState);fetchHandler=savedFetch;context.densitySaved=saved;
+    read('({materials,materialCatalogTotal,catalogFacets,categories,catalogPageGeneration,catalogLayerStats,catalogLoadError,catalogQueryResetPending}=densitySaved)');
+    delete context.densitySaved;delete context.densityConsumerItem;
+  }
+}
+function densityConsumerFixturePages() {
+  const facets={categories:{all:3,options:[]},performance:{all:3,groups:[],
+    options:[{id:'low-density-lightweight',count:3}]},domains:{all:3,options:[]}};
+  const policy=require('../property-projection-policy');
+  return [1.13,1.2,null].map((density,index)=>{
+    const id='D5-UI-'+index;
+    const claims=density===null?[]:[{material_id:id,property_key:'density',value_numeric:density,
+      unit:'g/cm3',test_standard:'TEST STANDARD',test_condition:'TEST CONDITION',value_type:'typical',
+      source_type:'manufacturer',source_title:'TEST ONLY',source_url:'https://example.invalid/d5',
+      verification_status:'verified',confidence_level:'medium',conflict_status:'none'}];
+    const projection=policy.projectProperty(id,'density',claims);
+    return {items:[{...grade(id,null,null),density:projection.queryKey,
+      summary:index===2?'lightweight':'TEST ONLY',propertyProjections:{density:projection}}],total:3,facets};
+  });
+}
+
 function assertProjectionConsumers(items) {
   context.projectionItems = items;
   const state = read("state"), oldLanguage = state.language;
@@ -1536,7 +1593,7 @@ function snapshotProjectionConsumers(items) {
     for(const key of ["projectionSnapshotItem","projectionSnapshotKey","projectionSnapshotField"])delete context[key];
   }
 }
-module.exports = { assertReportCompatibility, assertProjectionConsumers, snapshotProjectionConsumers };
+module.exports = { assertReportCompatibility, assertProjectionConsumers, snapshotProjectionConsumers, assertDensityTagConsumers };
 if (require.main === module) {
   let completed = false;
   let watchdog;
